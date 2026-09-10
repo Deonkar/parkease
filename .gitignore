@@ -1,0 +1,36 @@
+# Project documentation — kept local (commercial model, fee rates, launch strategy)
+docs/
+md files/
+
+# Agent configuration — kept local
+CLAUDE.md
+.claude/
+.mcp.json
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+build/
+.next/
+.expo/
+.turbo/
+*.tsbuildinfo
+
+# Test & coverage
+coverage/
+.nyc_output/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.log
+.idea/
+.vscode/
