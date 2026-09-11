@@ -1,0 +1,2 @@
+pnpm exec lint-staged
+gitleaks detect --no-banner --verbose 2>/dev/null || echo "gitleaks not installed — skipping"

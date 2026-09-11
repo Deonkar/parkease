@@ -6,6 +6,7 @@ md files/
 CLAUDE.md
 .claude/
 .mcp.json
+learnings.md
 
 # Environment
 .env

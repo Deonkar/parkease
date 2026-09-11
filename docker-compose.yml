@@ -1,0 +1,33 @@
+services:
+  postgres:
+    image: postgis/postgis:18-3.6
+    container_name: parkease-postgres
+    environment:
+      POSTGRES_USER: parkease
+      POSTGRES_PASSWORD: parkease_local
+      POSTGRES_DB: parkease_dev
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-parkease-test.sh:/docker-entrypoint-initdb.d/10-init-parkease-test.sh:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U parkease -d parkease_dev']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: parkease-redis
+    command: ['redis-server', '--appendonly', 'no', '--save', '']
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres_data:

@@ -1,0 +1,40 @@
+{
+  "name": "@parkease/mobile",
+  "version": "0.0.0",
+  "private": true,
+  "main": "expo-router/entry",
+  "scripts": {
+    "dev": "expo start --dev-client",
+    "build": "echo 'Mobile builds use EAS Build'",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint \"app/**/*.{ts,tsx}\" \"src/**/*.{ts,tsx}\" --no-error-on-unmatched-pattern && npx expo-doctor",
+    "test": "echo 'No mobile tests yet'"
+  },
+  "dependencies": {
+    "@expo/metro-runtime": "^57.0.15",
+    "@parkease/contracts": "workspace:*",
+    "@parkease/tokens": "workspace:*",
+    "@parkease/ui-native": "workspace:*",
+    "expo": "57.0.21",
+    "expo-router": "57.0.20",
+    "expo-secure-store": "57.0.3",
+    "expo-status-bar": "57.0.1",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-safe-area-context": "5.7.0",
+    "react-native-screens": "4.26.2"
+  },
+  "devDependencies": {
+    "@babel/core": "7.29.7",
+    "@types/react": "19.2.18",
+    "typescript": "5.7.2"
+  },
+  "expo": {
+    "install": {
+      "exclude": [
+        "typescript"
+      ]
+    }
+  }
+}

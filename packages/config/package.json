@@ -1,0 +1,20 @@
+{
+  "name": "@parkease/config",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./eslint/*": "./eslint/*.js",
+    "./tsconfig/*": "./tsconfig/*.json",
+    "./prettier": "./prettier/index.js"
+  },
+  "scripts": {
+    "lint": "echo 'config package — no lintable source'"
+  },
+  "dependencies": {
+    "@eslint/js": "9.17.0",
+    "eslint-import-resolver-typescript": "3.7.0",
+    "eslint-plugin-import": "2.31.0",
+    "typescript-eslint": "8.18.1"
+  }
+}
