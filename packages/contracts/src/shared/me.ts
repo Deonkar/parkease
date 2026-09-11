@@ -12,7 +12,7 @@ export const meResponseSchema = z.object({
   avatarUrl: z.string().url().nullable(),
   status: userStatusSchema,
   roles: z.array(roleSchema),
-  activeRole: roleSchema,
+  activeRole: roleSchema.nullable(),
   createdAt: z.string().datetime(),
 });
 

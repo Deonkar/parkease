@@ -1,11 +1,9 @@
 import { z } from 'zod';
 
 import { roleSchema } from '../enums/role.js';
-import { indianPhoneSchema } from '../primitives/indian.js';
 
 export const createSessionSchema = z.object({
-  phone: indianPhoneSchema,
-  firebaseToken: z.string().min(1),
+  idToken: z.string().min(1),
 });
 
 export type CreateSession = z.infer<typeof createSessionSchema>;
@@ -13,9 +11,10 @@ export type CreateSession = z.infer<typeof createSessionSchema>;
 export const sessionResponseSchema = z.object({
   accessToken: z.string(),
   refreshToken: z.string(),
-  expiresAt: z.string().datetime(),
+  expiresIn: z.number().int().positive(),
   roles: z.array(roleSchema),
-  activeRole: roleSchema,
+  activeRole: roleSchema.nullable(),
+  isNewUser: z.boolean(),
 });
 
 export type SessionResponse = z.infer<typeof sessionResponseSchema>;
