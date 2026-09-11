@@ -17,6 +17,8 @@
     "db:generate": "pnpm --filter @parkease/db generate",
     "db:migrate": "pnpm --filter @parkease/db migrate",
     "db:seed": "pnpm --filter @parkease/db seed",
+    "db:seed:bootstrap": "pnpm --filter @parkease/db seed:bootstrap",
+    "db:seed:dev": "pnpm --filter @parkease/db seed:dev",
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",
     "check:node": "bash scripts/check-node-version.sh",
