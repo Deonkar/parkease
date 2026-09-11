@@ -9,19 +9,27 @@
   },
   "scripts": {
     "build": "tsc --build",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit -p tsconfig.check.json",
     "lint": "eslint src/",
     "generate": "drizzle-kit generate",
-    "migrate": "drizzle-kit migrate",
-    "seed": "tsx src/seed/bootstrap-admin.ts"
+    "migrate": "tsx src/migrate.ts",
+    "seed": "tsx src/seed/run.ts",
+    "seed:bootstrap": "tsx src/seed/bootstrap-admin.ts",
+    "seed:dev": "tsx src/seed/dev/seed-dev.ts",
+    "test": "vitest run --passWithNoTests",
+    "test:integration": "vitest run -c vitest.integration.config.ts"
   },
   "dependencies": {
     "@parkease/contracts": "workspace:*",
     "drizzle-orm": "0.45.2",
-    "postgres": "3.4.5"
+    "postgres": "3.4.5",
+    "zod": "3.24.2"
   },
   "devDependencies": {
+    "@parkease/testing": "workspace:*",
+    "@types/node": "22.20.2",
     "drizzle-kit": "0.30.4",
-    "tsx": "4.19.2"
+    "tsx": "4.19.2",
+    "vitest": "2.1.8"
   }
 }

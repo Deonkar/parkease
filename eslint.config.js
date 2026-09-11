@@ -131,8 +131,16 @@ export default tseslint.config(
       '**/vitest.config.ts',
       '**/vitest.integration.config.ts',
       '**/test/**/*.spec.ts',
+      '**/test/**/*.test.ts',
+      '**/drizzle.config.ts',
     ],
     ...tseslint.configs.disableTypeChecked,
+  },
+  {
+    files: ['**/test/**/*.test.ts', '**/test/**/*.spec.ts'],
+    rules: {
+      '@typescript-eslint/no-non-null-assertion': 'off',
+    },
   },
   {
     files: ['**/babel.config.js', '**/metro.config.js'],
