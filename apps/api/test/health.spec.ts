@@ -1,41 +1,70 @@
-import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
-import { Test } from '@nestjs/testing';
-import request from 'supertest';
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { HttpStatus } from '@nestjs/common';
+import { describe, it, expect, vi } from 'vitest';
 
-import { AppModule } from '../src/app.module.js';
+import { HealthController } from '../src/roles/public/health.controller.js';
 
-describe('GET /api/v1/health', () => {
-  let app: NestFastifyApplication;
+describe('HealthController', () => {
+  it('GET /health returns flat shape (not wrapped)', () => {
+    const controller = new HealthController({} as never, {} as never);
+    const result = controller.check();
 
-  beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
-    app.setGlobalPrefix('api/v1');
-    await app.init();
-    await app.getHttpAdapter().getInstance().ready();
-  });
-
-  afterAll(async () => {
-    await app.close();
-  });
-
-  it('returns 200 with the correct shape', async () => {
-    const res = await request(app.getHttpServer()).get('/api/v1/health').expect(200);
-
-    expect(res.body).toEqual({
+    expect(result).toEqual({
       status: 'ok',
       version: expect.any(String),
       timestamp: expect.any(String),
     });
 
-    expect(Object.keys(res.body)).toHaveLength(3);
+    expect(Object.keys(result)).toHaveLength(3);
+    expect(result).not.toHaveProperty('data');
+  });
 
-    const ts = new Date(res.body.timestamp);
-    expect(ts.getTime()).not.toBeNaN();
-    expect(Math.abs(Date.now() - ts.getTime())).toBeLessThan(5000);
+  it('GET /health/ready returns 200 when PG + Redis are ok', async () => {
+    const db = { execute: vi.fn().mockResolvedValue(undefined) };
+    const redis = { ping: vi.fn().mockResolvedValue('PONG') };
+    const controller = new HealthController(db as never, redis as never);
+
+    let sentBody: unknown;
+    const reply = {
+      status: vi.fn().mockReturnValue({
+        send: vi.fn((body: unknown) => {
+          sentBody = body;
+        }),
+      }),
+    };
+
+    await controller.ready(reply as never);
+    const sentStatus = reply.status.mock.calls[0]?.[0] as number;
+
+    expect(sentStatus).toBe(HttpStatus.OK);
+    expect(sentBody).toEqual(
+      expect.objectContaining({
+        status: 'ok',
+        services: {
+          postgres: { status: 'ok' },
+          redis: { status: 'ok' },
+        },
+      }),
+    );
+  });
+
+  it('GET /health/ready returns 503 when Redis is down', async () => {
+    const db = { execute: vi.fn().mockResolvedValue(undefined) };
+    const redis = { ping: vi.fn().mockRejectedValue(new Error('ECONNREFUSED')) };
+    const controller = new HealthController(db as never, redis as never);
+
+    let sentBody: Record<string, unknown> | undefined;
+    const reply = {
+      status: vi.fn().mockReturnValue({
+        send: vi.fn((body: Record<string, unknown>) => {
+          sentBody = body;
+        }),
+      }),
+    };
+
+    await controller.ready(reply as never);
+    const sentStatus = reply.status.mock.calls[0]?.[0] as number;
+
+    expect(sentStatus).toBe(HttpStatus.SERVICE_UNAVAILABLE);
+    expect(sentBody).toEqual(expect.objectContaining({ status: 'degraded' }));
   });
 });

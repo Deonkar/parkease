@@ -1,6 +1,8 @@
+import { db } from '@parkease/db';
 import PgBoss from 'pg-boss';
 
 import { env } from './config/env.js';
+import type { JobDeps } from './deps.js';
 import { registerHandlers } from './handlers.js';
 import { logger } from './logger.js';
 import { registerSchedule } from './schedule.js';
@@ -17,7 +19,10 @@ boss.on('error', (error: Error) => {
 });
 
 await boss.start();
-await registerHandlers(boss);
+
+const deps: JobDeps = { db, boss };
+
+await registerHandlers(boss, deps);
 await registerSchedule(boss);
 
 logger.info({ schema: 'pgboss' }, 'worker started');

@@ -12,7 +12,11 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@opentelemetry/api": "^1.9.0",
     "@parkease/contracts": "workspace:*",
+    "@parkease/db": "workspace:*",
+    "drizzle-orm": "^0.45.0",
+    "ioredis": "^5.4.0",
     "pg-boss": "10.1.5",
     "pino": "9.5.0"
   },
