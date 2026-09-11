@@ -1,0 +1,19 @@
+{
+  "name": "@parkease/testing",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "build": "tsc --build",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/"
+  },
+  "dependencies": {
+    "@parkease/contracts": "workspace:*",
+    "@parkease/db": "workspace:*"
+  }
+}

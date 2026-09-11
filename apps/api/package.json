@@ -1,0 +1,33 @@
+{
+  "name": "@parkease/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "build": "tsc --build",
+    "start": "node dist/main.js",
+    "typecheck": "tsc --noEmit -p tsconfig.check.json",
+    "lint": "eslint src/",
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
+  },
+  "dependencies": {
+    "@nestjs/common": "12.0.1",
+    "@nestjs/core": "12.0.1",
+    "@nestjs/platform-fastify": "12.0.1",
+    "@parkease/contracts": "workspace:*",
+    "fastify": "5.12.3",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.1",
+    "zod": "3.24.1"
+  },
+  "devDependencies": {
+    "@nestjs/testing": "12.0.1",
+    "@parkease/config": "workspace:*",
+    "@types/supertest": "6.0.2",
+    "supertest": "7.0.0",
+    "tsx": "4.19.2",
+    "vitest": "2.1.8"
+  }
+}

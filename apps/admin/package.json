@@ -1,0 +1,29 @@
+{
+  "name": "@parkease/admin",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5173",
+    "build": "tsc --build && vite build",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/",
+    "test": "vitest run --passWithNoTests",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@parkease/contracts": "workspace:*",
+    "@parkease/tokens": "workspace:*",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
+  },
+  "devDependencies": {
+    "@parkease/config": "workspace:*",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.6",
+    "@vitejs/plugin-react": "4.3.4",
+    "typescript": "5.7.2",
+    "vite": "6.0.5",
+    "vitest": "2.1.8"
+  }
+}

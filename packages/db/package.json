@@ -1,0 +1,27 @@
+{
+  "name": "@parkease/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --build",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/",
+    "generate": "drizzle-kit generate",
+    "migrate": "drizzle-kit migrate",
+    "seed": "tsx src/seed/bootstrap-admin.ts"
+  },
+  "dependencies": {
+    "@parkease/contracts": "workspace:*",
+    "drizzle-orm": "0.45.2",
+    "postgres": "3.4.5"
+  },
+  "devDependencies": {
+    "drizzle-kit": "0.30.4",
+    "tsx": "4.19.2"
+  }
+}
