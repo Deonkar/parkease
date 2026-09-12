@@ -31,10 +31,10 @@ export default function PhoneScreen() {
     setError(null);
 
     try {
-      const confirmation = await requestOtp(`+91${phone}`);
+      await requestOtp(`+91${phone}`);
       router.push({
         pathname: '/(auth)/verify',
-        params: { phone, confirmationId: JSON.stringify(confirmation) },
+        params: { phone },
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to send OTP';

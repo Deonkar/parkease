@@ -49,19 +49,26 @@ function wrapConfirmation(confirmation: {
   };
 }
 
-export async function requestOtp(e164Phone: string): Promise<OtpConfirmation> {
+let pendingConfirmation: OtpConfirmation | null = null;
+
+export async function requestOtp(e164Phone: string): Promise<void> {
   if (!isFirebaseAvailable()) {
     if (__DEV__) {
-      return createDevMock(e164Phone);
+      pendingConfirmation = createDevMock(e164Phone);
+      return;
     }
     throw new Error('Firebase is not configured. Run expo prebuild and rebuild the app.');
   }
 
   const confirmation = await getAuth().signInWithPhoneNumber(e164Phone);
-  return wrapConfirmation(confirmation);
+  pendingConfirmation = wrapConfirmation(confirmation);
 }
 
-export async function confirmOtp(confirmation: OtpConfirmation, code: string): Promise<string> {
-  const result = await confirmation.confirm(code);
+export async function confirmOtp(code: string): Promise<string> {
+  if (!pendingConfirmation) {
+    throw new Error('No pending OTP request. Call requestOtp first.');
+  }
+  const result = await pendingConfirmation.confirm(code);
+  pendingConfirmation = null;
   return result.idToken;
 }

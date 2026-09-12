@@ -17,7 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
 import { markOnboarded } from '@/features/shared/hooks/useHasOnboarded';
 import { api } from '@/lib/api';
-import { requestOtp } from '@/lib/firebase';
+import { confirmOtp, requestOtp } from '@/lib/firebase';
 import { secureStorage } from '@/lib/secure-storage';
 import { uuidv7 } from '@/lib/uuid';
 
@@ -50,7 +50,14 @@ export default function VerifyScreen() {
     setError(null);
 
     try {
-      const idToken = `stub-id-token-${otp}`;
+      const idToken = await confirmOtp(otp);
+
+      if (__DEV__ && idToken.startsWith('dev-mock-token-')) {
+        await markOnboarded();
+        auth.setAuthenticated([], null);
+        router.replace('/(auth)/choose-role');
+        return;
+      }
 
       const { data } = await api.post<{ data: SessionResponse }>('/auth/session', { idToken }, {
         _skipAuth: true,
