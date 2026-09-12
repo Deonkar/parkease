@@ -1,3 +1,4 @@
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, fontSize, spacing } from '@parkease/tokens';
 import { Button } from '@parkease/ui-native';
 import { router } from 'expo-router';
@@ -5,20 +6,27 @@ import { useRef, useState } from 'react';
 import { AccessibilityInfo, Pressable, StyleSheet, Text, View } from 'react-native';
 import PagerView from 'react-native-pager-view';
 
-import { markOnboarded } from '@/features/shared/hooks/useHasOnboarded';
-
 const slides = [
   {
     title: 'Find Parking Instantly',
     body: 'Search thousands of private and public parking spots near your destination. Cars and two-wheelers welcome.',
+    icon: 'map-marker-radius' as const,
+    iconColor: '#4F46E5',
+    bgColor: '#EEF2FF',
   },
   {
     title: 'Earn From Your Empty Space',
     body: 'Have an unused parking spot? List it on ParkEase and earn passive income — hourly, daily, or monthly.',
+    icon: 'home-city' as const,
+    iconColor: '#059669',
+    bgColor: '#ECFDF5',
   },
   {
     title: 'Valet & Car Wash, On Demand',
     body: "Too busy to park? We'll send a valet. Want a clean car? We'll wash it while you're away.",
+    icon: 'car-connected' as const,
+    iconColor: '#D97706',
+    bgColor: '#FFFBEB',
   },
 ] as const;
 
@@ -27,17 +35,15 @@ export default function OnboardingScreen() {
   const [page, setPage] = useState(0);
   const isLast = page === slides.length - 1;
 
-  const handleNext = async () => {
+  const handleNext = () => {
     if (isLast) {
-      await markOnboarded();
       router.replace('/(auth)/phone');
     } else {
       pagerRef.current?.setPage(page + 1);
     }
   };
 
-  const handleSkip = async () => {
-    await markOnboarded();
+  const handleSkip = () => {
     router.replace('/(auth)/phone');
   };
 
@@ -45,7 +51,7 @@ export default function OnboardingScreen() {
     <View style={styles.container}>
       {!isLast && (
         <Pressable
-          onPress={() => void handleSkip()}
+          onPress={handleSkip}
           style={styles.skipButton}
           accessibilityRole="button"
           accessibilityLabel="Skip onboarding"
@@ -71,10 +77,8 @@ export default function OnboardingScreen() {
       >
         {slides.map((slide, i) => (
           <View key={i} style={styles.slide}>
-            <View style={styles.illustrationPlaceholder}>
-              <Text style={styles.illustrationEmoji}>
-                {i === 0 ? '\u{1F5FA}' : i === 1 ? '\u{1F3E0}' : '\u{1F697}'}
-              </Text>
+            <View style={[styles.illustrationContainer, { backgroundColor: slide.bgColor }]}>
+              <MaterialCommunityIcons name={slide.icon} size={72} color={slide.iconColor} />
             </View>
             <Text style={styles.title}>{slide.title}</Text>
             <Text style={styles.body}>{slide.body}</Text>
@@ -94,7 +98,7 @@ export default function OnboardingScreen() {
         </View>
         <Button
           label={isLast ? 'Get Started' : 'Next'}
-          onPress={() => void handleNext()}
+          onPress={handleNext}
           accessibilityLabel={isLast ? 'Get Started' : 'Next slide'}
         />
       </View>
@@ -132,17 +136,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: spacing['2xl'],
   },
-  illustrationPlaceholder: {
+  illustrationContainer: {
     width: 200,
     height: 200,
-    borderRadius: 24,
-    backgroundColor: colors.surfaceTertiary,
+    borderRadius: 32,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: spacing['2xl'],
-  },
-  illustrationEmoji: {
-    fontSize: 64,
   },
   title: {
     fontSize: fontSize['2xl'],

@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@expo/metro-runtime": "^57.0.15",
+    "@expo/vector-icons": "15.1.1",
     "@parkease/contracts": "workspace:*",
     "@parkease/tokens": "workspace:*",
     "@parkease/ui-native": "workspace:*",
@@ -29,6 +30,7 @@
     "react-native-pager-view": "9.0.4",
     "react-native-safe-area-context": "5.7.0",
     "react-native-screens": "4.26.2",
+    "react-native-svg": "15.15.5",
     "uuid": "11.1.0"
   },
   "devDependencies": {

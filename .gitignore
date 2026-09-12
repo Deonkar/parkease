@@ -29,9 +29,18 @@ build/
 coverage/
 .nyc_output/
 
+# Firebase config files (contain API keys)
+google-services.json
+GoogleService-Info.plist
+
 # OS / editor
 .DS_Store
 Thumbs.db
 *.log
 .idea/
 .vscode/
+
+# Expo prebuild output (Continuous Native Generation) — regenerate with `expo prebuild`.
+# Keeping it untracked preserves CNG; committing it means owning these files forever.
+apps/mobile/android/
+apps/mobile/ios/

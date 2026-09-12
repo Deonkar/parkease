@@ -15,6 +15,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/contexts/AuthContext';
+import { markOnboarded } from '@/features/shared/hooks/useHasOnboarded';
 import { api } from '@/lib/api';
 import { requestOtp } from '@/lib/firebase';
 import { secureStorage } from '@/lib/secure-storage';
@@ -63,6 +64,7 @@ export default function VerifyScreen() {
         activeRole: data.data.activeRole,
       });
 
+      await markOnboarded();
       auth.setAuthenticated(data.data.roles, data.data.activeRole);
 
       if (data.data.isNewUser || data.data.activeRole === null) {

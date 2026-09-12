@@ -1,3 +1,4 @@
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Role } from '@parkease/contracts/enums';
 import { colors, fontSize, spacing } from '@parkease/tokens';
 import { useState } from 'react';
@@ -9,25 +10,33 @@ import { useAuth } from '@/contexts/AuthContext';
 const roles = [
   {
     role: Role.DRIVER,
-    emoji: '\u{1F697}',
+    icon: 'steering' as const,
+    iconColor: '#4F46E5',
+    bgColor: '#EEF2FF',
     title: "I'm looking for parking",
     subtitle: 'Find and book spots near you',
   },
   {
     role: Role.OWNER,
-    emoji: '\u{1F3E0}',
+    icon: 'home-city-outline' as const,
+    iconColor: '#059669',
+    bgColor: '#ECFDF5',
     title: 'I have a parking space',
     subtitle: 'List your space and earn money',
   },
   {
     role: Role.VALET,
-    emoji: '\u{1F511}',
+    icon: 'car-key' as const,
+    iconColor: '#7C3AED',
+    bgColor: '#F5F3FF',
     title: 'I want to be a valet',
     subtitle: 'Park cars and earn per trip',
   },
   {
     role: Role.WASHER,
-    emoji: '\u{1F9FD}',
+    icon: 'car-wash' as const,
+    iconColor: '#0891B2',
+    bgColor: '#ECFEFF',
     title: 'I offer car wash services',
     subtitle: 'Wash vehicles and grow your business',
   },
@@ -73,7 +82,9 @@ export default function ChooseRoleScreen() {
               loading && styles.cardDisabled,
             ]}
           >
-            <Text style={styles.emoji}>{item.emoji}</Text>
+            <View style={[styles.iconContainer, { backgroundColor: item.bgColor }]}>
+              <MaterialCommunityIcons name={item.icon} size={24} color={item.iconColor} />
+            </View>
             <View style={styles.cardContent}>
               <Text style={styles.cardTitle}>{item.title}</Text>
               <Text style={styles.cardSubtitle}>{item.subtitle}</Text>
@@ -128,10 +139,12 @@ const styles = StyleSheet.create({
   cardDisabled: {
     opacity: 0.5,
   },
-  emoji: {
-    fontSize: 32,
+  iconContainer: {
     width: 48,
-    textAlign: 'center',
+    height: 48,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   cardContent: {
     flex: 1,

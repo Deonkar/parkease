@@ -55,16 +55,18 @@ export default function PhoneScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <Pressable
-        onPress={() => {
-          router.back();
-        }}
-        style={[styles.backButton, { marginTop: insets.top }]}
-        accessibilityRole="button"
-        accessibilityLabel="Go back"
-      >
-        <Text style={styles.backText}>{'←'}</Text>
-      </Pressable>
+      {router.canGoBack() && (
+        <Pressable
+          onPress={() => {
+            router.back();
+          }}
+          style={[styles.backButton, { marginTop: insets.top }]}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
+          <Text style={styles.backText}>{'←'}</Text>
+        </Pressable>
+      )}
 
       <View style={styles.content}>
         <Text style={styles.title}>Welcome to ParkEase</Text>
