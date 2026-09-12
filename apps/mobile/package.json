@@ -8,32 +8,52 @@
     "build": "echo 'Mobile builds use EAS Build'",
     "typecheck": "tsc --noEmit",
     "lint": "eslint \"app/**/*.{ts,tsx}\" \"src/**/*.{ts,tsx}\" --no-error-on-unmatched-pattern && npx expo-doctor",
-    "test": "echo 'No mobile tests yet'"
+    "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
     "@expo/metro-runtime": "^57.0.15",
+    "@expo/vector-icons": "15.1.1",
     "@parkease/contracts": "workspace:*",
     "@parkease/tokens": "workspace:*",
     "@parkease/ui-native": "workspace:*",
+    "@react-native-async-storage/async-storage": "3.1.1",
+    "@react-native-firebase/app": "26.4.0",
+    "@react-native-firebase/auth": "26.4.0",
+    "@shopify/flash-list": "2.3.2",
+    "@tanstack/react-query": "5.102.8",
+    "axios": "1.20.0",
     "expo": "57.0.22",
     "expo-router": "57.0.21",
     "expo-secure-store": "57.0.4",
+    "expo-splash-screen": "57.0.9",
     "expo-status-bar": "57.0.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.86.3",
+    "react-native-pager-view": "9.0.4",
     "react-native-safe-area-context": "5.7.0",
-    "react-native-screens": "4.26.2"
+    "react-native-screens": "4.26.2",
+    "react-native-svg": "15.15.5",
+    "uuid": "11.1.0"
   },
   "devDependencies": {
     "@babel/core": "7.29.7",
+    "@testing-library/react-native": "14.0.1",
     "@types/react": "19.2.18",
-    "typescript": "5.7.2"
+    "@types/uuid": "11.0.0",
+    "axios-mock-adapter": "2.1.0",
+    "react-test-renderer": "19.2.3",
+    "typescript": "5.7.2",
+    "vitest": "2.1.8"
   },
   "expo": {
     "install": {
       "exclude": [
-        "typescript"
+        "typescript",
+        "@react-native-async-storage/async-storage",
+        "@shopify/flash-list",
+        "react-native-pager-view",
+        "react-native-svg"
       ]
     }
   }

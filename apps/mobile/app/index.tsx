@@ -1,28 +1,24 @@
-import { Text, View, StyleSheet } from 'react-native';
+import { SplashScreen } from '@parkease/ui-native';
+import { Redirect } from 'expo-router';
 
-export default function HomeScreen() {
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>ParkEase</Text>
-      <Text style={styles.subtitle}>Find and book parking in seconds</Text>
-    </View>
-  );
+import { useAuth } from '@/contexts/AuthContext';
+import { useHasOnboarded } from '@/features/shared/hooks/useHasOnboarded';
+
+export default function Splash() {
+  const auth = useAuth();
+  const hasOnboarded = useHasOnboarded();
+
+  if (auth.status === 'loading' || hasOnboarded === undefined) {
+    return <SplashScreen />;
+  }
+
+  if (auth.status === 'unauthenticated') {
+    return <Redirect href={hasOnboarded ? '/(auth)/phone' : '/(auth)/onboarding'} />;
+  }
+
+  if (auth.activeRole === null) {
+    return <Redirect href="/(auth)/choose-role" />;
+  }
+
+  return <Redirect href={`/(${auth.activeRole})`} />;
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#fff',
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-  },
-  subtitle: {
-    fontSize: 16,
-    marginTop: 8,
-    color: '#666',
-  },
-});

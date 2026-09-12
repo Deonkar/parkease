@@ -10,7 +10,8 @@
     "verbatimModuleSyntax": false,
     "composite": false,
     "declaration": false,
-    "declarationMap": false
+    "declarationMap": false,
+    "types": []
   },
   "include": ["src", "vite-env.d.ts"]
 }
