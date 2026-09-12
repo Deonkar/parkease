@@ -13,7 +13,12 @@
     "android": {
       "package": "in.parkease.app"
     },
-    "plugins": ["expo-router", "expo-secure-store", "expo-status-bar"],
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-status-bar",
+      "@react-native-async-storage/async-storage"
+    ],
     "web": {
       "bundler": "metro"
     }
