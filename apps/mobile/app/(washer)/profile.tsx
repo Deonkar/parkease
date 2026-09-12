@@ -1,14 +1,23 @@
 import { colors, fontSize, spacing } from '@parkease/tokens';
 import { router } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function WasherProfileScreen() {
   const auth = useAuth();
+  const insets = useSafeAreaInsets();
+
+  const handleSignOut = () => {
+    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sign Out', style: 'destructive', onPress: () => void auth.signOut() },
+    ]);
+  };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top + spacing.xl }]}>
       <Text style={styles.title}>Profile</Text>
 
       <Pressable
@@ -36,7 +45,7 @@ export default function WasherProfileScreen() {
       </Pressable>
 
       <Pressable
-        onPress={() => void auth.signOut()}
+        onPress={handleSignOut}
         style={[styles.item, styles.signOut]}
         accessibilityRole="button"
         accessibilityLabel="Sign out"
@@ -51,7 +60,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.surface,
-    paddingTop: 100,
     paddingHorizontal: spacing.base,
   },
   title: {

@@ -24,6 +24,7 @@ export default function WasherLayout() {
       <Tabs.Screen name="active" options={{ title: 'Active' }} />
       <Tabs.Screen name="menu" options={{ title: 'Menu' }} />
       <Tabs.Screen name="earnings" options={{ title: 'Earnings' }} />
+      <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
     </Tabs>
   );
 }

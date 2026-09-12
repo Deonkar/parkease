@@ -9,7 +9,7 @@ export const colors = {
 
   text: '#111827',
   textSecondary: '#6B7280',
-  textTertiary: '#9CA3AF',
+  textTertiary: '#71717A',
   textInverse: '#FFFFFF',
 
   border: '#E5E7EB',
@@ -28,7 +28,7 @@ export const colors = {
   skeletonHighlight: '#F3F4F6',
 
   tabActive: '#4F46E5',
-  tabInactive: '#9CA3AF',
+  tabInactive: '#71717A',
 
   overlay: 'rgba(0, 0, 0, 0.5)',
 } as const;

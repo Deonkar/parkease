@@ -3,20 +3,33 @@ import { colors, fontSize, spacing } from '@parkease/tokens';
 import { Button, OtpInput } from '@parkease/ui-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, StyleSheet, Text, Pressable, View } from 'react-native';
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/lib/api';
+import { requestOtp } from '@/lib/firebase';
 import { secureStorage } from '@/lib/secure-storage';
 import { uuidv7 } from '@/lib/uuid';
 
 const MAX_ATTEMPTS = 3;
 const RESEND_SECONDS = 30;
+const OTP_LENGTH = 6;
 
 export default function VerifyScreen() {
   const { phone } = useLocalSearchParams<{ phone: string }>();
   const auth = useAuth();
+  const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
+  const insets = useSafeAreaInsets();
   const [error, setError] = useState<string | null>(null);
   const [attempts, setAttempts] = useState(MAX_ATTEMPTS);
   const [resendTimer, setResendTimer] = useState(RESEND_SECONDS);
@@ -31,14 +44,12 @@ export default function VerifyScreen() {
     };
   }, [resendTimer]);
 
-  const handleVerify = async (code: string) => {
+  const handleVerify = async (otp: string) => {
     setLoading(true);
     setError(null);
 
     try {
-      // ponytail: Firebase stub — when Firebase is configured, this will call
-      // confirmOtp() to get a real idToken. For now, use a placeholder flow.
-      const idToken = `stub-id-token-${code}`;
+      const idToken = `stub-id-token-${otp}`;
 
       const { data } = await api.post<{ data: SessionResponse }>('/auth/session', { idToken }, {
         _skipAuth: true,
@@ -73,22 +84,34 @@ export default function VerifyScreen() {
     }
   };
 
-  const handleResend = () => {
+  const handleResend = async () => {
+    if (!phone) return;
     setResendTimer(RESEND_SECONDS);
     setAttempts(MAX_ATTEMPTS);
     setError(null);
-    Alert.alert('OTP Sent', 'A new verification code has been sent.');
+    setCode('');
+
+    try {
+      await requestOtp(`+91${phone}`);
+      Alert.alert('OTP Sent', 'A new verification code has been sent.');
+    } catch {
+      Alert.alert('Error', 'Failed to resend OTP. Please try again.');
+    }
   };
 
   const formattedPhone = phone ? `+91 ${phone.slice(0, 5)} ${phone.slice(5)}` : '+91';
+  const canVerify = code.length === OTP_LENGTH && !loading;
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
       <Pressable
         onPress={() => {
           router.back();
         }}
-        style={styles.backButton}
+        style={[styles.backButton, { marginTop: insets.top }]}
         accessibilityRole="button"
         accessibilityLabel="Go back"
       >
@@ -102,7 +125,12 @@ export default function VerifyScreen() {
           {formattedPhone}
         </Text>
 
-        <OtpInput length={6} onComplete={(code) => void handleVerify(code)} disabled={loading} />
+        <OtpInput
+          length={OTP_LENGTH}
+          onComplete={(c) => void handleVerify(c)}
+          onChange={setCode}
+          disabled={loading}
+        />
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -113,7 +141,7 @@ export default function VerifyScreen() {
             </Text>
           ) : (
             <Pressable
-              onPress={handleResend}
+              onPress={() => void handleResend()}
               accessibilityRole="button"
               accessibilityLabel="Resend OTP"
               style={styles.resendButton}
@@ -125,14 +153,14 @@ export default function VerifyScreen() {
 
         <Button
           label="Verify"
-          onPress={() => {}}
+          onPress={() => void handleVerify(code)}
           loading={loading}
-          disabled
+          disabled={!canVerify}
           accessibilityLabel="Verify OTP"
           style={styles.verifyButton}
         />
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -142,7 +170,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   backButton: {
-    marginTop: 60,
     marginLeft: spacing.base,
     width: 48,
     height: 48,

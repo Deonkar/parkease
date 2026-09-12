@@ -1,7 +1,8 @@
 import { Role } from '@parkease/contracts/enums';
 import { colors, fontSize, spacing } from '@parkease/tokens';
 import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -35,6 +36,7 @@ const roles = [
 export default function ChooseRoleScreen() {
   const auth = useAuth();
   const [loading, setLoading] = useState(false);
+  const insets = useSafeAreaInsets();
 
   const handleSelect = async (role: Role) => {
     setLoading(true);
@@ -48,7 +50,10 @@ export default function ChooseRoleScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <ScrollView
+      style={[styles.container, { paddingTop: insets.top + spacing.xl }]}
+      contentContainerStyle={styles.contentContainer}
+    >
       <View style={styles.header}>
         <Text style={styles.title}>How will you use ParkEase?</Text>
         <Text style={styles.subtitle}>You can switch roles anytime from your profile</Text>
@@ -76,7 +81,7 @@ export default function ChooseRoleScreen() {
           </Pressable>
         ))}
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -84,8 +89,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.surface,
-    paddingTop: 100,
     paddingHorizontal: spacing['2xl'],
+  },
+  contentContainer: {
+    paddingBottom: spacing['3xl'],
   },
   header: {
     marginBottom: spacing['2xl'],

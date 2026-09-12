@@ -1,8 +1,10 @@
 import { Role } from '@parkease/contracts/enums';
 import { colors, fontSize, spacing } from '@parkease/tokens';
+import { SplashScreen } from '@parkease/ui-native';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -16,8 +18,9 @@ const roleConfig = {
 export default function SwitchRoleScreen() {
   const auth = useAuth();
   const [loading, setLoading] = useState(false);
+  const insets = useSafeAreaInsets();
 
-  if (auth.status !== 'authenticated') return null;
+  if (auth.status !== 'authenticated') return <SplashScreen />;
 
   const handleSwitch = async (role: Role) => {
     if (role === auth.activeRole) return;
@@ -33,7 +36,7 @@ export default function SwitchRoleScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <Pressable
         onPress={() => {
           router.back();
@@ -93,7 +96,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.surface,
-    paddingTop: 60,
   },
   backButton: {
     paddingHorizontal: spacing.base,

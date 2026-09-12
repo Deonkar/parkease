@@ -2,7 +2,7 @@ import { colors, fontSize, spacing } from '@parkease/tokens';
 import { Button } from '@parkease/ui-native';
 import { router } from 'expo-router';
 import { useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, Pressable, StyleSheet, Text, View } from 'react-native';
 import PagerView from 'react-native-pager-view';
 
 import { markOnboarded } from '@/features/shared/hooks/useHasOnboarded';
@@ -59,7 +59,14 @@ export default function OnboardingScreen() {
         style={styles.pager}
         initialPage={0}
         onPageSelected={(e) => {
-          setPage(e.nativeEvent.position);
+          const newPage = e.nativeEvent.position;
+          setPage(newPage);
+          const slide = slides[newPage];
+          if (slide) {
+            AccessibilityInfo.announceForAccessibility(
+              `${slide.title}. Page ${String(newPage + 1)} of ${String(slides.length)}`,
+            );
+          }
         }}
       >
         {slides.map((slide, i) => (
@@ -102,7 +109,7 @@ const styles = StyleSheet.create({
   },
   skipButton: {
     position: 'absolute',
-    top: 60,
+    top: 52,
     right: spacing.base,
     zIndex: 1,
     padding: spacing.sm,

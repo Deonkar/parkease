@@ -12,6 +12,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { requestOtp } from '@/lib/firebase';
 
@@ -19,6 +20,7 @@ export default function PhoneScreen() {
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const insets = useSafeAreaInsets();
 
   const isValid = /^\d{10}$/.test(phone);
 
@@ -43,6 +45,11 @@ export default function PhoneScreen() {
     }
   };
 
+  const handleLink = (type: 'terms' | 'privacy') => {
+    const label = type === 'terms' ? 'Terms of Service' : 'Privacy Policy';
+    Alert.alert(label, `${label} will be available at parkease.in/${type}. Coming soon.`);
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -52,7 +59,7 @@ export default function PhoneScreen() {
         onPress={() => {
           router.back();
         }}
-        style={styles.backButton}
+        style={[styles.backButton, { marginTop: insets.top }]}
         accessibilityRole="button"
         accessibilityLabel="Go back"
       >
@@ -101,8 +108,26 @@ export default function PhoneScreen() {
       </View>
 
       <Text style={styles.terms}>
-        By continuing, you agree to our <Text style={styles.link}>Terms of Service</Text> and{' '}
-        <Text style={styles.link}>Privacy Policy</Text>
+        By continuing, you agree to our{' '}
+        <Text
+          style={styles.link}
+          onPress={() => {
+            handleLink('terms');
+          }}
+          accessibilityRole="link"
+        >
+          Terms of Service
+        </Text>{' '}
+        and{' '}
+        <Text
+          style={styles.link}
+          onPress={() => {
+            handleLink('privacy');
+          }}
+          accessibilityRole="link"
+        >
+          Privacy Policy
+        </Text>
       </Text>
     </KeyboardAvoidingView>
   );
@@ -114,7 +139,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   backButton: {
-    marginTop: 60,
     marginLeft: spacing.base,
     width: 48,
     height: 48,

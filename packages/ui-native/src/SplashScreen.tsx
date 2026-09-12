@@ -1,13 +1,38 @@
 import { colors, fontSize, spacing } from '@parkease/tokens';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { Animated, StyleSheet, Text, View } from 'react-native';
 
 export function SplashScreen() {
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 0.6,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    animation.start();
+    return () => {
+      animation.stop();
+    };
+  }, [pulseAnim]);
+
   return (
     <View style={styles.container} accessibilityRole="none" accessibilityLabel="Loading ParkEase">
-      <Text style={styles.logo}>P</Text>
+      <Animated.View style={[styles.logoContainer, { opacity: pulseAnim }]}>
+        <Text style={styles.logo}>P</Text>
+      </Animated.View>
       <Text style={styles.name}>ParkEase</Text>
       <Text style={styles.tagline}>Find parking.{'\n'}Earn from parking.</Text>
-      <ActivityIndicator size="small" color={colors.primary} style={styles.spinner} />
     </View>
   );
 }
@@ -18,6 +43,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: colors.surface,
+  },
+  logoContainer: {
+    marginBottom: spacing.xl,
   },
   logo: {
     fontSize: 48,
@@ -30,7 +58,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 80,
     overflow: 'hidden',
-    marginBottom: spacing.xl,
   },
   name: {
     fontSize: fontSize['3xl'],
@@ -43,8 +70,5 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: fontSize.base * 1.5,
-  },
-  spinner: {
-    marginTop: spacing['3xl'],
   },
 });

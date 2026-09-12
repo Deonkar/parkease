@@ -5,16 +5,18 @@ import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-na
 interface OtpInputProps {
   readonly length?: number;
   readonly onComplete: (code: string) => void;
+  readonly onChange?: (code: string) => void;
   readonly disabled?: boolean;
 }
 
-export function OtpInput({ length = 6, onComplete, disabled = false }: OtpInputProps) {
+export function OtpInput({ length = 6, onComplete, onChange, disabled = false }: OtpInputProps) {
   const [code, setCode] = useState('');
   const inputRef = useRef<TextInput>(null);
 
   const handleChange = (text: string) => {
     const cleaned = text.replace(/\D/g, '').slice(0, length);
     setCode(cleaned);
+    onChange?.(cleaned);
     if (cleaned.length === length) {
       onComplete(cleaned);
     }
@@ -26,7 +28,12 @@ export function OtpInput({ length = 6, onComplete, disabled = false }: OtpInputP
 
   return (
     <View>
-      <Pressable onPress={handlePress} style={styles.boxContainer} accessibilityRole="none">
+      <Pressable
+        onPress={handlePress}
+        style={styles.boxContainer}
+        accessible={false}
+        importantForAccessibility="no-hide-descendants"
+      >
         {Array.from({ length }, (_, i) => {
           const char = code[i] ?? '';
           const isFocused = i === code.length && !disabled;
