@@ -9,12 +9,7 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "in.parkease.app",
-      "supportsTablet": false,
-      "splash": {
-        "image": "./assets/splash.png",
-        "resizeMode": "contain",
-        "backgroundColor": "#FFFFFF"
-      }
+      "supportsTablet": false
     },
     "android": {
       "package": "in.parkease.app",
@@ -22,11 +17,6 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#4F46E5"
-      },
-      "splash": {
-        "image": "./assets/splash.png",
-        "resizeMode": "contain",
-        "backgroundColor": "#FFFFFF"
       }
     },
     "plugins": [
@@ -34,7 +24,16 @@
       "@react-native-firebase/auth",
       "expo-router",
       "expo-secure-store",
-      "expo-status-bar"
+      "expo-status-bar",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#FFFFFF"
+        }
+      ]
     ],
     "web": {
       "bundler": "metro",
