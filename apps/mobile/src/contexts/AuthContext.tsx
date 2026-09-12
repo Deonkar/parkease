@@ -2,6 +2,7 @@ import { type Role } from '@parkease/contracts/enums';
 import { router } from 'expo-router';
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 
+import { clearOnboarded } from '@/features/shared/hooks/useHasOnboarded';
 import { api, registerSessionExpiredHandler } from '@/lib/api';
 import { queryClient } from '@/lib/query';
 import { secureStorage } from '@/lib/secure-storage';
@@ -54,9 +55,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     await secureStorage.clear();
+    await clearOnboarded();
     queryClient.clear();
     setState({ status: 'unauthenticated' });
-    router.replace('/(auth)/phone');
+    router.replace('/');
   }, []);
 
   const switchRole = useCallback(async (role: Role) => {
