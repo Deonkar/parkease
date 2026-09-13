@@ -62,10 +62,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const switchRole = useCallback(async (role: Role) => {
+    const session = await secureStorage.read();
+
+    if (__DEV__ && !session) {
+      await secureStorage.write({
+        accessToken: `dev-mock-access-${String(Date.now())}`,
+        refreshToken: `dev-mock-refresh-${String(Date.now())}`,
+        roles: [role],
+        activeRole: role,
+      });
+      queryClient.clear();
+      setState({ status: 'authenticated', roles: [role], activeRole: role });
+      router.replace(`/(${role})`);
+      return;
+    }
+
     const { data } = await api.post<{
       data: { accessToken: string; refreshToken: string; activeRole: Role };
     }>('/me/roles/active', { role }, { headers: { 'Idempotency-Key': uuidv7() } });
-    const session = await secureStorage.read();
     await secureStorage.write({
       accessToken: data.data.accessToken,
       refreshToken: data.data.refreshToken,

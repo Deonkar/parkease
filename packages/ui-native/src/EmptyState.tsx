@@ -1,4 +1,5 @@
 import { colors, fontSize, spacing } from '@parkease/tokens';
+import { type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { Button } from './Button.js';
@@ -6,15 +7,16 @@ import { Button } from './Button.js';
 interface EmptyStateProps {
   readonly title: string;
   readonly body: string;
+  readonly icon?: ReactNode;
   readonly actionLabel?: string;
   readonly onAction?: () => void;
 }
 
-export function EmptyState({ title, body, actionLabel, onAction }: EmptyStateProps) {
+export function EmptyState({ title, body, icon, actionLabel, onAction }: EmptyStateProps) {
   return (
     <View style={styles.container}>
       <View style={styles.illustrationPlaceholder}>
-        <Text style={styles.illustrationText}>-</Text>
+        {icon ?? <Text style={styles.illustrationText}>{'( )'}</Text>}
       </View>
       <Text style={styles.title}>{title}</Text>
       <Text style={styles.body}>{body}</Text>

@@ -1,3 +1,4 @@
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { SpaceSummary } from '@parkease/contracts/owner';
 import { colors, spacing } from '@parkease/tokens';
 import { EmptyState, ErrorState, ListSkeleton } from '@parkease/ui-native';
@@ -61,6 +62,13 @@ export default function ListingsScreen() {
         <EmptyState
           title="No spaces listed"
           body="List your empty parking space and start earning."
+          icon={
+            <MaterialCommunityIcons
+              name="home-city-outline"
+              size={48}
+              color={colors.textTertiary}
+            />
+          }
           actionLabel="Add Space"
           onAction={() => {
             router.push('/(owner)/listings/new');

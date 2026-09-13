@@ -2,7 +2,7 @@ import type { CreateSpace } from '@parkease/contracts/owner';
 import type { SpaceSchedule } from '@parkease/contracts/owner';
 import { toPaise } from '@parkease/contracts/primitives';
 import { colors, fontSize, spacing } from '@parkease/tokens';
-import { Button } from '@parkease/ui-native';
+import { Button, ParkMap } from '@parkease/ui-native';
 import { router, Stack } from 'expo-router';
 import { useState } from 'react';
 import {
@@ -19,6 +19,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useCreateSpace } from '@/features/owner/hooks/useCreateSpace';
+import type { PlaceSuggestion } from '@/features/shared/api/geocoding';
+import { usePlaceSearch } from '@/features/shared/hooks/usePlaceSearch';
 
 type Draft = Partial<CreateSpace>;
 
@@ -87,8 +89,9 @@ export default function NewListingScreen() {
     try {
       await createSpace.mutateAsync(body);
       router.replace('/(owner)/listings');
-    } catch {
-      Alert.alert('Error', 'Failed to create listing. Please try again.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      Alert.alert('Could not create listing', message);
     }
   }
 
@@ -164,12 +167,71 @@ export default function NewListingScreen() {
 
 function LocationStep({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft>) => void }) {
   const address = draft.address ?? { line: '', city: '', pincode: '' };
+  const defaultLocation = draft.location ?? { lat: 12.9716, lng: 77.5946 };
+  const [search, setSearch] = useState('');
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const places = usePlaceSearch(search);
+
+  function selectPlace(place: PlaceSuggestion) {
+    setSearch(place.title);
+    setShowSuggestions(false);
+    patch({
+      location: { lat: place.lat, lng: place.lng },
+      address: {
+        ...address,
+        line: address.line || place.title,
+        city: place.city ?? address.city,
+        pincode: place.pincode ?? address.pincode,
+      },
+    });
+  }
+
   return (
     <View>
       <Text style={styles.sectionTitle}>Where is it?</Text>
-      <View style={styles.mapPlaceholder}>
-        <Text style={styles.mapText}>Map — drag to set pin</Text>
-      </View>
+      <TextInput
+        style={styles.input}
+        value={search}
+        onChangeText={(text) => {
+          setSearch(text);
+          setShowSuggestions(true);
+        }}
+        placeholder="Search area, e.g. Koregaon Park, Pune"
+        accessibilityLabel="Search for a place"
+        autoCorrect={false}
+      />
+      {showSuggestions && places.isLoading && <Text style={styles.searchStatus}>Searching…</Text>}
+      {showSuggestions && places.isError && (
+        <Text style={styles.searchStatus}>Could not search places. Set the pin manually.</Text>
+      )}
+      {showSuggestions && places.data && places.data.length > 0 && (
+        <View style={styles.suggestionList}>
+          {places.data.map((place) => (
+            <Pressable
+              key={place.id}
+              style={styles.suggestionItem}
+              onPress={() => {
+                selectPlace(place);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={place.subtitle}
+            >
+              <Text style={styles.suggestionTitle}>{place.title}</Text>
+              <Text style={styles.suggestionSubtitle} numberOfLines={1}>
+                {place.subtitle}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
+      <ParkMap
+        location={defaultLocation}
+        onLocationChange={(loc) => {
+          patch({ location: loc });
+        }}
+        style={styles.mapContainer}
+      />
+      <Text style={styles.mapHint}>Drag the pin to set exact location</Text>
       <Text style={styles.label}>Address</Text>
       <TextInput
         style={styles.input}
@@ -218,16 +280,14 @@ function LocationStep({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft
           />
         </View>
       </View>
-      {!draft.location ? (
+      {!draft.location && (
         <Button
-          label="Set Location"
+          label="Use Default Location"
           variant="secondary"
           onPress={() => {
             patch({ location: { lat: 12.9716, lng: 77.5946 } });
           }}
         />
-      ) : (
-        <Text style={styles.hint}>Location set (will be adjustable via map)</Text>
       )}
     </View>
   );
@@ -576,17 +636,44 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: spacing.sm,
   },
-  mapPlaceholder: {
-    height: 160,
-    backgroundColor: colors.surfaceTertiary,
+  mapContainer: {
+    height: 200,
     borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: spacing.base,
+    marginBottom: spacing.xs,
   },
-  mapText: {
+  mapHint: {
+    fontSize: fontSize.xs,
     color: colors.textTertiary,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+  },
+  searchStatus: {
+    fontSize: fontSize.xs,
+    color: colors.textTertiary,
+    marginBottom: spacing.sm,
+  },
+  suggestionList: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    marginBottom: spacing.sm,
+    overflow: 'hidden',
+  },
+  suggestionItem: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  suggestionTitle: {
     fontSize: fontSize.sm,
+    color: colors.text,
+    fontWeight: '600',
+  },
+  suggestionSubtitle: {
+    fontSize: fontSize.xs,
+    color: colors.textTertiary,
+    marginTop: 2,
   },
   amenityGrid: {
     flexDirection: 'row',
