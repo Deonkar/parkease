@@ -1,24 +1,22 @@
 import { z } from 'zod';
 
 export const APPROVAL_STATUS_VALUES = [
-  'draft',
-  'pending_review',
-  'active',
+  'pending_approval',
   'changes_requested',
   'rejected',
-  'paused',
+  'active',
+  'inactive',
 ] as const;
 
 export const approvalStatusSchema = z.enum(APPROVAL_STATUS_VALUES);
 export type ApprovalStatus = z.infer<typeof approvalStatusSchema>;
 
 export const ApprovalStatus = {
-  DRAFT: 'draft',
-  PENDING_REVIEW: 'pending_review',
-  ACTIVE: 'active',
+  PENDING_APPROVAL: 'pending_approval',
   CHANGES_REQUESTED: 'changes_requested',
   REJECTED: 'rejected',
-  PAUSED: 'paused',
+  ACTIVE: 'active',
+  INACTIVE: 'inactive',
 } as const satisfies Record<string, ApprovalStatus>;
 
 type _MissingFromObject = Exclude<

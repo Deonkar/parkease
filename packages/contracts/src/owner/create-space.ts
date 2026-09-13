@@ -1,31 +1,46 @@
 import { z } from 'zod';
 
-import { durationTypeSchema } from '../enums/duration-type.js';
-import { vehicleTypeSchema } from '../enums/vehicle-type.js';
-import { geoPointSchema, pincodeSchema } from '../primitives/indian.js';
-import { paiseSchema } from '../primitives/paise.js';
+import { amenitySchema } from '../enums/amenity.js';
+import { pincodeSchema } from '../primitives/indian.js';
 
-export const spaceSlotConfigSchema = z.object({
-  vehicleType: vehicleTypeSchema,
-  totalSlots: z.number().int().min(1).max(1000),
+import { slotCountsSchema } from './slot-counts.js';
+import { spacePricingSchema } from './space-pricing.js';
+import { spaceScheduleSchema } from './space-schedule.js';
+
+export const MAX_PHOTOS_PER_SPACE = 5;
+
+const latLngSchema = z.object({
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
 });
 
-export const spacePricingSchema = z.object({
-  vehicleType: vehicleTypeSchema,
-  durationType: durationTypeSchema,
-  pricePaise: paiseSchema,
-});
-
-export const createSpaceSchema = z.object({
-  name: z.string().min(1).max(200),
-  address: z.string().min(1).max(500),
+const addressSchema = z.object({
+  line: z.string().trim().min(8).max(200),
+  landmark: z.string().trim().max(120).optional(),
+  city: z.string().trim().min(2).max(60),
   pincode: pincodeSchema,
-  location: geoPointSchema,
-  description: z.string().max(2000).optional(),
-  amenities: z.array(z.string().min(1).max(100)).max(20).optional(),
-  slots: z.array(spaceSlotConfigSchema).min(1),
-  pricing: z.array(spacePricingSchema).min(1),
-  images: z.array(z.string().url()).max(10).optional(),
 });
+
+const baseCreateSpaceSchema = z.object({
+  title: z.string().trim().min(4).max(80),
+  description: z.string().trim().max(1000).optional(),
+  address: addressSchema,
+  location: latLngSchema,
+  slots: slotCountsSchema,
+  pricing: spacePricingSchema,
+  schedule: spaceScheduleSchema,
+  amenities: z.array(amenitySchema).max(6).default([]),
+  accessInstructions: z.string().trim().max(500).optional(),
+});
+
+export const createSpaceSchema = baseCreateSpaceSchema
+  .refine((v) => v.slots.car === 0 || v.pricing.car !== undefined, {
+    path: ['pricing', 'car'],
+    message: 'Set car pricing, or set car slots to 0',
+  })
+  .refine((v) => v.slots.twoWheeler === 0 || v.pricing.twoWheeler !== undefined, {
+    path: ['pricing', 'twoWheeler'],
+    message: 'Set two-wheeler pricing, or set two-wheeler slots to 0',
+  });
 
 export type CreateSpace = z.infer<typeof createSpaceSchema>;

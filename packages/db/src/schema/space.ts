@@ -1,3 +1,6 @@
+import type { Amenity } from '@parkease/contracts/enums';
+import type { SpacePricing } from '@parkease/contracts/owner';
+import type { SpaceSchedule } from '@parkease/contracts/owner';
 import { sql } from 'drizzle-orm';
 import {
   boolean,
@@ -12,26 +15,10 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 
-import { paise, primaryId, softDelete, timestamps } from '../columns/common.js';
+import { primaryId, softDelete, timestamps } from '../columns/common.js';
 import { geographyPoint } from '../columns/geography-point.js';
 
 import { users } from './identity.js';
-
-export interface SpaceAmenities {
-  covered?: boolean;
-  cctv?: boolean;
-  ev_charging?: boolean;
-  security_guard?: boolean;
-  lighting?: boolean;
-  wheelchair_accessible?: boolean;
-}
-
-export interface SpaceScheduleSlot {
-  open: string;
-  close: string;
-}
-
-export type SpaceSchedule = Record<string, SpaceScheduleSlot | null>;
 
 export const spaces = pgTable(
   'spaces',
@@ -49,12 +36,15 @@ export const spaces = pgTable(
     pincode: text('pincode').notNull(),
     location: geographyPoint('location').notNull(),
     zoneId: text('zone_id').notNull(),
-    approvalStatus: text('approval_status').notNull().default('draft'),
+    pricing: jsonb('pricing').$type<SpacePricing>().notNull(),
+    schedule: jsonb('schedule').$type<SpaceSchedule>().notNull(),
+    amenities: jsonb('amenities').$type<Amenity[]>().notNull().default([]),
+    accessInstructions: text('access_instructions'),
+    approvalStatus: text('approval_status').notNull().default('pending_approval'),
     rejectionReason: text('rejection_reason'),
+    submittedAt: timestamp('submitted_at', { withTimezone: true }),
     approvedAt: timestamp('approved_at', { withTimezone: true }),
     approvedByUserId: uuid('approved_by_user_id').references(() => users.id),
-    amenities: jsonb('amenities').$type<SpaceAmenities>().notNull().default({}),
-    schedule: jsonb('schedule').$type<SpaceSchedule>().notNull(),
     ratingAvgBp: integer('rating_avg_bp'),
     ratingCount: integer('rating_count').notNull().default(0),
     ...timestamps,
@@ -67,7 +57,7 @@ export const spaces = pgTable(
     index('spaces_approval_status_idx').on(t.approvalStatus),
     check(
       'spaces_approval_status_check',
-      sql`${t.approvalStatus} IN ('draft','pending_review','active','changes_requested','rejected','paused')`,
+      sql`${t.approvalStatus} IN ('pending_approval','changes_requested','rejected','active','inactive')`,
     ),
     check('spaces_pincode_check', sql`${t.pincode} ~ '^[1-9][0-9]{5}$'`),
   ],
@@ -82,11 +72,7 @@ export const spaceSlots = pgTable(
       .references(() => spaces.id, { onDelete: 'cascade' }),
     vehicleType: text('vehicle_type').notNull(),
     slotIndex: integer('slot_index').notNull(),
-    pricePaiseHourly: paise('price_paise_hourly').notNull(),
-    pricePaiseDaily: paise('price_paise_daily'),
-    pricePaiseWeekly: paise('price_paise_weekly'),
-    pricePaiseMonthly: paise('price_paise_monthly'),
-    isActive: boolean('is_active').notNull().default(true),
+    label: text('label'),
     ...timestamps,
   },
   (t) => [
@@ -94,7 +80,6 @@ export const spaceSlots = pgTable(
     index('space_slots_space_id_idx').on(t.spaceId),
     check('space_slots_vehicle_type_check', sql`${t.vehicleType} IN ('car','two_wheeler')`),
     check('space_slots_slot_index_check', sql`${t.slotIndex} >= 0`),
-    check('space_slots_price_hourly_check', sql`${t.pricePaiseHourly} > 0`),
   ],
 );
 
@@ -106,8 +91,20 @@ export const spacePhotos = pgTable(
       .notNull()
       .references(() => spaces.id, { onDelete: 'cascade' }),
     cloudinaryPublicId: text('cloudinary_public_id').notNull(),
-    sortOrder: integer('sort_order').notNull().default(0),
+    url: text('url').notNull(),
+    format: text('format').notNull(),
+    bytes: integer('bytes').notNull(),
+    width: integer('width').notNull(),
+    height: integer('height').notNull(),
+    displayOrder: integer('display_order').notNull().default(0),
+    isPrimary: boolean('is_primary').notNull().default(false),
     ...timestamps,
   },
-  (t) => [index('space_photos_space_id_idx').on(t.spaceId)],
+  (t) => [
+    uniqueIndex('space_photos_order_uq').on(t.spaceId, t.displayOrder),
+    uniqueIndex('space_photos_primary_uq')
+      .on(t.spaceId)
+      .where(sql`${t.isPrimary}`),
+    index('space_photos_space_id_idx').on(t.spaceId),
+  ],
 );

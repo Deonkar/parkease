@@ -1,3 +1,4 @@
+export { AMENITY_VALUES, amenitySchema, Amenity } from './amenity.js';
 export { ROLE_VALUES, roleSchema, Role } from './role.js';
 export { VEHICLE_TYPE_VALUES, vehicleTypeSchema, VehicleType } from './vehicle-type.js';
 export { BOOKING_STATUS_VALUES, bookingStatusSchema, BookingStatus } from './booking-status.js';
