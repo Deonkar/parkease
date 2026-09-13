@@ -15,10 +15,22 @@ config.resolver.nodeModulesPaths = [
   path.resolve(monorepoRoot, 'node_modules'),
 ];
 
+const nativeOnlyModules = ['react-native-pager-view'];
+const webStubs = {
+  'react-native-pager-view': path.resolve(projectRoot, 'src/polyfills/pager-view-web-stub'),
+};
+
 // Workspace packages use NodeNext .js extensions in imports that point to .ts source.
 // Only rewrite for files inside packages/ — not for node_modules or react-native internals.
 const originalResolveRequest = config.resolver.resolveRequest;
 config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (platform === 'web' && nativeOnlyModules.includes(moduleName)) {
+    return {
+      filePath: webStubs[moduleName] + '.tsx',
+      type: 'sourceFile',
+    };
+  }
+
   if (
     moduleName.endsWith('.js') &&
     context.originModulePath &&
