@@ -44,6 +44,12 @@ import {
 } from '@/features/driver/hooks/useSearchFilters';
 import { useSpaceSearch } from '@/features/driver/hooks/useSpaceSearch';
 
+/**
+ * How many all-filtered-out pages to walk through before giving up and showing
+ * the empty state. Five pages at the default limit is 100 candidates.
+ */
+const AUTO_ADVANCE_LIMIT = 5;
+
 /** How far the driver must pan before "Search this area" is offered. */
 const PAN_THRESHOLD_M = 400;
 const DEFAULT_ZOOM = 14;
@@ -104,11 +110,34 @@ export default function DriverDiscoveryScreen() {
   // slot, so a page can arrive empty while more pages remain. FlashList cannot
   // help here — an empty list never reaches onEndReached — so pull the next
   // page directly, or the driver is shown "no spots" with results one page away.
+  // Depend on primitives and the stable fetchNextPage, never on `query` itself:
+  // TanStack Query returns a fresh object every render, so depending on it runs
+  // this effect on every render, and every fetchNextPage causes a render. That
+  // is an unbounded loop that wedges the JS thread before the app ever paints.
+  //
+  // AUTO_ADVANCE_LIMIT bounds it a second way. Advancing is correct when the
+  // server hands back a page whose rows were all filtered out, but a server
+  // that always reports another page would otherwise walk the whole result set
+  // in one go. After the cap the driver gets the empty state and can act.
+  const { hasNextPage, isFetchingNextPage, isPending, fetchNextPage } = query;
+  const [autoAdvances, setAutoAdvances] = useState(0);
+
   useEffect(() => {
-    if (items.length === 0 && query.hasNextPage && !query.isFetchingNextPage && !query.isPending) {
-      void query.fetchNextPage();
+    setAutoAdvances(0);
+  }, [filters, origin]);
+
+  useEffect(() => {
+    if (
+      items.length === 0 &&
+      hasNextPage &&
+      !isFetchingNextPage &&
+      !isPending &&
+      autoAdvances < AUTO_ADVANCE_LIMIT
+    ) {
+      setAutoAdvances((n) => n + 1);
+      void fetchNextPage();
     }
-  }, [items.length, query]);
+  }, [items.length, hasNextPage, isFetchingNextPage, isPending, fetchNextPage, autoAdvances]);
 
   const points = useMemo(() => {
     if (!origin) return [];
@@ -283,7 +312,7 @@ export default function DriverDiscoveryScreen() {
     // with more still to come. Showing "No spots found" then would be a lie the
     // driver cannot get past — an empty list never fires onEndReached, so
     // nothing would ever fetch the next page.
-    if (items.length === 0 && query.hasNextPage) {
+    if (items.length === 0 && hasNextPage && autoAdvances < AUTO_ADVANCE_LIMIT) {
       return <ListSkeleton count={5} itemHeight={96} />;
     }
 
