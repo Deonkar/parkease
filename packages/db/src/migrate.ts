@@ -15,7 +15,21 @@ function getDatabaseUrl(): string {
 }
 
 export async function migrate(): Promise<void> {
-  const sql = postgres(getDatabaseUrl(), { max: 1 });
+  const sql = postgres(getDatabaseUrl(), {
+    max: 1,
+    connection: {
+      // Set on the connection rather than per file, because a migration that
+      // needs CREATE INDEX CONCURRENTLY must be the only statement in its file:
+      // Postgres wraps a multi-statement simple query in an implicit
+      // transaction, and CONCURRENTLY cannot run inside one. A per-file
+      // `SET lock_timeout` would be that second statement.
+      //
+      // Without lock_timeout a migration waits forever for its lock, queueing
+      // behind one slow query and blocking every write to the table.
+      lock_timeout: '5s',
+      statement_timeout: '15min',
+    },
+  });
 
   try {
     await sql`
