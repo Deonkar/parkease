@@ -56,7 +56,20 @@ export function parseCandidate(raw: unknown): Candidate {
   return candidateSchema.parse(raw);
 }
 
-const cachedCandidatesSchema = z.array(candidateSchema);
+/**
+ * An entry remembers the origin its distances were measured from.
+ *
+ * The key quantises the origin to a ~153m cell, so the caller reading an entry
+ * is generally NOT the caller who wrote it. Distances are therefore that other
+ * point's, and a distance cursor issued from this page has to continue from the
+ * same point or page 2 disagrees with page 1 about what "farther" means.
+ */
+const cachedEntrySchema = z.object({
+  origin: z.object({ lat: z.number(), lng: z.number() }),
+  candidates: z.array(candidateSchema),
+});
+
+export type CachedEntry = z.infer<typeof cachedEntrySchema>;
 
 @Injectable()
 export class SearchCache {
@@ -71,7 +84,7 @@ export class SearchCache {
    * A miss and an unreachable Redis are the same answer: recompute. ADR-010 —
    * Redis is a cache, and a search must still work without it.
    */
-  async read(q: SearchSpacesQuery): Promise<Candidate[] | undefined> {
+  async read(q: SearchSpacesQuery): Promise<CachedEntry | undefined> {
     const key = SearchCache.keyFor(q);
 
     let raw: string | null;
@@ -94,22 +107,23 @@ export class SearchCache {
 
     // R-VAL-01: a cached value is data from outside the process. An entry
     // written by an older shape must degrade to a miss, never to a crash.
-    const candidates = cachedCandidatesSchema.safeParse(parsed);
-    if (!candidates.success) {
+    const entry = cachedEntrySchema.safeParse(parsed);
+    if (!entry.success) {
       logger.warn(
-        { key, issues: candidates.error.issues },
+        { key, issues: entry.error.issues },
         'candidate cache entry failed validation — recomputing',
       );
       return undefined;
     }
 
-    return candidates.data;
+    return entry.data;
   }
 
   async write(q: SearchSpacesQuery, candidates: readonly Candidate[]): Promise<void> {
     const key = SearchCache.keyFor(q);
+    const entry: CachedEntry = { origin: { lat: q.lat, lng: q.lng }, candidates: [...candidates] };
     try {
-      await this.redis.set(key, JSON.stringify(candidates), 'EX', CANDIDATE_CACHE_TTL_SECONDS);
+      await this.redis.set(key, JSON.stringify(entry), 'EX', CANDIDATE_CACHE_TTL_SECONDS);
     } catch (err) {
       // A cache that cannot be written is a slower search, not a failed one.
       logger.warn({ err, key }, 'candidate cache write failed — continuing uncached');

@@ -19,7 +19,7 @@ import {
 } from '@parkease/ui-native';
 import { FlashList } from '@shopify/flash-list';
 import { useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   FadeIn,
@@ -99,6 +99,16 @@ export default function DriverDiscoveryScreen() {
 
   // Read straight out of the query cache — never copied into state (R-FE-02).
   const items = useMemo(() => query.data?.pages.flatMap((page) => page.data) ?? [], [query.data]);
+
+  // The server paginates candidates and only then drops the ones with no free
+  // slot, so a page can arrive empty while more pages remain. FlashList cannot
+  // help here — an empty list never reaches onEndReached — so pull the next
+  // page directly, or the driver is shown "no spots" with results one page away.
+  useEffect(() => {
+    if (items.length === 0 && query.hasNextPage && !query.isFetchingNextPage && !query.isPending) {
+      void query.fetchNextPage();
+    }
+  }, [items.length, query]);
 
   const points = useMemo(() => {
     if (!origin) return [];
@@ -266,6 +276,15 @@ export default function DriverDiscoveryScreen() {
           }}
         />
       );
+    }
+
+    // `hasNextPage` matters here: the server paginates candidates and only then
+    // drops the ones with no free slot, so a page can legitimately arrive empty
+    // with more still to come. Showing "No spots found" then would be a lie the
+    // driver cannot get past — an empty list never fires onEndReached, so
+    // nothing would ever fetch the next page.
+    if (items.length === 0 && query.hasNextPage) {
+      return <ListSkeleton count={5} itemHeight={96} />;
     }
 
     if (items.length === 0) {

@@ -192,7 +192,12 @@ describe('cursorCondition', () => {
 
   it('uses a greater-than tuple comparison for an ascending sort', () => {
     const q = query();
-    const c: SearchCursor = { sortBy: 'distance', value: 450, id };
+    const c: SearchCursor = {
+      sortBy: 'distance',
+      value: 450,
+      id,
+      origin: { lat: 12.9345, lng: 77.6266 },
+    };
     const { text, params } = render(
       cursorCondition(c, originPoint(q.lat, q.lng), basePriceExpr(q)),
     );
@@ -204,7 +209,12 @@ describe('cursorCondition', () => {
 
   it('uses a less-than tuple comparison for the descending rating sort', () => {
     const q = query({ sortBy: 'rating' });
-    const c: SearchCursor = { sortBy: 'rating', value: 42_000, id };
+    const c: SearchCursor = {
+      sortBy: 'rating',
+      value: 42_000,
+      id,
+      origin: { lat: 12.9345, lng: 77.6266 },
+    };
     const { text, params } = render(
       cursorCondition(c, originPoint(q.lat, q.lng), basePriceExpr(q)),
     );
@@ -216,7 +226,7 @@ describe('cursorCondition', () => {
     const q = query({ sortBy: 'price', vehicleType: 'car' });
     const { text } = render(
       cursorCondition(
-        { sortBy: 'price', value: 3000, id },
+        { sortBy: 'price', value: 3000, id, origin: { lat: 12.9345, lng: 77.6266 } },
         originPoint(q.lat, q.lng),
         basePriceExpr(q),
       ),
@@ -274,7 +284,12 @@ describe('filtersHash', () => {
 
 describe('cursor codec', () => {
   const id = '0192f1b3-0000-7000-8000-000000000001';
-  const cursor: SearchCursor = { sortBy: 'distance', value: 450.25, id };
+  const cursor: SearchCursor = {
+    sortBy: 'distance',
+    value: 450.25,
+    id,
+    origin: { lat: 12.9345, lng: 77.6266 },
+  };
 
   it('round-trips through base64url', () => {
     const q = query();
@@ -292,18 +307,60 @@ describe('cursor codec', () => {
     expect(decodeCursor(token, query({ minRating: '4' }))).toBeUndefined();
   });
 
+  it('carries its own origin, so a different caller still pages from where the page was measured', () => {
+    // The bug this guards: a candidate-cache hit serves rows whose distances
+    // were measured from whoever populated the ~153m cell, which can be ~216m
+    // from this caller. If page 2 ordered by distance from the caller while
+    // comparing against that other point's value, every row between the two
+    // would be skipped or repeated. The cursor must win over the request.
+    const measuredFrom = { lat: 12.93, lng: 77.62 };
+    const issued: SearchCursor = { sortBy: 'distance', value: 812.5, id, origin: measuredFrom };
+
+    const callerFarAway = query({ lat: '12.9999', lng: '77.6999' });
+    const decoded = decodeCursor(encodeCursor(issued, callerFarAway), callerFarAway);
+
+    expect(decoded?.origin).toEqual(measuredFrom);
+
+    const { params } = render(
+      cursorCondition(
+        decoded!,
+        originPoint(callerFarAway.lat, callerFarAway.lng),
+        basePriceExpr(callerFarAway),
+      ),
+    );
+    // The cursor's origin reaches SQL, not the request's.
+    expect(params).toContain(measuredFrom.lng);
+    expect(params).toContain(measuredFrom.lat);
+    expect(params).not.toContain(callerFarAway.lat);
+  });
+
+  it('rejects an origin outside real coordinate bounds', () => {
+    const token = Buffer.from(
+      JSON.stringify({ s: 'distance', v: 1, i: id, h: 'x', o: [999, 999] }),
+      'utf8',
+    ).toString('base64url');
+    expect(decodeCursor(token, query())).toBeUndefined();
+  });
+
   it('rejects a cursor replayed against a different sort', () => {
     const token = encodeCursor(cursor, query());
     expect(decodeCursor(token, query({ sortBy: 'price' }))).toBeUndefined();
   });
 
-  it('rejects a cursor replayed against a different origin', () => {
-    // A distance cursor carries a distance measured from the origin that issued
-    // it. Replayed from somewhere else it silently skips or repeats rows, so
-    // the cursor binds the exact origin even though the cache key does not.
+  it('accepts a replay from a different origin and keeps measuring from its own', () => {
+    // This used to reject, on the reasoning that a distance measured from one
+    // origin cannot be compared against distances from another. True — but
+    // rejecting was the wrong remedy, because the candidate cache legitimately
+    // serves one caller rows measured from another's position in the same cell,
+    // and rejecting would have broken page 2 for every cache hit. The cursor
+    // now carries the origin it was measured from and page 2 continues from
+    // there, so a replay is correct rather than merely tolerated.
     const token = encodeCursor(cursor, query());
-    expect(decodeCursor(token, query({ lat: 12.97, lng: 77.59 }))).toBeUndefined();
-    expect(decodeCursor(token, query({ lat: 12.93452, lng: 77.62662 }))).toBeUndefined();
+    const elsewhere = query({ lat: 12.97, lng: 77.59 });
+
+    const decoded = decodeCursor(token, elsewhere);
+    expect(decoded).toBeDefined();
+    expect(decoded?.origin).toEqual(cursor.origin);
   });
 
   it('rejects garbage rather than throwing', () => {

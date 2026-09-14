@@ -100,8 +100,14 @@ describe('SearchCache.read', () => {
       }),
     });
 
-    await cache.write(query(), [candidate]);
-    expect(await cache.read(query())).toEqual([candidate]);
+    const q = query();
+    await cache.write(q, [candidate]);
+    // An entry remembers the origin its distances were measured from, so the
+    // cursor issued from a hit can continue from that same point.
+    expect(await cache.read(q)).toEqual({
+      origin: { lat: q.lat, lng: q.lng },
+      candidates: [candidate],
+    });
   });
 
   it('treats a cached value that fails validation as a miss, and warns', async () => {
@@ -141,7 +147,7 @@ describe('SearchCache.write', () => {
     expect(CANDIDATE_CACHE_TTL_SECONDS).toBe(60);
     expect(redis.set).toHaveBeenCalledWith(
       SearchCache.keyFor(q),
-      JSON.stringify([candidate]),
+      JSON.stringify({ origin: { lat: q.lat, lng: q.lng }, candidates: [candidate] }),
       'EX',
       CANDIDATE_CACHE_TTL_SECONDS,
     );

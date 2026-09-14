@@ -123,16 +123,29 @@ export interface SearchCursor {
   readonly sortBy: SearchSort;
   readonly value: number;
   readonly id: string;
+  /**
+   * The origin `value` was measured from, for a distance cursor.
+   *
+   * It travels in the cursor rather than being taken from the next request,
+   * because the two are not always the same point: a candidate-cache hit serves
+   * rows whose distances were measured from whichever origin populated the
+   * cell, up to ~216m from the current caller. Ordering page 2 by distance from
+   * the caller while comparing against a value measured from someone else skips
+   * or repeats every row between the two. Carrying the origin makes the cursor
+   * self-consistent, and page 2 continues the same ordering page 1 showed.
+   */
+  readonly origin: { readonly lat: number; readonly lng: number };
 }
 
 /**
  * Keyset pagination. Both keys of the tuple sort the same direction, so "the
  * rows after this one" is a single row comparison rather than an OR-chain.
  */
-export function cursorCondition(c: SearchCursor, origin: SQL, basePrice: SQL): SQL {
+export function cursorCondition(c: SearchCursor, _origin: SQL, basePrice: SQL): SQL {
   switch (c.sortBy) {
     case 'distance':
-      return sql`(ST_Distance(s.location, ${origin}), s.id) > (${c.value}::float8, ${c.id}::uuid)`;
+      // The cursor's own origin, not the request's — see SearchCursor.origin.
+      return sql`(ST_Distance(s.location, ${originPoint(c.origin.lat, c.origin.lng)}), s.id) > (${c.value}::float8, ${c.id}::uuid)`;
     case 'price':
       return sql`(${basePrice}, s.id) > (${c.value}::bigint, ${c.id}::uuid)`;
     case 'rating':
@@ -166,17 +179,16 @@ export function filtersHash(q: SearchSpacesQuery): string {
 }
 
 /**
- * What a cursor is bound to: the filter set *and* the exact origin.
+ * What a cursor is bound to: the filter set.
  *
- * A distance cursor carries a distance measured from the origin that issued it,
- * so replaying it from even a slightly different origin silently skips or
- * repeats rows. The cache can quantise the origin; a keyset cursor cannot.
+ * Replaying a cursor against a *different filter set* silently skips or repeats
+ * rows, so that is rejected. The origin is not part of the binding because the
+ * cursor carries its own (see `SearchCursor.origin`) and page 2 continues from
+ * that — which is the only way a cache hit, whose rows were measured from
+ * another point in the cell, can page correctly.
  */
 function cursorBinding(q: SearchSpacesQuery): string {
-  return createHash('sha256')
-    .update(JSON.stringify([filtersHash(q), q.lat, q.lng]))
-    .digest('hex')
-    .slice(0, 16);
+  return createHash('sha256').update(filtersHash(q)).digest('hex').slice(0, 16);
 }
 
 const cursorPayloadSchema = z.object({
@@ -184,10 +196,19 @@ const cursorPayloadSchema = z.object({
   v: z.number().finite(),
   i: z.string().uuid(),
   h: z.string(),
+  // Untrusted input: bounded here so it cannot reach ST_Distance as anything
+  // but a real coordinate (R-VAL-01).
+  o: z.tuple([z.number().min(-90).max(90), z.number().min(-180).max(180)]),
 });
 
 export function encodeCursor(c: SearchCursor, q: SearchSpacesQuery): string {
-  const payload = { s: c.sortBy, v: c.value, i: c.id, h: cursorBinding(q) };
+  const payload = {
+    s: c.sortBy,
+    v: c.value,
+    i: c.id,
+    h: cursorBinding(q),
+    o: [c.origin.lat, c.origin.lng],
+  };
   return Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
 }
 
@@ -214,5 +235,11 @@ export function decodeCursor(raw: string, q: SearchSpacesQuery): SearchCursor | 
   if (!payload.success) return undefined;
   if (payload.data.h !== cursorBinding(q)) return undefined;
 
-  return { sortBy: payload.data.s, value: payload.data.v, id: payload.data.i };
+  const [lat, lng] = payload.data.o;
+  return {
+    sortBy: payload.data.s,
+    value: payload.data.v,
+    id: payload.data.i,
+    origin: { lat, lng },
+  };
 }

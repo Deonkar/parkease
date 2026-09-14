@@ -40,6 +40,17 @@ export interface SearchPage {
 
 const NO_AVAILABILITY: SlotAvailability = { car: 0, twoWheeler: 0 };
 
+export interface GeoOrigin {
+  readonly lat: number;
+  readonly lng: number;
+}
+
+/** Candidate rows together with the origin their distances were measured from. */
+interface MeasuredCandidates {
+  readonly origin: GeoOrigin;
+  readonly rows: Candidate[];
+}
+
 /**
  * Rows come back from raw SQL, so numerics are normalised on the way in —
  * `::bigint` and `count(*)` arrive as strings from postgres-js — and the result
@@ -84,7 +95,7 @@ export class SearchService {
    * Exactly two SQL statements on a cache miss, one on a hit (R-PERF-02).
    */
   async findNearby(q: SearchSpacesQuery): Promise<SearchPage> {
-    const fetched = await this.candidates(q);
+    const { origin, rows: fetched } = await this.candidates(q);
 
     const page = fetched.slice(0, q.limit);
     const hasMore = fetched.length > q.limit;
@@ -114,7 +125,8 @@ export class SearchService {
       // The cursor is taken from the last *candidate* of the page, not the last
       // surviving item: a row dropped for having no free slot has still been
       // paged past, and re-scanning it would stall pagination.
-      nextCursor: hasMore && last !== undefined ? encodeCursor(this.cursorFor(last, q), q) : null,
+      nextCursor:
+        hasMore && last !== undefined ? encodeCursor(this.cursorFor(last, q, origin), q) : null,
     };
   }
 
@@ -124,14 +136,24 @@ export class SearchService {
     return true;
   }
 
-  private cursorFor(candidate: Candidate, q: SearchSpacesQuery): SearchCursor {
+  /**
+   * `origin` is the point the candidate's distance was measured from, which on
+   * a cache hit is not the caller's own position. It rides along in the cursor
+   * so page 2 orders by distance from the same point page 1 did.
+   */
+  private cursorFor(candidate: Candidate, q: SearchSpacesQuery, origin: GeoOrigin): SearchCursor {
     switch (q.sortBy) {
       case 'distance':
-        return { sortBy: 'distance', value: candidate.distanceExactM, id: candidate.id };
+        return {
+          sortBy: 'distance',
+          value: candidate.distanceExactM,
+          id: candidate.id,
+          origin,
+        };
       case 'price':
-        return { sortBy: 'price', value: candidate.basePricePaise, id: candidate.id };
+        return { sortBy: 'price', value: candidate.basePricePaise, id: candidate.id, origin };
       case 'rating':
-        return { sortBy: 'rating', value: candidate.ratingAvgBp ?? 0, id: candidate.id };
+        return { sortBy: 'rating', value: candidate.ratingAvgBp ?? 0, id: candidate.id, origin };
     }
   }
 
@@ -140,14 +162,18 @@ export class SearchService {
    * entirely — keyset correctness matters more than the hit rate on a page most
    * sessions never reach.
    */
-  private async candidates(q: SearchSpacesQuery): Promise<Candidate[]> {
+  private async candidates(q: SearchSpacesQuery): Promise<MeasuredCandidates> {
     if (q.cursor === undefined) {
       const cached = await this.cache.read(q);
-      if (cached !== undefined) return cached;
+      // A hit carries the origin its distances were measured from, which is
+      // some other caller in the same ~153m cell. The cursor issued from this
+      // page has to continue from that same point, not from ours.
+      if (cached !== undefined) return { origin: cached.origin, rows: cached.candidates };
 
-      const fresh = await this.findCandidates(q, undefined);
+      const origin = { lat: q.lat, lng: q.lng };
+      const fresh = await this.findCandidates(q, undefined, origin);
       await this.cache.write(q, fresh);
-      return fresh;
+      return { origin, rows: fresh };
     }
 
     const cursor = decodeCursor(q.cursor, q);
@@ -158,14 +184,15 @@ export class SearchService {
       });
     }
 
-    return this.findCandidates(q, cursor);
+    return { origin: cursor.origin, rows: await this.findCandidates(q, cursor, cursor.origin) };
   }
 
   private async findCandidates(
     q: SearchSpacesQuery,
     cursor: SearchCursor | undefined,
+    from: GeoOrigin,
   ): Promise<Candidate[]> {
-    const origin = originPoint(q.lat, q.lng);
+    const origin = originPoint(from.lat, from.lng);
     const basePrice = basePriceExpr(q);
     const conditions = buildConditions(q, origin, basePrice);
 
