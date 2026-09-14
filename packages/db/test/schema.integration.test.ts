@@ -14,7 +14,7 @@ let ctx: PgTestContext;
 
 beforeAll(async () => {
   ctx = await startPgContainer();
-  await runMigrations(ctx.sql);
+  await runMigrations(ctx.connectionString);
 }, 180_000);
 
 afterAll(async () => {
@@ -54,7 +54,7 @@ describe('extensions', () => {
   });
 
   it('running migrations again is a no-op', async () => {
-    await expect(runMigrations(sql())).resolves.not.toThrow();
+    await expect(runMigrations(ctx.connectionString)).resolves.not.toThrow();
   });
 });
 
@@ -85,12 +85,13 @@ describe('geography', () => {
       await sql()`
         INSERT INTO spaces (
           owner_id, title, address_line, city, state, pincode,
-          location, zone_id, approval_status, schedule
+          location, zone_id, approval_status, schedule, pricing
         ) VALUES (
           ${actualOwnerId}, ${f.title}, ${f.title + ' address'}, 'Bangalore', 'Karnataka',
           ${f.pincode},
           ST_SetSRID(ST_MakePoint(${f.lng}, ${f.lat}), 4326)::geography,
-          ${'zone' + String(i)}, 'active', '{"monday":{"open":"06:00","close":"22:00"}}'::jsonb
+          ${'zone' + String(i)}, 'active', '{"monday":{"open":"06:00","close":"22:00"}}'::jsonb,
+          '{"car":{"hourlyPaise":3000}}'::jsonb
         ) ON CONFLICT DO NOTHING
       `;
     }
@@ -174,17 +175,20 @@ describe('exclusion constraint', () => {
     await sql()`
       INSERT INTO spaces (
         id, owner_id, title, address_line, city, state, pincode,
-        location, zone_id, approval_status, schedule
+        location, zone_id, approval_status, schedule, pricing
       ) VALUES (
         ${testSpaceId}, ${owner!['id'] as string}, 'Exclusion Test Space', 'Test Addr', 'Bangalore', 'Karnataka',
         '560034', ST_SetSRID(ST_MakePoint(77.6245, 12.9352), 4326)::geography,
-        'zone_excl', 'active', '{"monday":{"open":"06:00","close":"22:00"}}'::jsonb
+        'tdr1w6', 'active', '{"monday":{"open":"06:00","close":"22:00"}}'::jsonb,
+        '{"car":{"hourlyPaise":3000}}'::jsonb
       )
     `;
 
+    // Pricing moved from per-slot columns to the spaces.pricing jsonb in
+    // migration 0012 (task 6), so a slot now carries only its identity.
     await sql()`
-      INSERT INTO space_slots (space_id, vehicle_type, slot_index, price_paise_hourly)
-      VALUES (${testSpaceId}, 'car', 0, 3000)
+      INSERT INTO space_slots (space_id, vehicle_type, slot_index)
+      VALUES (${testSpaceId}, 'car', 0)
     `;
   });
 
@@ -569,23 +573,29 @@ describe('schema conformance', () => {
   });
 
   it('spaces.pincode 012345 is rejected by CHECK', async () => {
+    // Every other column here must be VALID, or this passes for the wrong
+    // reason: omitting pricing (NOT NULL) raises 23502 before the CHECK is ever
+    // evaluated, and an invalid approval_status raises 23514 from a different
+    // constraint entirely. The only thing wrong with this row is the pincode.
     try {
       const [owner] = await sql()`SELECT id FROM users LIMIT 1`;
       await sql()`
         INSERT INTO spaces (
           owner_id, title, address_line, city, state, pincode,
-          location, zone_id, approval_status, schedule
+          location, zone_id, approval_status, schedule, pricing
         ) VALUES (
           ${owner!['id'] as string}, 'Bad Pincode Space', 'Addr', 'City', 'State',
           '012345',
           ST_SetSRID(ST_MakePoint(77.0, 12.0), 4326)::geography,
-          'zone_bad', 'draft', '{}'::jsonb
+          'tdr1w6', 'pending_approval', '{}'::jsonb,
+          '{"car":{"hourlyPaise":3000}}'::jsonb
         )
       `;
       expect.fail('Should have thrown');
     } catch (err: unknown) {
-      const pgErr = err as { code: string };
+      const pgErr = err as { code: string; constraint_name?: string };
       expect(pgErr.code).toBe('23514');
+      expect(pgErr.constraint_name).toBe('spaces_pincode_check');
     }
   });
 });
