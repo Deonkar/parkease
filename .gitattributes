@@ -1,0 +1,17 @@
+# Default: let git normalise text files in the repository.
+* text=auto
+
+# Shell scripts must keep LF endings even on a Windows checkout. A CRLF shebang
+# becomes `#!/bin/bash\r`, and the kernel then looks for an interpreter named
+# "/bin/bash\r" — which fails as "cannot execute: required file not found",
+# naming the script rather than the real cause. This bit the Postgres init
+# script mounted into docker-entrypoint-initdb.d, which silently skipped
+# creating parkease_test.
+*.sh text eol=lf
+
+# Gradle wrappers and the same reasoning as above.
+gradlew text eol=lf
+
+# SQL migrations are read by the migration runner, not executed, but keeping
+# them LF makes their hashes stable across platforms.
+*.sql text eol=lf

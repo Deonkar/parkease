@@ -9,7 +9,13 @@ services:
     ports:
       - '5432:5432'
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      # PostgreSQL 18 images keep data in a major-version subdirectory and expect
+      # the volume one level up, at /var/lib/postgresql. Mounting it at
+      # .../data makes the container exit at startup ("there appears to be
+      # PostgreSQL data in: /var/lib/postgresql/data (unused mount/volume)")
+      # while `docker compose up -d` still reports Started — the failure is only
+      # visible in `docker logs parkease-postgres`.
+      - postgres_data:/var/lib/postgresql
       - ./docker/init-parkease-test.sh:/docker-entrypoint-initdb.d/10-init-parkease-test.sh:ro
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U parkease -d parkease_dev']
