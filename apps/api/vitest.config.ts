@@ -4,7 +4,13 @@ export default defineConfig({
   test: {
     root: '.',
     globals: false,
+    // Testcontainers-backed tests need Docker and minutes, not milliseconds.
+    // They run from vitest.integration.config.ts instead.
+    exclude: ['**/node_modules/**', 'test/integration/**'],
     env: {
+      // Pinned so a timezone-dependent bug cannot pass locally (IST) and fail
+      // in CI (UTC). `isOpenAt` must read instants in Asia/Kolkata regardless.
+      TZ: 'UTC',
       NODE_ENV: 'test',
       PORT: '3000',
       APP_VERSION: '0.0.0-test',

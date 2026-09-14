@@ -138,6 +138,9 @@ export default tseslint.config(
       '**/vitest.integration.config.ts',
       '**/test/**/*.spec.ts',
       '**/test/**/*.test.ts',
+      // Test helpers and fixtures live under test/ too, and are no more part of
+      // a tsconfig project than the specs that import them.
+      '**/test/**/*.ts',
       '**/drizzle.config.ts',
     ],
     ...tseslint.configs.disableTypeChecked,
