@@ -3,6 +3,7 @@ import { Role } from '@parkease/contracts/enums';
 import { colors, fontSize, fontWeight } from '@parkease/tokens';
 import { Tabs, Redirect } from 'expo-router';
 import type { ColorValue } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -24,8 +25,15 @@ function tabIcon(outline: IconName, filled: IconName) {
   };
 }
 
+/**
+ * Material's minimum for bottom navigation with labels. The default tab bar is
+ * 48px, which clips the label under a 24px icon — visible at 375x812.
+ */
+const TAB_BAR_HEIGHT = 60;
+
 export default function DriverLayout() {
   const auth = useAuth();
+  const insets = useSafeAreaInsets();
 
   if (auth.status !== 'authenticated') return <Redirect href="/" />;
   if (auth.activeRole !== Role.DRIVER) {
@@ -38,6 +46,15 @@ export default function DriverLayout() {
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.tabInactive,
         tabBarLabelStyle: { fontSize: fontSize.xs, fontWeight: fontWeight.medium },
+        // The gesture bar sits under the tab bar on a modern Android device, so
+        // the inset is added to the height rather than eating into it.
+        tabBarStyle: {
+          height: TAB_BAR_HEIGHT + insets.bottom,
+          paddingBottom: insets.bottom + 6,
+          paddingTop: 6,
+          backgroundColor: colors.surface,
+          borderTopColor: colors.border,
+        },
         headerShown: false,
       }}
     >
