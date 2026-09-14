@@ -26,8 +26,11 @@ export async function migrate(): Promise<void> {
       //
       // Without lock_timeout a migration waits forever for its lock, queueing
       // behind one slow query and blocking every write to the table.
-      lock_timeout: '5s',
-      statement_timeout: '15min',
+      //
+      // Milliseconds, not a Postgres interval string: postgres.js types these
+      // as numbers. '5s' is accepted by the server but fails typecheck.
+      lock_timeout: 5_000, // 5s
+      statement_timeout: 900_000, // 15min
     },
   });
 

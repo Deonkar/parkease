@@ -16,6 +16,7 @@
     "seed": "tsx src/seed/run.ts",
     "seed:bootstrap": "tsx src/seed/bootstrap-admin.ts",
     "seed:dev": "tsx src/seed/dev/seed-dev.ts",
+    "seed:perf": "tsx src/seed/perf/run.ts",
     "test": "vitest run --passWithNoTests",
     "test:integration": "vitest run -c vitest.integration.config.ts"
   },
