@@ -9,12 +9,20 @@ export const VEHICLE_TYPE_VALUES = ['car', 'two_wheeler'] as const;
 export const DURATION_TYPE_VALUES = ['hourly', 'daily', 'weekly', 'monthly'] as const;
 
 export const APPROVAL_STATUS_VALUES = [
-  'draft',
-  'pending_review',
-  'active',
+  'pending_approval',
   'changes_requested',
   'rejected',
-  'paused',
+  'active',
+  'inactive',
+] as const;
+
+export const AMENITY_VALUES = [
+  'covered',
+  'cctv',
+  'guarded',
+  'ev_charging',
+  'lit',
+  'wheelchair_accessible',
 ] as const;
 
 export const VERIFICATION_STATUS_VALUES = [

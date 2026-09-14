@@ -22,6 +22,7 @@
     "plugins": [
       "@react-native-firebase/app",
       "@react-native-firebase/auth",
+      "@maplibre/maplibre-react-native",
       "expo-router",
       "expo-secure-store",
       "expo-status-bar",

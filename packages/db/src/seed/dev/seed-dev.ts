@@ -75,17 +75,16 @@ async function seedDev(): Promise<void> {
 
       const spaceIds: string[] = [];
       for (const fixture of BANGALORE_FIXTURES) {
-        const schedule: Record<string, { open: string; close: string }> = {};
-        for (const day of [
-          'monday',
-          'tuesday',
-          'wednesday',
-          'thursday',
-          'friday',
-          'saturday',
-          'sunday',
-        ]) {
-          schedule[day] = { open: '06:00', close: '22:00' };
+        const pricing: Record<string, Record<string, number>> = {};
+        const slotsEntries = Object.entries(fixture.slots) as Array<[string, number]>;
+        for (const [vType] of slotsEntries) {
+          const priceKey = vType === 'two_wheeler' ? 'twoWheeler' : vType;
+          const hourly = fixture.pricePaiseHourly[
+            vType as keyof typeof fixture.pricePaiseHourly
+          ] as number | undefined;
+          if (hourly !== undefined) {
+            pricing[priceKey] = { hourlyPaise: hourly };
+          }
         }
 
         const [space] = await tx
@@ -101,7 +100,21 @@ async function seedDev(): Promise<void> {
             zoneId: `tdr0p${String(spaceIds.length)}`,
             approvalStatus: 'active',
             approvedAt: new Date(),
-            schedule,
+            submittedAt: new Date(),
+            schedule: {
+              is24x7: false,
+              days: {
+                mon: { isOpen: true, opensAt: '06:00', closesAt: '22:00' },
+                tue: { isOpen: true, opensAt: '06:00', closesAt: '22:00' },
+                wed: { isOpen: true, opensAt: '06:00', closesAt: '22:00' },
+                thu: { isOpen: true, opensAt: '06:00', closesAt: '22:00' },
+                fri: { isOpen: true, opensAt: '06:00', closesAt: '22:00' },
+                sat: { isOpen: true, opensAt: '06:00', closesAt: '22:00' },
+                sun: { isOpen: true, opensAt: '08:00', closesAt: '20:00' },
+              },
+            },
+            pricing,
+            amenities: ['covered', 'cctv'],
           })
           .onConflictDoNothing()
           .returning({ id: spaces.id });
@@ -116,20 +129,11 @@ async function seedDev(): Promise<void> {
         }
         spaceIds.push(space.id);
 
-        const slotsEntries = Object.entries(fixture.slots) as Array<[string, number]>;
         for (const [vType, slotCount] of slotsEntries) {
-          const priceKey = vType as keyof typeof fixture.pricePaiseHourly;
-          const price = fixture.pricePaiseHourly[priceKey];
-
           for (let i = 0; i < slotCount; i++) {
             await tx
               .insert(spaceSlots)
-              .values({
-                spaceId: space.id,
-                vehicleType: vType,
-                slotIndex: i,
-                pricePaiseHourly: price,
-              })
+              .values({ spaceId: space.id, vehicleType: vType, slotIndex: i })
               .onConflictDoNothing();
           }
         }

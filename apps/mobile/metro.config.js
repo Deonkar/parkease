@@ -15,10 +15,38 @@ config.resolver.nodeModulesPaths = [
   path.resolve(monorepoRoot, 'node_modules'),
 ];
 
+const nativeOnlyModules = ['react-native-pager-view', '@maplibre/maplibre-react-native'];
+const webStubs = {
+  'react-native-pager-view': path.resolve(projectRoot, 'src/polyfills/pager-view-web-stub'),
+  '@maplibre/maplibre-react-native': path.resolve(projectRoot, 'src/polyfills/maplibre-web-stub'),
+};
+
+// maplibre-gl is the web-only GL JS library. ParkMap requires it behind a
+// Platform.OS check, but Metro bundles every require() regardless, so stub it
+// out on native to keep it from shipping in the native bundle.
+const webOnlyModules = ['maplibre-gl'];
+const nativeStubs = {
+  'maplibre-gl': path.resolve(projectRoot, 'src/polyfills/maplibre-gl-native-stub'),
+};
+
 // Workspace packages use NodeNext .js extensions in imports that point to .ts source.
 // Only rewrite for files inside packages/ — not for node_modules or react-native internals.
 const originalResolveRequest = config.resolver.resolveRequest;
 config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (platform === 'web' && nativeOnlyModules.includes(moduleName)) {
+    return {
+      filePath: webStubs[moduleName] + '.tsx',
+      type: 'sourceFile',
+    };
+  }
+
+  if (platform !== 'web' && webOnlyModules.includes(moduleName)) {
+    return {
+      filePath: nativeStubs[moduleName] + '.ts',
+      type: 'sourceFile',
+    };
+  }
+
   if (
     moduleName.endsWith('.js') &&
     context.originModulePath &&

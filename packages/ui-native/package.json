@@ -16,6 +16,7 @@
     "@parkease/tokens": "workspace:*"
   },
   "peerDependencies": {
+    "@maplibre/maplibre-react-native": "*",
     "react": "*",
     "react-native": "*"
   }

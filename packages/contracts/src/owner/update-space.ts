@@ -1,21 +1,44 @@
 import { z } from 'zod';
 
-import { spaceIdSchema } from '../primitives/ids.js';
-import { geoPointSchema, pincodeSchema } from '../primitives/indian.js';
+import { amenitySchema } from '../enums/amenity.js';
+import { pincodeSchema } from '../primitives/indian.js';
 
-import { spaceSlotConfigSchema, spacePricingSchema } from './create-space.js';
+import { slotCountsSchema } from './slot-counts.js';
+import { spacePricingSchema } from './space-pricing.js';
+import { spaceScheduleSchema } from './space-schedule.js';
 
-export const updateSpaceSchema = z.object({
-  spaceId: spaceIdSchema,
-  name: z.string().min(1).max(200).optional(),
-  address: z.string().min(1).max(500).optional(),
-  pincode: pincodeSchema.optional(),
-  location: geoPointSchema.optional(),
-  description: z.string().max(2000).optional(),
-  amenities: z.array(z.string().min(1).max(100)).max(20).optional(),
-  slots: z.array(spaceSlotConfigSchema).min(1).optional(),
-  pricing: z.array(spacePricingSchema).min(1).optional(),
-  images: z.array(z.string().url()).max(10).optional(),
+const latLngSchema = z.object({
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
 });
+
+const addressSchema = z.object({
+  line: z.string().trim().min(8).max(200),
+  landmark: z.string().trim().max(120).optional(),
+  city: z.string().trim().min(2).max(60),
+  pincode: pincodeSchema,
+});
+
+const baseUpdateSpaceSchema = z.object({
+  title: z.string().trim().min(4).max(80).optional(),
+  description: z.string().trim().max(1000).optional(),
+  address: addressSchema.optional(),
+  location: latLngSchema.optional(),
+  slots: slotCountsSchema.optional(),
+  pricing: spacePricingSchema.optional(),
+  schedule: spaceScheduleSchema.optional(),
+  amenities: z.array(amenitySchema).max(6).optional(),
+  accessInstructions: z.string().trim().max(500).optional(),
+});
+
+export const updateSpaceSchema = baseUpdateSpaceSchema.refine(
+  (v) => {
+    if (v.slots === undefined || v.pricing === undefined) return true;
+    if (v.slots.car > 0 && v.pricing.car === undefined) return false;
+    if (v.slots.twoWheeler > 0 && v.pricing.twoWheeler === undefined) return false;
+    return true;
+  },
+  { message: 'Pricing must cover every vehicle type that has slots' },
+);
 
 export type UpdateSpace = z.infer<typeof updateSpaceSchema>;
