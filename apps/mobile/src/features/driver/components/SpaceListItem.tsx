@@ -190,14 +190,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
+  // A parking bay is a commodity: the name is orientation, not the decision.
+  // It sits a step below price rather than tied with it.
   title: {
     flex: 1,
-    fontSize: fontSize.base,
+    fontSize: fontSize.sm,
     fontWeight: '600',
     color: colors.text,
   },
   distance: {
-    fontSize: fontSize.xs,
+    fontSize: fontSize.sm,
     fontWeight: '600',
     color: colors.textSecondary,
   },
@@ -231,9 +233,17 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.primaryDark,
   },
+  // Closed means this space cannot be used at all, so it reads as a status
+  // rather than as another grey detail line like the address.
   closedText: {
     fontSize: fontSize.xs,
-    color: colors.textTertiary,
+    fontWeight: '700',
+    color: colors.surge,
+    backgroundColor: colors.surgeSoft,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radius.sm,
+    overflow: 'hidden',
   },
   priceRow: {
     flexDirection: 'row',
@@ -241,10 +251,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: spacing.xs,
   },
+  // The largest thing on the card. At a red light this is what the eye must
+  // land on first, with free-slot status beside it.
   price: {
-    fontSize: fontSize.base,
+    fontSize: fontSize.xl,
     fontWeight: '700',
     color: colors.text,
+    letterSpacing: -0.5,
   },
   priceUnit: {
     fontSize: fontSize.xs,

@@ -22,7 +22,13 @@ export function SurgeBadge({ multiplier }: SurgeBadgeProps) {
       style={styles.badge}
     >
       <MaterialCommunityIcons name="lightning-bolt" size={13} color={colors.surge} />
-      <Text style={styles.text}>{multiplier.toFixed(1)}x HIGH DEMAND</Text>
+      {/*
+        Sentence case, not all-caps. This was the single loudest element on an
+        otherwise restrained surface, and shouting at the driver about a price
+        rise they did not cause is the wrong tone — the badge needs to inform,
+        not alarm. The multiplier still leads, so the magnitude reads first.
+      */}
+      <Text style={styles.text}>{multiplier.toFixed(1)}x high demand</Text>
     </Animated.View>
   );
 }

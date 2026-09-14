@@ -631,7 +631,11 @@ const styles = StyleSheet.create({
   },
   searchAreaButton: {
     position: 'absolute',
-    top: spacing.base,
+    // Bottom, not top. The driver this screen is designed for is one-handed and
+    // often still in the car; "Search this area" is the most likely action after
+    // panning, and at the top of a 812pt screen it sits outside thumb reach
+    // while Recentre — the rarer action — already sits comfortably bottom-right.
+    bottom: spacing['3xl'],
     alignSelf: 'center',
   },
   pillButton: {
