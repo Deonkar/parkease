@@ -2,6 +2,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const store = new Map<string, string>();
 
+// react-native ships Flow-typed JS, which the node-environment test runner
+// cannot parse — it fails as "Expected 'from', got 'typeOf'" pointing at this
+// test rather than at react-native. secure-storage only reads Platform.OS.
+vi.mock('react-native', () => ({
+  Platform: {
+    OS: 'android',
+    select: <T>(o: { android?: T; default?: T }) => o.android ?? o.default,
+  },
+}));
+
 vi.mock('expo-secure-store', () => ({
   getItemAsync: vi.fn((key: string) => Promise.resolve(store.get(key) ?? null)),
   setItemAsync: vi.fn((key: string, value: string) => {
@@ -13,11 +23,6 @@ vi.mock('expo-secure-store', () => ({
     return Promise.resolve();
   }),
 }));
-
-vi.mock('zod', async () => {
-  const actual = await vi.importActual<typeof import('zod')>('zod');
-  return actual;
-});
 
 import { secureStorage, type StoredSession } from '../secure-storage';
 
