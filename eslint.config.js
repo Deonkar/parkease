@@ -111,7 +111,13 @@ export default tseslint.config(
         'error',
         {
           groups: ['builtin', 'external', 'internal', 'parent', 'sibling', 'index'],
-          pathGroups: [{ pattern: '@parkease/**', group: 'internal', position: 'before' }],
+          pathGroups: [
+            { pattern: '@parkease/**', group: 'internal', position: 'before' },
+            // Pin the '@/' alias explicitly. Without this, eslint-plugin-import
+            // classifies it by where it resolves, which differs between Windows
+            // and Linux CI and makes the same file pass locally but fail in CI.
+            { pattern: '@/**', group: 'internal', position: 'after' },
+          ],
           'newlines-between': 'always',
           alphabetize: { order: 'asc', caseInsensitive: true },
         },
