@@ -50,7 +50,17 @@ export class ExtendBookingCommand {
 
     // The whole extended window is re-validated, not just the added tail: a
     // space closes at a time, and the extension is what pushes past it.
-    assertWindowIsBookable(space.schedule, booking.durationType, booking.startsAt, input.newEndsAt);
+    assertWindowIsBookable(
+      space.schedule,
+      booking.durationType,
+      booking.startsAt,
+      input.newEndsAt,
+      {
+        // An active booking started in the past by definition. The past-start rule
+        // governs new bookings, not a stay already under way.
+        alreadyStarted: booking.status === 'active',
+      },
+    );
 
     const delta = this.quotes.forExtension({
       pricing: space.pricing,

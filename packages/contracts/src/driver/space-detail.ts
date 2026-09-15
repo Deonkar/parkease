@@ -67,7 +67,6 @@ export const spaceDetailSchema = z.object({
   longitude: z.number(),
   photos: z.array(spacePhotoSchema),
   amenities: z.array(amenitySchema),
-  accessInstructions: z.string().nullable(),
   schedule: spaceScheduleSchema,
   isOpenNow: z.boolean(),
   pricing: z.object({

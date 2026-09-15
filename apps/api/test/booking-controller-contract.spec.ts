@@ -1,5 +1,7 @@
 import 'reflect-metadata';
 
+import { readFile } from 'node:fs/promises';
+
 import { RequestMethod } from '@nestjs/common';
 import { INTERCEPTORS_METADATA, PATH_METADATA, METHOD_METADATA } from '@nestjs/common/constants';
 import { describe, expect, it } from 'vitest';
@@ -65,21 +67,25 @@ describe('booking controllers', () => {
     });
 
     /**
-     * ADR-011. On a booking, a retried POST that is not deduplicated produces a
-     * second reservation, which matters more here than anywhere else in the API.
-     * The interceptor itself is tested in idempotency.spec.ts; what this catches
-     * is a new mutation being added without it.
+     * ADR-011 is enforced by the *global* `IdempotencyInterceptor` in AppModule,
+     * which already covers every non-GET route in the application.
+     *
+     * So the invariant worth testing is the opposite of the obvious one: no
+     * controller may re-declare it. An earlier version of these controllers did,
+     * and the result was that the interceptor ran twice per request — the second
+     * `claim()` found the row the first had just taken, answered `in_flight`,
+     * and every booking mutation returned 409. The integration tests never saw
+     * it because they drive the commands directly, and the first version of
+     * *this* test asserted the decorator was present, which cemented the bug.
      */
     it.each(
       routes.filter((r) => r.method !== RequestMethod.GET).map((r) => [r.handler, r] as const),
-    )('mutation %s requires an Idempotency-Key', (_handler, route) => {
-      expect(route.interceptors).toContain(IdempotencyInterceptor);
+    )('mutation %s does not re-declare the global idempotency interceptor', (_handler, route) => {
+      expect(route.interceptors).not.toContain(IdempotencyInterceptor);
     });
 
-    it('does not put an idempotency interceptor on a read', () => {
-      for (const route of routes.filter((r) => r.method === RequestMethod.GET)) {
-        expect(route.interceptors).not.toContain(IdempotencyInterceptor);
-      }
+    it('declares at least one mutation, so the rule above is not vacuous', () => {
+      expect(routes.some((r) => r.method !== RequestMethod.GET)).toBe(true);
     });
 
     /**
@@ -97,6 +103,19 @@ describe('booking controllers', () => {
         expect(Object.keys(RATE_LIMIT_POLICIES)).toContain(key);
       },
     );
+  });
+
+  /**
+   * The other half of the rule above. If the global registration is ever
+   * removed, the controllers stop being idempotent entirely and nothing else in
+   * this file would notice — the `not.toContain` assertions would still pass.
+   */
+  it('registers the idempotency interceptor globally, exactly once', async () => {
+    const source = await readFile(new URL('../src/app.module.ts', import.meta.url), 'utf8');
+    const registrations = source.match(
+      /provide:\s*APP_INTERCEPTOR,\s*useClass:\s*IdempotencyInterceptor/g,
+    );
+    expect(registrations).toHaveLength(1);
   });
 
   it('routes both check-ins through one command, under two role prefixes', () => {

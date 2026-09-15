@@ -147,18 +147,35 @@ function assertInsideOpeningHours(schedule: SpaceSchedule, startsAt: Date, endsA
   }
 }
 
+export interface WindowCheckOptions {
+  /**
+   * Pure by construction: the clock is a parameter, because a validator that
+   * reads the wall clock cannot be tested at a boundary.
+   */
+  readonly now?: Date;
+  /**
+   * The window has already legally begun, so the past-start rule does not apply.
+   *
+   * This exists for extension. "You cannot book a time in the past" is a rule
+   * about *new* bookings; re-applying it when a driver extends a stay that is
+   * already under way rejects the main reason anyone extends — their car is in
+   * the space right now, so `startsAt` is necessarily behind us. Without this
+   * flag, extending an `active` booking always 400s.
+   */
+  readonly alreadyStarted?: boolean;
+}
+
 /**
- * The boring rules that are nonetheless product requirements (prd.md §8). Pure,
- * so `now` is a parameter rather than a call to the clock — a validator that
- * reads the wall clock cannot be tested at a boundary.
+ * The boring rules that are nonetheless product requirements (prd.md §8).
  */
 export function assertWindowIsBookable(
   schedule: SpaceSchedule,
   durationType: DurationType,
   startsAt: Date,
   endsAt: Date,
-  now: Date = new Date(),
+  options: WindowCheckOptions = {},
 ): void {
+  const { now = new Date(), alreadyStarted = false } = options;
   if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime())) {
     throw new InvalidBookingWindowError('Those dates are not valid.');
   }
@@ -167,7 +184,7 @@ export function assertWindowIsBookable(
     throw new InvalidBookingWindowError('The end time must be after the start time.');
   }
 
-  if (startsAt.getTime() < now.getTime() - CLOCK_SKEW_GRACE_MS) {
+  if (!alreadyStarted && startsAt.getTime() < now.getTime() - CLOCK_SKEW_GRACE_MS) {
     throw new InvalidBookingWindowError('You cannot book a time in the past.');
   }
 

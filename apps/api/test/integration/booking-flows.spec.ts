@@ -334,6 +334,40 @@ describe('booking flows', () => {
       expect(delta.driverTotalPaise).toBe(4851);
     });
 
+    /**
+     * The main reason anyone extends: the car is in the space right now. This
+     * failed with a 400 "you cannot book a time in the past" until the window
+     * validator learned that an extension's start has already legitimately
+     * happened. Every other extend test here uses a `confirmed` booking with a
+     * future start, which is exactly why none of them caught it.
+     */
+    it('extends a booking that is already under way', async () => {
+      const spaceId = await seedSpace(h, { lat: 12.9345, lng: 77.6266, carSlots: 1 });
+      const { booking } = await book(spaceId, h.driverId, windowFromNow(2, 2));
+      await markActive(h, booking.id);
+      // Started 40 minutes ago and runs for another 80.
+      await startedMinutesAgo(h, booking.id, 40);
+
+      // Epoch millis out of SQL. Postgres' own timestamptz text rendering
+      // carries an offset, so string-munging it back into a Date is a second
+      // thing to get wrong inside a test about the first.
+      const target = await h.sql<{ next_ms: string }[]>`
+        SELECT (extract(epoch from ends_at + interval '1 hour') * 1000)::bigint::text AS next_ms
+        FROM bookings WHERE id = ${booking.id}
+      `;
+      const nextMs = target[0]?.next_ms;
+      if (nextMs === undefined) throw new Error('booking vanished');
+
+      const { delta } = await stack.extend.execute({
+        bookingId: booking.id,
+        driverId: h.driverId,
+        newEndsAt: new Date(Number(nextMs)),
+      });
+
+      expect(delta.driverTotalPaise).toBeGreaterThan(0);
+      expect((await bookingRow(booking.id))?.status).toBe('active');
+    });
+
     it('refuses to extend a cancelled booking', async () => {
       const spaceId = await seedSpace(h, { lat: 12.9345, lng: 77.6266, carSlots: 1 });
       const window = windowFromNow(2, 2);

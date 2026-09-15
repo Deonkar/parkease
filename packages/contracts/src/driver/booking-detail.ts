@@ -21,6 +21,16 @@ export const bookingSpaceSummarySchema = z.object({
   landmark: z.string().nullable(),
   latitude: z.number(),
   longitude: z.number(),
+  /**
+   * How to actually get in — gate codes, which lift, who holds the key.
+   *
+   * Deliberately NOT on the public space detail. Any signed-up driver can read
+   * that endpoint without ever booking, so putting it there would hand out
+   * entry instructions for private parking across the whole marketplace. It is
+   * released here, on the driver's own booking, and only once that booking is
+   * confirmed — the same gate the QR token uses.
+   */
+  accessInstructions: z.string().nullable(),
 });
 
 export type BookingSpaceSummary = z.infer<typeof bookingSpaceSummarySchema>;

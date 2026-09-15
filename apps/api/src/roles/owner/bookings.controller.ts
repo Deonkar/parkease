@@ -1,19 +1,10 @@
-import {
-  Body,
-  Controller,
-  NotFoundException,
-  Param,
-  ParseUUIDPipe,
-  Post,
-  UseInterceptors,
-} from '@nestjs/common';
+import { Body, Controller, NotFoundException, Param, ParseUUIDPipe, Post } from '@nestjs/common';
 import { Role } from '@parkease/contracts/enums';
 import { type OwnerCheckInResult, ownerCheckInSchema } from '@parkease/contracts/owner';
 
 import { BookingService } from '../../domains/booking/booking.service.js';
 import { CheckInCommand } from '../../domains/booking/commands/check-in.command.js';
 import { type AuthUser, CurrentUser } from '../../platform/auth/current-user.decorator.js';
-import { IdempotencyInterceptor } from '../../platform/idempotency/idempotency.interceptor.js';
 import { Roles } from '../../platform/rbac/roles.decorator.js';
 
 import { toOwnerCheckInView } from './views/owner-booking.view.js';
@@ -33,7 +24,6 @@ export class OwnerBookingsController {
   ) {}
 
   @Post(':id/check-in')
-  @UseInterceptors(IdempotencyInterceptor)
   async scan(
     @CurrentUser() user: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,

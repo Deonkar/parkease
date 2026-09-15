@@ -13,7 +13,6 @@ interface SpaceRow {
   readonly city: string;
   readonly location: { lat: number; lng: number };
   readonly amenities: Amenity[];
-  readonly accessInstructions: string | null;
   readonly schedule: SpaceSchedule;
   readonly pricing: SpacePricing;
   readonly ratingAvgBp: number | null;
@@ -66,7 +65,6 @@ export function toSpaceDetailView(input: SpaceDetailInput): SpaceDetail {
     longitude: space.location.lng,
     photos: input.photos.map((photo) => ({ url: photo.url, isPrimary: photo.isPrimary })),
     amenities: space.amenities,
-    accessInstructions: space.accessInstructions,
     schedule: space.schedule,
     isOpenNow: input.isOpenNow,
     pricing: {

@@ -39,7 +39,7 @@ const bookable =
     now: Date = NOW,
   ): (() => void) =>
   () => {
-    assertWindowIsBookable(schedule, durationType, startsAt, endsAt, now);
+    assertWindowIsBookable(schedule, durationType, startsAt, endsAt, { now });
   };
 
 describe('assertWindowIsBookable', () => {
@@ -148,6 +148,53 @@ describe('assertWindowIsBookable', () => {
       expect(
         bookable(ALWAYS_OPEN, 'hourly', startsAt, new Date(startsAt.getTime() + 3_600_000), now),
       ).not.toThrow();
+    });
+
+    /**
+     * The past-start rule governs *new* bookings. Re-applying it to an extension
+     * rejects the main reason anyone extends — their car is in the space right
+     * now, so the start is necessarily behind us. Before `alreadyStarted`
+     * existed, extending an active booking always returned 400.
+     */
+    it('accepts a start well in the past when the window already began', () => {
+      const now = ist('2026-10-05T11:30');
+      expect(() => {
+        assertWindowIsBookable(
+          ALWAYS_OPEN,
+          'hourly',
+          ist('2026-10-05T10:00'),
+          ist('2026-10-05T13:00'),
+          { now, alreadyStarted: true },
+        );
+      }).not.toThrow();
+    });
+
+    it('still rejects a past start when the window has not begun', () => {
+      const now = ist('2026-10-05T11:30');
+      expect(() => {
+        assertWindowIsBookable(
+          ALWAYS_OPEN,
+          'hourly',
+          ist('2026-10-05T10:00'),
+          ist('2026-10-05T13:00'),
+          { now, alreadyStarted: false },
+        );
+      }).toThrow(/in the past/i);
+    });
+
+    it('does not let alreadyStarted waive the other rules', () => {
+      // The flag is narrow on purpose: it suspends the past-start check and
+      // nothing else. A closed day is still closed.
+      const now = ist('2026-10-11T11:30');
+      expect(() => {
+        assertWindowIsBookable(
+          DAYTIME,
+          'hourly',
+          ist('2026-10-11T10:00'),
+          ist('2026-10-11T13:00'),
+          { now, alreadyStarted: true },
+        );
+      }).toThrow(/closed/i);
     });
   });
 

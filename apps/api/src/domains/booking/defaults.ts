@@ -67,7 +67,7 @@ export function defaultWindowFor(input: {
   // opening hours included. A space that closes in twenty minutes must not
   // offer a two-hour button that 400s the moment it is tapped.
   try {
-    assertWindowIsBookable(schedule, 'hourly', startsAt, endsAt, now);
+    assertWindowIsBookable(schedule, 'hourly', startsAt, endsAt, { now });
   } catch {
     // Not an error: this space simply has no sensible default right now, and the
     // screen falls back to "Choose a time". Swallowing is correct here precisely

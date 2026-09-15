@@ -32,6 +32,7 @@ export interface SpaceRow {
   readonly addressLine: string;
   readonly landmark: string | null;
   readonly location: { lat: number; lng: number };
+  readonly accessInstructions: string | null;
 }
 
 /**
@@ -56,6 +57,13 @@ const toQuoteBreakdown = (row: BookingRow): QuoteBreakdown =>
  * or cancelled booking would put a signed, still-valid reference on a screen
  * that has no business showing one.
  */
+/**
+ * Statuses at which the driver has actually earned entry details. A
+ * pending_payment hold has not: the slot is reserved, nothing is paid, and the
+ * expiry job may take it back in ten minutes.
+ */
+const RELEASES_ACCESS = new Set(['confirmed', 'active', 'completed']);
+
 const qrTokenFor = (row: BookingRow, secret: string, now: Date): string | null =>
   row.status === 'confirmed' ? signBookingReference(row.id, secret, now) : null;
 
@@ -76,6 +84,10 @@ export function toDriverBookingView(
       landmark: space.landmark,
       latitude: space.location.lat,
       longitude: space.location.lng,
+      // Released only once the booking is real, for the same reason the QR is.
+      // A pending_payment hold has not bought anyone the gate code — the slot is
+      // reserved, nothing is paid, and the expiry job may take it back.
+      accessInstructions: RELEASES_ACCESS.has(row.status) ? space.accessInstructions : null,
     },
     vehicleType: row.vehicleType as VehicleType,
     vehicleNumber: row.vehicleNumber,

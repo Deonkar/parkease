@@ -7,7 +7,6 @@ import {
   ParseUUIDPipe,
   Post,
   Query,
-  UseInterceptors,
 } from '@nestjs/common';
 import {
   cancelBookingSchema,
@@ -26,7 +25,6 @@ import { CreateBookingCommand } from '../../domains/booking/commands/create-book
 import { ExtendBookingCommand } from '../../domains/booking/commands/extend-booking.command.js';
 import { type AuthUser, CurrentUser } from '../../platform/auth/current-user.decorator.js';
 import { env } from '../../platform/config/env.schema.js';
-import { IdempotencyInterceptor } from '../../platform/idempotency/idempotency.interceptor.js';
 import { Roles } from '../../platform/rbac/roles.decorator.js';
 
 import { toDriverBookingView } from './views/booking.view.js';
@@ -36,9 +34,12 @@ import { toDriverBookingView } from './views/booking.view.js';
  * platform/ratelimit/policies.ts — 10/min per user on every mutation. A route
  * with no policy inherits the strictest default.
  *
- * Every mutation here carries an Idempotency-Key (ADR-011). On a booking that
- * means a retried POST cannot produce a second reservation, which matters more
- * here than anywhere else in the API.
+ * Every mutation here carries an Idempotency-Key (ADR-011) — enforced by the
+ * global `IdempotencyInterceptor` in AppModule, which covers every non-GET route
+ * in the application. Do NOT also declare it with `@UseInterceptors` here: it
+ * then runs twice, and the second `claim()` finds the row the first one just
+ * took and answers `in_flight`, so every mutation returns 409. An earlier
+ * version of this file did exactly that.
  */
 @Controller('driver/bookings')
 @Roles(Role.DRIVER)
@@ -52,7 +53,6 @@ export class DriverBookingsController {
   ) {}
 
   @Post()
-  @UseInterceptors(IdempotencyInterceptor)
   async create(@CurrentUser() user: AuthUser, @Body() body: unknown): Promise<DriverBooking> {
     const input = createBookingSchema.parse(body);
 
@@ -105,7 +105,6 @@ export class DriverBookingsController {
   }
 
   @Post(':id/cancel')
-  @UseInterceptors(IdempotencyInterceptor)
   async cancel(
     @CurrentUser() user: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,
@@ -123,7 +122,6 @@ export class DriverBookingsController {
   }
 
   @Post(':id/extend')
-  @UseInterceptors(IdempotencyInterceptor)
   async extend(
     @CurrentUser() user: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,
@@ -142,7 +140,6 @@ export class DriverBookingsController {
 
   /** The unattended-space fallback: no token, gated on time instead. */
   @Post(':id/check-in')
-  @UseInterceptors(IdempotencyInterceptor)
   async selfCheckIn(
     @CurrentUser() user: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,
