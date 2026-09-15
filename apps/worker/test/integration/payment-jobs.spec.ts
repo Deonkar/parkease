@@ -96,15 +96,13 @@ async function seedPendingRefund(paymentId: string, amountPaise = 5162): Promise
 function gatewayDouble(overrides: Partial<RefundGateway> = {}): RefundGateway {
   return {
     findByReference: vi.fn().mockResolvedValue(null),
-    create: vi
-      .fn()
-      .mockImplementation(({ amountPaise }: { amountPaise: number }) =>
-        Promise.resolve({
-          id: `rfnd_${String(Math.random()).slice(2, 12)}`,
-          amountPaise,
-          status: 'pending',
-        }),
-      ),
+    create: vi.fn().mockImplementation(({ amountPaise }: { amountPaise: number }) =>
+      Promise.resolve({
+        id: `rfnd_${String(Math.random()).slice(2, 12)}`,
+        amountPaise,
+        status: 'pending',
+      }),
+    ),
     ...overrides,
   } as RefundGateway;
 }
@@ -310,13 +308,27 @@ describe('payment.orphan-capture', () => {
     expect(ledgerRows[0]?.count).toBe('2');
   });
 
-  it('marks the payment refunded', async () => {
+  it('marks the payment refunded and records what was captured', async () => {
+    // confirm-payment never reached markCaptured on this path, so without this
+    // the row would claim a refund of money it has no record of receiving — and
+    // task 16 would have no gateway payment id to match Route's report against.
     const { bookingId, paymentId } = await seedCapturedBooking();
+    await pg.sql`
+      UPDATE payments SET razorpay_payment_id = NULL, captured_paise = NULL,
+                          captured_at = NULL, status = 'created'
+      WHERE id = ${paymentId}
+    `;
+
     await reconcileOrphanCapture(deps, orphanPayload(bookingId, paymentId));
 
-    const [row] = await pg.sql<{ status: string }[]>`
-      SELECT status FROM payments WHERE id = ${paymentId}
+    const [row] = await pg.sql<
+      { status: string; razorpay_payment_id: string | null; captured_paise: string | null }[]
+    >`
+      SELECT status, razorpay_payment_id, captured_paise::text AS captured_paise
+      FROM payments WHERE id = ${paymentId}
     `;
     expect(row?.status).toBe('refunded');
+    expect(row?.razorpay_payment_id).toBe('pay_abc123');
+    expect(row?.captured_paise).toBe('6162');
   });
 });

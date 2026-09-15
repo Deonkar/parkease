@@ -143,6 +143,31 @@ describe('a claim is scoped to its endpoint, not just its key', () => {
     ).resolves.toEqual({ outcome: 'conflict' });
   });
 
+  it('refuses one key shared across the order and verify calls', async () => {
+    // The exact shape of a bug review found in this task's own mobile client:
+    // `useCheckout` used a single `useIntent()` for both payment endpoints, so
+    // the verify call answered 422 and no payment could ever be confirmed.
+    // Creating an order and confirming a payment are two user intents and need
+    // two keys.
+    const key = crypto.randomUUID();
+
+    await service.claim({
+      key,
+      userId: h.driverId,
+      endpoint: 'POST /api/v1/driver/payments/orders',
+      requestHash: 'hash-a',
+    });
+
+    await expect(
+      service.claim({
+        key,
+        userId: h.driverId,
+        endpoint: 'POST /api/v1/driver/payments/verify',
+        requestHash: 'hash-b',
+      }),
+    ).resolves.toEqual({ outcome: 'conflict' });
+  });
+
   it('still replays the same key on the same endpoint with the same body', async () => {
     const key = crypto.randomUUID();
     const input = {

@@ -31,18 +31,27 @@ export type CheckoutPhase =
  *
  * `reset()` on success, so the next booking starts a fresh intent rather than
  * replaying this one's stored response.
+ *
+ * **Two intents, not one.** Creating the order and confirming the payment are
+ * different endpoints, and ADR-011 scopes a key to its endpoint — so one key
+ * across both answers 422 on the second call and no payment is ever confirmed.
+ * They are also genuinely different user intents: "give me an order to pay" and
+ * "I have paid, confirm it". Sharing a key between them was a bug found in
+ * review, by the endpoint check added to `IdempotencyService` earlier in this
+ * same task.
  */
 export function useCheckout(bookingId: string | undefined) {
   const queryClient = useQueryClient();
-  const intent = useIntent();
+  const orderIntent = useIntent();
+  const verifyIntent = useIntent();
   const [state, setState] = useState<CheckoutPhase>({ phase: 'idle' });
 
   const orderMutation = useMutation({
-    mutationFn: (id: string) => createPaymentOrder(id, intent),
+    mutationFn: (id: string) => createPaymentOrder(id, orderIntent),
   });
 
   const verifyMutation = useMutation({
-    mutationFn: (body: Parameters<typeof verifyPayment>[0]) => verifyPayment(body, intent),
+    mutationFn: (body: Parameters<typeof verifyPayment>[0]) => verifyPayment(body, verifyIntent),
   });
 
   /**
@@ -97,8 +106,9 @@ export function useCheckout(bookingId: string | undefined) {
         },
         {
           onSuccess: (payment) => {
-            // The intent is spent. A later booking mints a fresh key.
-            intent.reset();
+            // Both intents are spent. A later booking mints fresh keys.
+            orderIntent.reset();
+            verifyIntent.reset();
             // No optimistic status write: the confirmed state arrives from the
             // server, which is the only thing that knows whether the webhook
             // got there first.
@@ -115,7 +125,7 @@ export function useCheckout(bookingId: string | undefined) {
         },
       );
     },
-    [intent, queryClient, verifyMutation],
+    [orderIntent, queryClient, verifyIntent, verifyMutation],
   );
 
   const dismissFailure = useCallback(() => {

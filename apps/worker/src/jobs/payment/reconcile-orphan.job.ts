@@ -88,9 +88,20 @@ export async function reconcileOrphanCapture(deps: JobDeps, raw: unknown): Promi
       throw new Error(`Refund row for orphan capture on payment ${payment.id} was not created`);
     }
 
+    // Record what was actually captured before recording that it went back.
+    // `confirm-payment` never reached `markCaptured` on this path — it diverted
+    // at the status check — so without this the row claims a refund of money it
+    // has no record of receiving, and task 16 has no gateway payment id to match
+    // Route's settlement report against.
     await tx
       .update(payments)
-      .set({ status: 'refunded', updatedAt: new Date() })
+      .set({
+        status: 'refunded',
+        razorpayPaymentId: payment.razorpayPaymentId ?? payload.razorpayPaymentId,
+        capturedPaise: payment.capturedPaise ?? payload.capturedPaise,
+        capturedAt: payment.capturedAt ?? new Date(),
+        updatedAt: new Date(),
+      })
       .where(eq(payments.id, payment.id));
 
     // Ledger first, money second — the gateway call is the next job, committed
