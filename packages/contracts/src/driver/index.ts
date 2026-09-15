@@ -48,3 +48,19 @@ export { createValetRequestSchema, type CreateValetRequest } from './create-vale
 export { createWashRequestSchema, type CreateWashRequest } from './create-wash-request.js';
 export { createReviewSchema, type CreateReview } from './create-review.js';
 export { addVehicleSchema, type AddVehicle, vehicleSchema, type Vehicle } from './vehicles.js';
+export {
+  driverRateCardSchema,
+  type DriverRateCard,
+  spacePhotoSchema,
+  type SpacePhoto,
+  spaceDetailSchema,
+  type SpaceDetail,
+  defaultBookingSchema,
+  type DefaultBooking,
+} from './space-detail.js';
+export {
+  quoteBookingSchema,
+  type QuoteBooking,
+  quoteResultSchema,
+  type QuoteResult,
+} from './quote-booking.js';

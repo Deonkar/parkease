@@ -84,8 +84,22 @@ export default function DriverLayout() {
         `bookings/[id]` in the bar as literal "undefined" destinations and took
         the bar to seven items. Bottom navigation holds at most five.
       */}
-      <Tabs.Screen name="book/[spaceId]" options={{ href: null }} />
-      <Tabs.Screen name="book/confirmed" options={{ href: null }} />
+      {/*
+        The booking flow hides the bar as well as leaving it. `href: null` only
+        removes the entry — the bar itself still renders, which on a checkout
+        step puts a second action zone under the dock, competing with it and
+        inviting the driver to wander off mid-commit. `tabBarStyle` is what
+        actually hides it.
+      */}
+      <Tabs.Screen
+        name="book/[spaceId]"
+        options={{ href: null, tabBarStyle: { display: 'none' } }}
+      />
+      <Tabs.Screen name="book/review" options={{ href: null, tabBarStyle: { display: 'none' } }} />
+      <Tabs.Screen
+        name="book/confirmed"
+        options={{ href: null, tabBarStyle: { display: 'none' } }}
+      />
       <Tabs.Screen name="bookings/[id]" options={{ href: null }} />
     </Tabs>
   );

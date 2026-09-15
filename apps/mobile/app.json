@@ -27,6 +27,13 @@
       "expo-secure-store",
       "expo-status-bar",
       [
+        "expo-camera",
+        {
+          "cameraPermission": "ParkEase uses the camera to scan a driver's booking QR when they arrive at your space.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/splash.png",

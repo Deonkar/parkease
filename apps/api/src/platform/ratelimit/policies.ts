@@ -15,6 +15,8 @@ export const RATE_LIMIT_POLICIES: Readonly<Record<string, RateLimitPolicy>> = {
   'POST /api/v1/auth/session:ip': { limit: 30, windowSeconds: 3600, keyBy: 'ip', failClosed: true },
   'POST /api/v1/auth/refresh': { limit: 30, windowSeconds: 3600, keyBy: 'user', failClosed: true },
   'GET /api/v1/driver/spaces': { limit: 60, windowSeconds: 60, keyBy: 'user' },
+  'GET /api/v1/driver/spaces/:id': { limit: 60, windowSeconds: 60, keyBy: 'user' },
+  'GET /api/v1/driver/quotes': { limit: 60, windowSeconds: 60, keyBy: 'user' },
   'POST /api/v1/driver/bookings': { limit: 10, windowSeconds: 60, keyBy: 'user' },
   'GET /api/v1/driver/bookings': { limit: 60, windowSeconds: 60, keyBy: 'user' },
   'GET /api/v1/driver/bookings/:id': { limit: 60, windowSeconds: 60, keyBy: 'user' },
