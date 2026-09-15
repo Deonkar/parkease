@@ -18,6 +18,13 @@ import { IdempotencyService, hashCanonicalBody } from './idempotency.service.js'
 
 const uuidSchema = z.string().uuid();
 
+/**
+ * Every webhook route, not one literal path — matching the prefix the
+ * `idempotency_keys_user_or_public_check` constraint uses, so the two cannot
+ * drift apart into a route that is exempt here but rejected by the database.
+ */
+const WEBHOOK_PATH_PREFIX = '/api/v1/webhooks/';
+
 @Injectable()
 export class IdempotencyInterceptor implements NestInterceptor {
   constructor(private readonly service: IdempotencyService) {}
@@ -26,6 +33,14 @@ export class IdempotencyInterceptor implements NestInterceptor {
     const request = context.switchToHttp().getRequest<FastifyRequest & { user?: AuthUser }>();
 
     if (request.method === 'GET' || request.method === 'HEAD') {
+      return next.handle();
+    }
+
+    // Gateways do not mint ParkEase idempotency keys. A webhook carries its own
+    // delivery id, and `WebhookService` claims that in the same table (ADR-011)
+    // — so demanding a client UUID here would 400 every Razorpay event before
+    // the controller ever saw it.
+    if (request.url.startsWith(WEBHOOK_PATH_PREFIX)) {
       return next.handle();
     }
 

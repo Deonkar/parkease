@@ -1,4 +1,4 @@
-import { mulRate, toRate, type Paise } from '../primitives/paise.js';
+import { mulRate, toPaise, toRate, type Paise } from '../primitives/paise.js';
 
 /**
  * The published refund policy from `prd.md` §8, as a pure function.
@@ -29,7 +29,15 @@ export type RefundTier = (typeof RefundTier)[keyof typeof RefundTier];
 export type CancelledBy = 'driver' | 'owner' | 'admin';
 
 export interface RefundContext {
-  readonly booking: { readonly totalPaise: Paise; readonly startsAt: Date };
+  /**
+   * Plain `number` rather than branded `Paise`, for the same reason
+   * `allocateProportionally` takes plain integers: the total arrives as a
+   * booking row's money column, and taking `Paise` would push an `as Paise`
+   * assertion onto data from outside the process (R-VAL-01). It is parsed
+   * below instead, so a rupee amount or a fraction is rejected rather than
+   * silently used.
+   */
+  readonly booking: { readonly totalPaise: number; readonly startsAt: Date };
   readonly at: Date;
   readonly cancelledBy: CancelledBy;
 }
@@ -45,7 +53,13 @@ export interface RefundOutcome {
 }
 
 export function resolveRefund(input: RefundContext): RefundOutcome {
-  const { booking, at, cancelledBy } = input;
+  const { at, cancelledBy } = input;
+  // Parses, never asserts: throws on a fraction, a negative, or a rupee amount
+  // that wandered in wearing the wrong name.
+  const booking = {
+    totalPaise: toPaise(input.booking.totalPaise),
+    startsAt: input.booking.startsAt,
+  };
 
   // Not the driver's fault, so they are not charged for it — at any hour, even
   // mid-booking. The goodwill is a separate expense, not a larger refund.

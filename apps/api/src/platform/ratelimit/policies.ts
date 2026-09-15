@@ -24,8 +24,12 @@ export const RATE_LIMIT_POLICIES: Readonly<Record<string, RateLimitPolicy>> = {
   'POST /api/v1/driver/bookings/:id/extend': { limit: 10, windowSeconds: 60, keyBy: 'user' },
   'POST /api/v1/driver/bookings/:id/check-in': { limit: 10, windowSeconds: 60, keyBy: 'user' },
   'POST /api/v1/owner/bookings/:id/check-in': { limit: 30, windowSeconds: 60, keyBy: 'user' },
-  'POST /api/v1/driver/payments': { limit: 10, windowSeconds: 60, keyBy: 'user' },
+  'POST /api/v1/driver/payments/orders': { limit: 10, windowSeconds: 60, keyBy: 'user' },
   'POST /api/v1/driver/payments/verify': { limit: 10, windowSeconds: 60, keyBy: 'user' },
+  // Razorpay's own range, per security.md §4.3. Keyed by IP because there is no
+  // user to key by, and `failClosed` is deliberately absent: dropping a capture
+  // event because Redis blinked is worse than serving it.
+  'POST /api/v1/webhooks/razorpay': { limit: 300, windowSeconds: 60, keyBy: 'ip' },
   'POST /api/v1/valet/jobs/:id/accept': { limit: 30, windowSeconds: 60, keyBy: 'user' },
   'POST /api/v1/owner/spaces': { limit: 10, windowSeconds: 60, keyBy: 'user' },
   'PUT /api/v1/owner/spaces/:id': { limit: 20, windowSeconds: 60, keyBy: 'user' },

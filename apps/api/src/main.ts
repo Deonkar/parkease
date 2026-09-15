@@ -6,6 +6,7 @@ import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fa
 import { AppModule } from './app.module.js';
 import { env } from './platform/config/env.schema.js';
 import { correlationIdMiddleware } from './platform/http/correlation-id.middleware.js';
+import { registerRawBodyParser } from './platform/http/raw-body.js';
 import { logger } from './platform/observability/logger.js';
 
 async function bootstrap(): Promise<void> {
@@ -25,6 +26,11 @@ async function bootstrap(): Promise<void> {
 
   const fastify = app.getHttpAdapter().getInstance();
   fastify.addHook('onRequest', correlationIdMiddleware);
+
+  // Keeps the raw bytes for the Razorpay webhook route. Registered from the same
+  // function the integration HTTP harness uses, so a signature test cannot pass
+  // against a body parser that differs from this one.
+  registerRawBodyParser(fastify);
 
   await app.listen({ port: env.PORT, host: '0.0.0.0' });
   logger.info({ port: env.PORT }, 'parkease api started');
