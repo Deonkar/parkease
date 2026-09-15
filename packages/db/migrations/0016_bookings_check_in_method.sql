@@ -1,0 +1,18 @@
+-- 0016_bookings_check_in_method.sql — hand-written
+-- Task 8, phase 1 of 3. Adds the column only.
+--
+-- prd.md §6.1: a QR the driver scans themselves proves nothing, so the owner
+-- scan is the real check-in and driver self check-in is a delayed fallback for
+-- unattended spaces. A dispute over whether a car ever arrived is answerable
+-- from this column and unanswerable without it — v1 had no equivalent.
+--
+-- ADD COLUMN of a nullable text with no DEFAULT is catalog-only on PostgreSQL
+-- 11+: no table rewrite, ACCESS EXCLUSIVE held for microseconds. lock_timeout
+-- is 5s on the connection in migrate.ts, so it fails fast rather than queueing
+-- behind a slow query and blocking every write to bookings.
+--
+-- ONE STATEMENT, and the constraints live in 0017/0018 rather than here. A
+-- multi-statement file is wrapped in an implicit transaction, which would hold
+-- this ACCESS EXCLUSIVE lock across the constraint validation scan — exactly
+-- the lock profile the NOT VALID + VALIDATE split exists to avoid.
+ALTER TABLE bookings ADD COLUMN check_in_method text;

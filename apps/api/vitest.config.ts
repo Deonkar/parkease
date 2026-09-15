@@ -17,6 +17,7 @@ export default defineConfig({
       DATABASE_URL: 'postgresql://parkease:parkease_local@localhost:5432/parkease_test',
       REDIS_URL: 'redis://localhost:6379',
       JWT_SECRET: 'test-secret-that-is-at-least-32-chars-long!!',
+      BOOKING_QR_SECRET: 'test-qr-secret-that-is-at-least-32-chars-long!!',
       JWT_ACCESS_TTL: '15m',
       JWT_REFRESH_TTL: '7d',
       FIREBASE_PROJECT_ID: 'test-project',

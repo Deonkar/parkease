@@ -8,6 +8,7 @@ import {
 import { trace } from '@opentelemetry/api';
 import type { FastifyReply } from 'fastify';
 
+import { pgSqlState } from '../db/errors.js';
 import { logger } from '../observability/logger.js';
 
 interface MappedError {
@@ -38,18 +39,6 @@ const PG_ERROR_MAP: Readonly<Record<string, MappedError>> = {
     message: 'Something changed while we were saving. Please try again.',
   },
 };
-
-function extractSqlState(error: unknown): string | undefined {
-  if (
-    error !== null &&
-    typeof error === 'object' &&
-    'code' in error &&
-    typeof (error as Record<string, unknown>)['code'] === 'string'
-  ) {
-    return (error as Record<string, unknown>)['code'] as string;
-  }
-  return undefined;
-}
 
 function errorCodeFor(exception: HttpException): string {
   const response = exception.getResponse();
@@ -87,7 +76,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
   }
 
   private map(exception: unknown): MappedError {
-    const sqlState = extractSqlState(exception);
+    const sqlState = pgSqlState(exception);
     if (sqlState) {
       const pgMapped = PG_ERROR_MAP[sqlState];
       if (pgMapped) return pgMapped;

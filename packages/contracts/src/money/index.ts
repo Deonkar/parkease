@@ -26,3 +26,13 @@ export {
   quote,
   assertQuoteBalances,
 } from './quote.js';
+
+export {
+  assertEntriesBalance,
+  bookingReceivableEntries,
+  type LedgerEntryDraft,
+  type ReceivableTotals,
+  receivableTotalsOf,
+  reverseEntries,
+  UnbalancedLedgerError,
+} from './ledger-entries.js';

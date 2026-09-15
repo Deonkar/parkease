@@ -12,6 +12,13 @@ const envSchema = z.object({
   JWT_ACCESS_TTL: z.string().default('15m'),
   JWT_REFRESH_TTL: z.string().default('7d'),
 
+  /**
+   * Signs the booking QR reference. Its own secret, deliberately not JWT_SECRET:
+   * a leaked QR secret must buy an attacker forged check-in references and
+   * nothing else, never the ability to mint a session.
+   */
+  BOOKING_QR_SECRET: z.string().min(32, 'must be at least 32 characters'),
+
   FIREBASE_PROJECT_ID: z.string().min(1),
   FIREBASE_CLIENT_EMAIL: z.string().email(),
   FIREBASE_PRIVATE_KEY: z.string().min(1),
