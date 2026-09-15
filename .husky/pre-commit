@@ -1,2 +1,23 @@
 pnpm exec lint-staged
-gitleaks detect --no-banner --verbose 2>/dev/null || echo "gitleaks not installed — skipping"
+
+# Secret scan on the staged change.
+#
+# This used to be `gitleaks detect ... || echo "gitleaks not installed — skipping"`,
+# which swallowed EVERY non-zero exit. Exit 1 means "leaks found", so a real
+# leaked credential printed "not installed" and committed successfully. That is
+# the silent-failure pattern R-FAIL-01 bans, in the one hook whose whole job is
+# to fail loudly.
+#
+# Now the two cases are distinguished: a missing binary warns and lets the commit
+# through (so a fresh clone is not blocked), a finding blocks it.
+if command -v gitleaks >/dev/null 2>&1; then
+  if ! gitleaks git --staged --no-banner --redact; then
+    echo ""
+    echo "gitleaks found a secret in the staged change — commit blocked."
+    echo "If it is a false positive, add its fingerprint WITH A REASON to .gitleaksignore."
+    exit 1
+  fi
+else
+  echo "WARNING: gitleaks is not installed, so this commit was NOT scanned for secrets."
+  echo "         Install it before opening a PR (R-GIT-07): winget install gitleaks.gitleaks"
+fi
