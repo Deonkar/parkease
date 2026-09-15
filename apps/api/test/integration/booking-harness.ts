@@ -5,6 +5,8 @@ import { CheckInCommand } from '../../src/domains/booking/commands/check-in.comm
 import { CreateBookingCommand } from '../../src/domains/booking/commands/create-booking.command.js';
 import { ExtendBookingCommand } from '../../src/domains/booking/commands/extend-booking.command.js';
 import { LedgerService } from '../../src/domains/ledger/ledger.service.js';
+import { PaymentService } from '../../src/domains/payment/payment.service.js';
+import { RefundService } from '../../src/domains/payment/refund.service.js';
 import { PricingQuoteService } from '../../src/domains/pricing/quote.service.js';
 import { SpaceService } from '../../src/domains/space/space.service.js';
 import { SurgeService } from '../../src/domains/surge/surge.service.js';
@@ -19,6 +21,8 @@ export interface BookingStack {
   readonly ledger: LedgerService;
   readonly outbox: OutboxService;
   readonly quotes: PricingQuoteService;
+  readonly payments: PaymentService;
+  readonly refunds: RefundService;
   readonly create: CreateBookingCommand;
   readonly cancel: CancelBookingCommand;
   readonly extend: ExtendBookingCommand;
@@ -42,6 +46,8 @@ export function buildBookingStack(h: Harness): BookingStack {
   const ledger = new LedgerService();
   const outbox = new OutboxService();
   const quotes = new PricingQuoteService(new SurgeService(h.redis.asClient()));
+  const payments = new PaymentService(h.db);
+  const refunds = new RefundService(ledger, payments, outbox);
 
   return {
     spaces,
@@ -51,7 +57,9 @@ export function buildBookingStack(h: Harness): BookingStack {
     outbox,
     quotes,
     create: new CreateBookingCommand(h.db, spaces, quotes, availability, bookings, ledger, outbox),
-    cancel: new CancelBookingCommand(h.db, bookings, availability, ledger, outbox),
+    payments,
+    refunds,
+    cancel: new CancelBookingCommand(h.db, bookings, availability, payments, refunds, outbox),
     extend: new ExtendBookingCommand(h.db, bookings, spaces, quotes, availability, ledger, outbox),
     checkIn: new CheckInCommand(h.db, bookings, availability, outbox),
   };

@@ -12,7 +12,10 @@ async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter({ bodyLimit: 1_048_576, trustProxy: true }),
-    { logger: false },
+    // Keeps the bytes a request arrived as, so the Razorpay webhook can verify
+    // its HMAC over them rather than over a re-serialisation. See
+    // platform/http/raw-body.ts for why this flag and not our own parser.
+    { logger: false, rawBody: true },
   );
 
   app.setGlobalPrefix('api/v1');

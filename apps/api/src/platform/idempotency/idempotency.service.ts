@@ -14,7 +14,13 @@ type ClaimOutcome =
 
 interface ClaimInput {
   readonly key: string;
-  readonly userId: string;
+  /**
+   * `null` where there genuinely is no user: a Razorpay webhook (ADR-011
+   * deduplicates those on the event id in this table) or an /auth route that is
+   * still creating the session. Anywhere else the database refuses it —
+   * `idempotency_keys_user_or_public_check`.
+   */
+  readonly userId: string | null;
   readonly endpoint: string;
   readonly requestHash: string;
 }
@@ -54,6 +60,14 @@ export class IdempotencyService {
     if (!existing) return { outcome: 'proceed' };
 
     if (existing.userId !== input.userId) {
+      return { outcome: 'conflict' };
+    }
+
+    // ADR-011 stores the endpoint alongside the key; comparing only the user and
+    // the body wastes it. Without this, one key reused across two routes with
+    // the same body replays the first route's response onto the second — a
+    // cancel's answer returned for an extend, and the extend never running.
+    if (existing.endpoint !== input.endpoint) {
       return { outcome: 'conflict' };
     }
 

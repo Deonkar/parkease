@@ -19,12 +19,13 @@
     "drizzle-orm": "^0.45.0",
     "ioredis": "^5.4.0",
     "pg-boss": "10.1.5",
-    "pino": "9.5.0"
+    "pino": "9.5.0",
+    "razorpay": "2.9.8"
   },
   "devDependencies": {
     "@parkease/config": "workspace:*",
+    "@parkease/testing": "workspace:*",
     "tsx": "4.19.2",
-    "vitest": "2.1.8",
-    "@parkease/testing": "workspace:*"
+    "vitest": "2.1.8"
   }
 }

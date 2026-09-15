@@ -4,6 +4,9 @@ import {
   type LedgerDirection,
 } from '../enums/index.js';
 
+import { allocateProportionally } from './allocate.js';
+import { type RefundOutcome, RefundTier } from './refund-policy.js';
+
 /**
  * Not an HTTP-shaped failure with friendly copy: an unbalanced posting is a bug
  * in our own composition, never something a request did. It must abort the
@@ -135,4 +138,149 @@ export function assertEntriesBalance(entries: readonly LedgerEntryDraft[]): void
       `debits ${String(debits)} do not equal credits ${String(credits)}`,
     );
   }
+}
+
+/**
+ * A promotion that pays out more than the booking is worth is a funding bug, not
+ * a generous campaign. Caught here rather than at the posting, so the message
+ * names the discount instead of "debits do not equal credits".
+ */
+export class DiscountExceedsTotalError extends Error {
+  constructor(discountPaise: number, totalPaise: number) {
+    super(
+      `Discount of ${String(discountPaise)} paise exceeds the booking total of ${String(totalPaise)} paise`,
+    );
+    this.name = 'DiscountExceedsTotalError';
+  }
+}
+
+/**
+ * Reverses the three credits a booking posted, in full, and splits the reversal
+ * between what goes back to the driver and what we keep.
+ *
+ * The retained portion is booked gross to `platform_revenue` and the original
+ * GST credit is reversed in full. Whether that retention itself attracts GST is
+ * one of the open questions in ADR-021; until a CA closes it, gross is the
+ * treatment that is easy to correct with a reversing entry later.
+ */
+function fullReversalLegs(
+  totals: ReceivableTotals,
+  refundPaise: number,
+  retainedPaise: number,
+  description: string,
+): readonly LedgerEntryDraft[] {
+  return [
+    ...leg(Account.OWNER_PAYABLE, 'debit', totals.ownerEarningsPaise, description),
+    ...leg(Account.PLATFORM_REVENUE, 'debit', totals.parkeaseFeePaise, description),
+    ...leg(Account.GST_PAYABLE, 'debit', totals.gstPaise, description),
+    ...leg(Account.REFUNDS_PAYABLE, 'credit', refundPaise, description),
+    ...leg(Account.PLATFORM_REVENUE, 'credit', retainedPaise, description),
+  ];
+}
+
+/**
+ * The refund posting for a resolved tier. One function rather than four, because
+ * the shapes differ and pairing the wrong shape with the wrong tier is the kind
+ * of mistake that balances perfectly and still pays the wrong person.
+ *
+ * - `before_start` and `owner_cancelled` reverse the booking **in full**: nobody
+ *   earned anything, and what we keep is re-recognised as revenue in the same
+ *   transaction.
+ * - `active_grace` reverses **proportionally**, so owner, platform and tax each
+ *   give back the same fraction the driver got back. The legs are allocated, not
+ *   computed one by one, so they sum to the refund exactly.
+ * - `no_refund` writes nothing. No money moves, and the booking's original
+ *   posting already says what everyone is owed.
+ *
+ * The result is a complete posting, goodwill included — the caller hands it
+ * straight to the ledger without composing anything further.
+ */
+export function refundEntries(
+  totals: ReceivableTotals,
+  outcome: RefundOutcome,
+  description: string,
+): readonly LedgerEntryDraft[] {
+  switch (outcome.tier) {
+    case RefundTier.NO_REFUND:
+      return [];
+
+    case RefundTier.BEFORE_START:
+      return fullReversalLegs(totals, outcome.refundPaise, outcome.retainedPaise, description);
+
+    case RefundTier.OWNER_CANCELLED:
+      return [
+        ...fullReversalLegs(totals, outcome.refundPaise, outcome.retainedPaise, description),
+        // Funded, never deducted. The ₹50 is an expense we chose to incur and it
+        // shows up as one, rather than quietly shrinking the owner's earnings.
+        ...leg(Account.PROMO_EXPENSE, 'debit', outcome.goodwillPaise, description),
+        ...leg(Account.REFUNDS_PAYABLE, 'credit', outcome.goodwillPaise, description),
+      ];
+
+    case RefundTier.ACTIVE_GRACE: {
+      const [ownerPaise = 0, feePaise = 0, gstPaise = 0] = allocateProportionally(
+        outcome.refundPaise,
+        [totals.ownerEarningsPaise, totals.parkeaseFeePaise, totals.gstPaise],
+      );
+
+      return [
+        ...leg(Account.OWNER_PAYABLE, 'debit', ownerPaise, description),
+        ...leg(Account.PLATFORM_REVENUE, 'debit', feePaise, description),
+        ...leg(Account.GST_PAYABLE, 'debit', gstPaise, description),
+        ...leg(Account.REFUNDS_PAYABLE, 'credit', outcome.refundPaise, description),
+      ];
+    }
+  }
+}
+
+/**
+ * Razorpay confirms the money left (`refund.processed`), so the liability we
+ * recorded is settled against the receivable the driver owed.
+ *
+ * Deliberately separate from `refundEntries`: the liability is recorded the
+ * moment we decide to refund, and discharged only when the gateway says the
+ * money moved. Collapsing the two would claim cash had moved before it had.
+ */
+export function refundSettledEntries(
+  refundPaise: number,
+  description: string,
+): readonly LedgerEntryDraft[] {
+  return [
+    ...leg(Account.REFUNDS_PAYABLE, 'debit', refundPaise, description),
+    ...leg(Account.DRIVER_RECEIVABLE, 'credit', refundPaise, description),
+  ];
+}
+
+/**
+ * A booking created under a promotional discount.
+ *
+ * A discount reduces what the driver pays. It does not reduce what the owner
+ * earns, and it does not skip GST. That is enforced structurally rather than by
+ * convention: the three credits are the same three an undiscounted booking
+ * posts, read from the same totals, so a promo has no path to reach them. Only
+ * the debit side changes — the discount is funded out of `promo_expense`.
+ *
+ * Owner earnings are answered by summing `owner_payable`, so a campaign shows up
+ * on the platform's side and is invisible on the owner's (R-MONEY-05).
+ */
+export function promoBookingEntries(
+  totals: ReceivableTotals,
+  discountPaise: number,
+  description = 'booking created',
+): readonly LedgerEntryDraft[] {
+  if (discountPaise > totals.driverTotalPaise) {
+    throw new DiscountExceedsTotalError(discountPaise, totals.driverTotalPaise);
+  }
+
+  return [
+    ...leg(
+      Account.DRIVER_RECEIVABLE,
+      'debit',
+      totals.driverTotalPaise - discountPaise,
+      description,
+    ),
+    ...leg(Account.PROMO_EXPENSE, 'debit', discountPaise, description),
+    ...leg(Account.OWNER_PAYABLE, 'credit', totals.ownerEarningsPaise, description),
+    ...leg(Account.PLATFORM_REVENUE, 'credit', totals.parkeaseFeePaise, description),
+    ...leg(Account.GST_PAYABLE, 'credit', totals.gstPaise, description),
+  ];
 }

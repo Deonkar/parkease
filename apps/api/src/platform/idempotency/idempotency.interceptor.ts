@@ -18,6 +18,13 @@ import { IdempotencyService, hashCanonicalBody } from './idempotency.service.js'
 
 const uuidSchema = z.string().uuid();
 
+/**
+ * Every webhook route, not one literal path — matching the prefix the
+ * `idempotency_keys_user_or_public_check` constraint uses, so the two cannot
+ * drift apart into a route that is exempt here but rejected by the database.
+ */
+const WEBHOOK_PATH_PREFIX = '/api/v1/webhooks/';
+
 @Injectable()
 export class IdempotencyInterceptor implements NestInterceptor {
   constructor(private readonly service: IdempotencyService) {}
@@ -29,12 +36,25 @@ export class IdempotencyInterceptor implements NestInterceptor {
       return next.handle();
     }
 
+    // Gateways do not mint ParkEase idempotency keys. A webhook carries its own
+    // delivery id, and `WebhookService` claims that in the same table (ADR-011)
+    // — so demanding a client UUID here would 400 every Razorpay event before
+    // the controller ever saw it.
+    if (request.url.startsWith(WEBHOOK_PATH_PREFIX)) {
+      return next.handle();
+    }
+
     const key = request.headers['idempotency-key'];
     if (typeof key !== 'string' || !uuidSchema.safeParse(key).success) {
       throw new BadRequestException('This request needs an Idempotency-Key header.');
     }
 
-    const userId = request.user?.id ?? 'anonymous';
+    // `null`, not the string 'anonymous'. `user_id` is a uuid column, so
+    // 'anonymous' failed the insert with 22P02 and surfaced as a 500 on every
+    // POST /auth/session and /auth/refresh — the single-flight refresh path
+    // rule 9 exists to protect. The database now decides which endpoints may go
+    // without an owner (`idempotency_keys_user_or_public_check`).
+    const userId = request.user?.id ?? null;
     const requestHash = hashCanonicalBody(request.body);
     const routeUrl = (request.routeOptions as { url?: string } | undefined)?.url ?? request.url;
     const endpoint = `${request.method} ${routeUrl}`;

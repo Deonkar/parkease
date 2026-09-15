@@ -41,6 +41,13 @@ describe('worker schedule and handler coverage', () => {
       'booking.expire-unpaid',
       'booking.complete',
       'booking.remind',
+      // Enqueued by RefundService inside the cancellation transaction: ledger
+      // first, money second, so the gateway call commits with the rows that
+      // justify it.
+      'payment.issue-refund',
+      // Enqueued by ConfirmPaymentCommand when a capture lands against a booking
+      // the expiry job already released.
+      'payment.orphan-capture',
     ]);
     const scheduledSet = new Set(scheduleNames);
 

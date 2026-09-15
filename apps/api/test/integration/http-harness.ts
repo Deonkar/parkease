@@ -5,6 +5,8 @@ import { Test } from '@nestjs/testing';
 import type { FastifyRequest } from 'fastify';
 
 import { BookingModule } from '../../src/domains/booking/booking.module.js';
+import { PaymentModule } from '../../src/domains/payment/payment.module.js';
+import { RAZORPAY } from '../../src/domains/payment/razorpay.client.js';
 import { PricingModule } from '../../src/domains/pricing/pricing.module.js';
 import { SpaceModule } from '../../src/domains/space/space.module.js';
 import { SurgeModule } from '../../src/domains/surge/surge.module.js';
@@ -18,9 +20,11 @@ import { ObservabilityModule } from '../../src/platform/observability/observabil
 import { OutboxModule } from '../../src/platform/outbox/outbox.module.js';
 import { REDIS, RedisModule } from '../../src/platform/redis/redis.module.js';
 import { DriverBookingsController } from '../../src/roles/driver/bookings.controller.js';
+import { DriverPaymentsController } from '../../src/roles/driver/payments.controller.js';
 import { DriverQuotesController } from '../../src/roles/driver/quotes.controller.js';
 import { DriverSearchController } from '../../src/roles/driver/search.controller.js';
 import { OwnerBookingsController } from '../../src/roles/owner/bookings.controller.js';
+import { RazorpayWebhookController } from '../../src/roles/public/webhooks/razorpay.controller.js';
 
 import type { Harness } from './harness.js';
 
@@ -70,12 +74,15 @@ class StubAuthGuard implements CanActivate {
     SurgeModule,
     PricingModule,
     BookingModule,
+    PaymentModule,
   ],
   controllers: [
     DriverBookingsController,
     DriverQuotesController,
     DriverSearchController,
+    DriverPaymentsController,
     OwnerBookingsController,
+    RazorpayWebhookController,
   ],
   providers: [
     // Registered exactly as AppModule does. This is the whole point of these
@@ -97,25 +104,51 @@ export interface HttpApp {
     url: string;
     headers?: Record<string, string>;
     payload?: unknown;
+    /**
+     * Exact bytes to send, bypassing `JSON.stringify`.
+     *
+     * Required for anything that signs a body: `payload` is re-serialised on the
+     * way out, so a test that signs a string and sends it as `payload` signs one
+     * byte sequence and transmits another. That the two usually agree is what
+     * made v1's bug invisible to its own tests.
+     */
+    rawPayload?: string;
   }): Promise<{ status: number; body: unknown }>;
 }
 
-export async function startHttpApp(h: Harness): Promise<HttpApp> {
+export async function startHttpApp(h: Harness, razorpay?: unknown): Promise<HttpApp> {
   const moduleRef = await Test.createTestingModule({ imports: [HttpTestModule] })
     .overrideProvider(DB)
     .useValue(h.db)
     .overrideProvider(REDIS)
     .useValue(h.redis.asClient())
+    .overrideProvider(RAZORPAY)
+    // No network in a test. A double also lets the gateway answer with an amount
+    // that disagrees with ours, which is the only way to reach the mismatch path.
+    .useValue(razorpay ?? {})
     .compile();
 
-  const app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
+  // `rawBody: true` exactly as main.ts sets it. If these two drift apart, every
+  // webhook signature assertion is testing a fiction — which is exactly how v1's
+  // `JSON.stringify(req.body)` survived its own test suite.
+  const app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter(), {
+    rawBody: true,
+  });
   app.setGlobalPrefix('api/v1');
+
   await app.init();
   await app.getHttpAdapter().getInstance().ready();
 
   return {
     app,
-    async request({ method, url, headers = {}, payload }) {
+    async request({ method, url, headers = {}, payload, rawPayload }) {
+      const outgoing =
+        rawPayload !== undefined
+          ? { payload: rawPayload }
+          : payload === undefined
+            ? {}
+            : { payload: JSON.stringify(payload) };
+
       const response = await app
         .getHttpAdapter()
         .getInstance()
@@ -123,7 +156,7 @@ export async function startHttpApp(h: Harness): Promise<HttpApp> {
           method,
           url,
           headers: { 'content-type': 'application/json', ...headers },
-          ...(payload === undefined ? {} : { payload: JSON.stringify(payload) }),
+          ...outgoing,
         });
 
       let body: unknown = null;
