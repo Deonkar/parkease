@@ -34,7 +34,12 @@ export class IdempotencyInterceptor implements NestInterceptor {
       throw new BadRequestException('This request needs an Idempotency-Key header.');
     }
 
-    const userId = request.user?.id ?? 'anonymous';
+    // `null`, not the string 'anonymous'. `user_id` is a uuid column, so
+    // 'anonymous' failed the insert with 22P02 and surfaced as a 500 on every
+    // POST /auth/session and /auth/refresh — the single-flight refresh path
+    // rule 9 exists to protect. The database now decides which endpoints may go
+    // without an owner (`idempotency_keys_user_or_public_check`).
+    const userId = request.user?.id ?? null;
     const requestHash = hashCanonicalBody(request.body);
     const routeUrl = (request.routeOptions as { url?: string } | undefined)?.url ?? request.url;
     const endpoint = `${request.method} ${routeUrl}`;

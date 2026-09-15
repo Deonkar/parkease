@@ -1,0 +1,23 @@
+-- 0021_idempotency_keys_text.sql — hand-written
+-- Task 9, phase 3 of 5. Widens the idempotency key to hold a Razorpay event id.
+--
+-- ADR-011 is explicit: "Razorpay webhooks are deduplicated on the Razorpay event
+-- ID by the same table." That table's key column is `uuid`, and a Razorpay event
+-- id is `evt_QK7xVv9pLm2Zab` — not a UUID and never will be. The ADR sits above
+-- the schema in the governance chain, so the column moves rather than a parallel
+-- webhook_events table appearing beside it.
+--
+-- The one statement in task 9 that rewrites a table: ALTER COLUMN TYPE from
+-- uuid to text changes the on-disk representation and rebuilds the primary key
+-- index under ACCESS EXCLUSIVE. Every mutation the API serves writes to this
+-- table, so for the length of that rewrite every POST blocks. What makes it
+-- acceptable is not that the table is small — a small table under write traffic
+-- is still a blocked table — but that 0020 has just proved it is small, and
+-- refused to let this file run if it was not.
+--
+-- ONE STATEMENT, alone in its file. A multi-statement file runs in an implicit
+-- transaction, which would hold the rewrite's ACCESS EXCLUSIVE lock across
+-- whatever followed it — and blocking every mutation in the API for the length
+-- of an unrelated statement is exactly what the 5s lock_timeout cannot save us
+-- from once the lock is already acquired.
+ALTER TABLE idempotency_keys ALTER COLUMN key TYPE text USING key::text;
