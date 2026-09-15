@@ -33,7 +33,33 @@ export async function startPgContainer(): Promise<PgTestContext> {
   return { container, sql, connectionString };
 }
 
-export async function runMigrations(sql: postgres.Sql): Promise<void> {
+/**
+ * Apply every migration to a fresh container.
+ *
+ * Pass a connection string, not the shared pool. Several migration files hold
+ * more than one statement, and Postgres wraps a multi-statement simple query in
+ * an implicit transaction; postgres.js then refuses it on a pooled connection
+ * with `UNSAFE_TRANSACTION: Only use sql.begin, sql.reserved or max: 1`, because
+ * a pooled connection could be handed to another caller mid-transaction. So
+ * migrations get their own `max: 1` connection — the same reason src/migrate.ts
+ * uses `max: 1` — while the test pool stays multi-connection for the tests that
+ * genuinely need concurrency, such as booking-concurrency.
+ *
+ * A `postgres.Sql` is still accepted for callers that already hold a `max: 1`
+ * handle.
+ */
+export async function runMigrations(target: postgres.Sql | string): Promise<void> {
+  const ownsConnection = typeof target === 'string';
+  const sql = ownsConnection ? postgres(target, { max: 1 }) : target;
+
+  try {
+    await applyMigrations(sql);
+  } finally {
+    if (ownsConnection) await sql.end();
+  }
+}
+
+async function applyMigrations(sql: postgres.Sql): Promise<void> {
   await sql`
     CREATE TABLE IF NOT EXISTS __drizzle_migrations (
       id serial PRIMARY KEY,

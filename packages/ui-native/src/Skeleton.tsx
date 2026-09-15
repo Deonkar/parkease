@@ -1,6 +1,6 @@
-import { colors } from '@parkease/tokens';
+import { colors, duration, radius as radiusTokens, spacing } from '@parkease/tokens';
 import { useEffect, useRef } from 'react';
-import { Animated, StyleSheet, View, type ViewStyle } from 'react-native';
+import { Animated, Easing, StyleSheet, View, type ViewStyle } from 'react-native';
 
 interface SkeletonProps {
   readonly width: number | `${number}%`;
@@ -9,20 +9,24 @@ interface SkeletonProps {
   readonly style?: ViewStyle;
 }
 
-export function Skeleton({ width, height, borderRadius = 8, style }: SkeletonProps) {
+export function Skeleton({ width, height, borderRadius = radiusTokens.sm, style }: SkeletonProps) {
   const opacity = useRef(new Animated.Value(0.3)).current;
 
   useEffect(() => {
+    // Opacity only, with useNativeDriver — the shimmer runs off the JS thread.
+    // Linear by construction: a shimmer that eases reads as a stutter.
     const animation = Animated.loop(
       Animated.sequence([
         Animated.timing(opacity, {
           toValue: 1,
-          duration: 800,
+          duration: duration.deliberate,
+          easing: Easing.linear,
           useNativeDriver: true,
         }),
         Animated.timing(opacity, {
           toValue: 0.3,
-          duration: 800,
+          duration: duration.deliberate,
+          easing: Easing.linear,
           useNativeDriver: true,
         }),
       ]),
@@ -68,17 +72,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.skeleton,
   },
   listContainer: {
-    padding: 16,
-    gap: 16,
+    padding: spacing.base,
+    gap: spacing.base,
   },
   listItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: spacing.md,
   },
   listItemContent: {
     flex: 1,
-    gap: 8,
+    gap: spacing.sm,
   },
   listItemSub: {
     marginTop: 0,

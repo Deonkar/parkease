@@ -1,0 +1,11 @@
+# gitleaks allowlist — fingerprints of findings reviewed and judged false positives.
+# Each entry needs a reason. An unexplained fingerprint here is a suppressed secret.
+#
+# apps/api/test/logger-redaction.spec.ts:60 — the literal
+# "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..." is the base64 of the standard JWT
+# header {"alg":"RS256","typ":"JWT"} followed by a literal "...". It is the
+# fixture for the test that asserts the logger REDACTS idToken, so removing it
+# would delete the thing under test. Not a credential; it decodes to a header
+# with no payload and no signature.
+e6096fc331e747d5a2ded0c58df44d44cf5d6e70:apps/api/test/logger-redaction.spec.ts:generic-api-key:60
+0bb57fd88261dd7e901c0ed71c5394f20010f247:apps/api/test/logger-redaction.spec.ts:generic-api-key:60

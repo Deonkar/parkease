@@ -7,10 +7,18 @@ export {
   type BookingDetail,
 } from './create-booking.js';
 export {
-  searchSpacesSchema,
-  type SearchSpaces,
-  spaceResultSchema,
-  type SpaceResult,
+  DEFAULT_SEARCH_LIMIT,
+  DEFAULT_SEARCH_RADIUS_M,
+  MAX_CURSOR_LENGTH,
+  MAX_SEARCH_AMENITIES,
+  MAX_SEARCH_LIMIT,
+  MAX_SEARCH_RADIUS_M,
+  searchSortSchema,
+  type SearchSort,
+  searchSpacesQuerySchema,
+  type SearchSpacesQuery,
+  spaceSearchItemSchema,
+  type SpaceSearchItem,
 } from './search-spaces.js';
 export { cancelBookingSchema, type CancelBooking } from './cancel-booking.js';
 export { extendBookingSchema, type ExtendBooking } from './extend-booking.js';

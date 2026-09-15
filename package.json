@@ -19,6 +19,7 @@
     "db:seed": "pnpm --filter @parkease/db seed",
     "db:seed:bootstrap": "pnpm --filter @parkease/db seed:bootstrap",
     "db:seed:dev": "pnpm --filter @parkease/db seed:dev",
+    "db:seed:perf": "pnpm --filter @parkease/db seed:perf",
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",
     "check:node": "bash scripts/check-node-version.sh",

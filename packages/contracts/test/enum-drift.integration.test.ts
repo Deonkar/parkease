@@ -32,7 +32,7 @@ let ctx: PgTestContext;
 
 beforeAll(async () => {
   ctx = await startPgContainer();
-  await runMigrations(ctx.sql);
+  await runMigrations(ctx.connectionString);
 });
 
 afterAll(async () => {

@@ -1,4 +1,4 @@
-import { colors, fontSize, spacing } from '@parkease/tokens';
+import { colors, fontSize, radius, spacing } from '@parkease/tokens';
 import { type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
@@ -10,9 +10,20 @@ interface EmptyStateProps {
   readonly icon?: ReactNode;
   readonly actionLabel?: string;
   readonly onAction?: () => void;
+  /** Optional second CTA, for the states that website.md gives two. */
+  readonly secondaryActionLabel?: string;
+  readonly onSecondaryAction?: () => void;
 }
 
-export function EmptyState({ title, body, icon, actionLabel, onAction }: EmptyStateProps) {
+export function EmptyState({
+  title,
+  body,
+  icon,
+  actionLabel,
+  onAction,
+  secondaryActionLabel,
+  onSecondaryAction,
+}: EmptyStateProps) {
   return (
     <View style={styles.container}>
       <View style={styles.illustrationPlaceholder}>
@@ -20,14 +31,24 @@ export function EmptyState({ title, body, icon, actionLabel, onAction }: EmptySt
       </View>
       <Text style={styles.title}>{title}</Text>
       <Text style={styles.body}>{body}</Text>
-      {actionLabel && onAction ? (
-        <Button
-          label={actionLabel}
-          onPress={onAction}
-          variant="primary"
-          accessibilityLabel={actionLabel}
-        />
-      ) : null}
+      <View style={styles.actions}>
+        {actionLabel && onAction ? (
+          <Button
+            label={actionLabel}
+            onPress={onAction}
+            variant="primary"
+            accessibilityLabel={actionLabel}
+          />
+        ) : null}
+        {secondaryActionLabel && onSecondaryAction ? (
+          <Button
+            label={secondaryActionLabel}
+            onPress={onSecondaryAction}
+            variant="secondary"
+            accessibilityLabel={secondaryActionLabel}
+          />
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -39,10 +60,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: spacing['2xl'],
   },
+  actions: {
+    alignSelf: 'stretch',
+    gap: spacing.sm,
+  },
   illustrationPlaceholder: {
     width: 120,
     height: 120,
-    borderRadius: 60,
+    borderRadius: radius.full,
     backgroundColor: colors.surfaceTertiary,
     justifyContent: 'center',
     alignItems: 'center',
