@@ -10,6 +10,7 @@ import {
   pressScale,
   spring,
 } from '@parkease/tokens';
+import { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
@@ -31,7 +32,7 @@ interface BookingCardProps {
 /** 48dp is Material's floor for a touch target; a whole card clears it easily. */
 const MIN_TARGET = 48;
 
-export function BookingCard({ booking, onPress }: BookingCardProps) {
+function BookingCardImpl({ booking, onPress }: BookingCardProps) {
   const reduceMotion = useReducedMotion();
   const scale = useSharedValue(1);
   const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
@@ -56,7 +57,7 @@ export function BookingCard({ booking, onPress }: BookingCardProps) {
     >
       <Animated.View style={[styles.card, animatedStyle]}>
         <View style={styles.headRow}>
-          <Text style={styles.title} numberOfLines={1}>
+          <Text style={styles.title} numberOfLines={2}>
             {booking.space.title}
           </Text>
           <BookingStatusChip status={booking.status} />
@@ -138,6 +139,12 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
 });
+
+/**
+ * Memoised because the list re-renders on every filter change, and a booking
+ * card that has not changed should not re-run its layout.
+ */
+export const BookingCard = memo(BookingCardImpl);
 
 export const BOOKING_CARD_ESTIMATED_HEIGHT = 132;
 export const BOOKING_CARD_ANIMATION_MS = duration.fast;

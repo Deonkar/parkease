@@ -1,7 +1,8 @@
 import type { DriverBooking } from '@parkease/contracts/driver';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRef } from 'react';
 
-import { newIntent } from '@/lib/api';
+import { newIntent, type Intent } from '@/lib/api';
 
 import {
   cancelBooking,
@@ -95,17 +96,28 @@ function useBookingInvalidation() {
 }
 
 /**
- * One intent per mutation hook instance, minted when the hook mounts rather
- * than per attempt (R-FE-05). A retry after a timeout reuses the same key, so
- * the server replays its stored response instead of reserving a second slot.
+ * One intent for the life of the component (R-FE-05).
  *
- * The key is deliberately not regenerated on error: "try again" on the same
- * screen is the same intent. A genuinely new attempt means a new screen, and a
- * new screen means a new hook.
+ * A `useRef`, not a bare call in the hook body. `newIntent()` in the body runs
+ * on *every render* — and `useMutation` re-renders the component itself as
+ * `isPending` flips — so the key would change between the attempt that timed out
+ * and the "try again" that follows it. The server would then see two distinct
+ * intents and reserve two slots, which is the exact double-booking the rule
+ * exists to prevent.
+ *
+ * Deliberately not regenerated on error: "try again" on the same screen is the
+ * same intent. A genuinely new attempt means a new screen, and a new screen
+ * means a new component.
  */
+function useIntent(): Intent {
+  const intent = useRef<Intent | null>(null);
+  intent.current ??= newIntent();
+  return intent.current;
+}
+
 export function useCreateBooking() {
   const invalidate = useBookingInvalidation();
-  const intent = newIntent();
+  const intent = useIntent();
 
   return useMutation({
     mutationFn: (body: CreateBookingBody) => createBooking(body, intent),
@@ -115,7 +127,7 @@ export function useCreateBooking() {
 
 export function useCancelBooking(bookingId: string) {
   const invalidate = useBookingInvalidation();
-  const intent = newIntent();
+  const intent = useIntent();
 
   return useMutation({
     mutationFn: (reason?: string) => cancelBooking(bookingId, reason, intent),
@@ -125,7 +137,7 @@ export function useCancelBooking(bookingId: string) {
 
 export function useExtendBooking(bookingId: string) {
   const invalidate = useBookingInvalidation();
-  const intent = newIntent();
+  const intent = useIntent();
 
   return useMutation({
     mutationFn: (newEndsAt: string) => extendBooking(bookingId, newEndsAt, intent),
@@ -135,7 +147,7 @@ export function useExtendBooking(bookingId: string) {
 
 export function useSelfCheckIn(bookingId: string) {
   const invalidate = useBookingInvalidation();
-  const intent = newIntent();
+  const intent = useIntent();
 
   return useMutation({
     mutationFn: () => selfCheckIn(bookingId, intent),

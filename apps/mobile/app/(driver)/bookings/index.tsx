@@ -12,6 +12,15 @@ import { SegmentedChoice } from '../../../src/features/driver/components/Segment
 import { useBookingsList } from '../../../src/features/driver/hooks/useBookings';
 import { ScreenHeader } from '../../../src/features/shared/components/ScreenHeader';
 
+/**
+ * Declared once, not inline. An arrow in the JSX is a new component *type* on
+ * every render, so FlashList unmounts and remounts every separator whenever the
+ * filter changes.
+ */
+function BookingSeparator() {
+  return <View style={styles.separator} />;
+}
+
 type Filter = 'upcoming' | 'past' | 'all';
 
 const EMPTY: Readonly<Record<Filter, { title: string; body: string }>> = {
@@ -91,7 +100,7 @@ export default function BookingsListScreen() {
             renderItem={renderItem}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.listContent}
-            ItemSeparatorComponent={() => <View style={styles.separator} />}
+            ItemSeparatorComponent={BookingSeparator}
             onEndReachedThreshold={0.5}
             onEndReached={() => {
               if (hasNextPage) void fetchNextPage();

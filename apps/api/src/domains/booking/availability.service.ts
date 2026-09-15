@@ -98,13 +98,25 @@ export class AvailabilityService {
    */
   async extend(tx: TxHandle, bookingId: string, newEndsAt: Date): Promise<void> {
     try {
-      await tx
+      const moved = await tx
         .update(bookingSlots)
         .set({
           period: sql`tstzrange(lower(${bookingSlots.period}), ${newEndsAt.toISOString()}::timestamptz, '[)')`,
           updatedAt: new Date(),
         })
-        .where(eq(bookingSlots.bookingId, bookingId));
+        .where(eq(bookingSlots.bookingId, bookingId))
+        .returning({ id: bookingSlots.id });
+
+      // An UPDATE that matches nothing is a successful no-op in SQL, and here
+      // that would be the worst outcome available: the booking's `ends_at`
+      // moves, the occupancy row does not, and the space is now sold for a
+      // window its own exclusion constraint no longer guards. Fail the
+      // transaction instead of committing half an extension (R-FAIL-01).
+      if (moved.length !== 1) {
+        throw new Error(
+          `Extension touched ${String(moved.length)} occupancy rows for booking ${bookingId}; expected exactly 1`,
+        );
+      }
     } catch (error) {
       if (isPgError(error, PG_EXCLUSION_VIOLATION)) {
         logger.info(
