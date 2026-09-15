@@ -11,6 +11,8 @@ import {
   type NotificationPayload,
 } from './jobs/notification/dispatch.job.js';
 import { relayOutbox } from './jobs/outbox/relay.job.js';
+import { issueRefund } from './jobs/payment/issue-refund.job.js';
+import { reconcileOrphanCapture } from './jobs/payment/reconcile-orphan.job.js';
 
 /**
  * Booking jobs are handled one at a time rather than in a batch: each takes a
@@ -34,5 +36,14 @@ export async function registerHandlers(boss: PgBoss, deps: JobDeps): Promise<voi
   });
   await boss.work<unknown>('booking.remind', { batchSize: 1 }, async (jobs) => {
     for (const job of jobs) await remindBooking(deps, job.data);
+  });
+
+  // One at a time, like the booking jobs: each takes a FOR UPDATE row lock, and
+  // a refund is the one thing in this system that cannot be undone if done twice.
+  await boss.work<unknown>('payment.issue-refund', { batchSize: 1 }, async (jobs) => {
+    for (const job of jobs) await issueRefund(deps, job.data);
+  });
+  await boss.work<unknown>('payment.orphan-capture', { batchSize: 1 }, async (jobs) => {
+    for (const job of jobs) await reconcileOrphanCapture(deps, job.data);
   });
 }

@@ -15,5 +15,17 @@ export default defineConfig({
     testTimeout: 120_000,
     hookTimeout: 300_000,
     fileParallelism: false,
+    /**
+     * The env schema calls `process.exit(1)` on a missing variable, which kills
+     * the test runner rather than failing a test (learnings.md). The real
+     * database URL comes from the container at runtime; these only get the
+     * module past validation.
+     */
+    env: {
+      DATABASE_URL: 'postgres://parkease:parkease@localhost:5432/parkease_test',
+      REDIS_URL: 'redis://localhost:6379',
+      RAZORPAY_KEY_ID: 'rzp_test_fake0000000000',
+      RAZORPAY_KEY_SECRET: 'fakesecretfakesecret00',
+    },
   },
 });

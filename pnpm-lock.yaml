@@ -168,7 +168,7 @@ importers:
         version: 4.19.2
       unplugin-swc:
         specifier: 1.6.0
-        version: 1.6.0(@swc/core@1.16.2)(esbuild@0.24.0)(rollup@4.63.1)(vite@5.4.21(@types/node@22.20.2)(lightningcss@1.33.0)(terser@5.51.2))
+        version: 1.6.0(@swc/core@1.16.2)(esbuild@0.24.0)(rollup@4.63.1)(vite@6.0.5(@types/node@22.20.2)(lightningcss@1.33.0)(terser@5.51.2)(tsx@4.19.2)(yaml@2.9.0))
       vitest:
         specifier: 2.1.8
         version: 2.1.8(@types/node@22.20.2)(lightningcss@1.33.0)(terser@5.51.2)
@@ -363,6 +363,9 @@ importers:
       pino:
         specifier: 9.5.0
         version: 9.5.0
+      razorpay:
+        specifier: 2.9.8
+        version: 2.9.8
     devDependencies:
       '@parkease/config':
         specifier: workspace:*
@@ -16775,12 +16778,12 @@ snapshots:
 
   unpipe@1.0.0: {}
 
-  unplugin-swc@1.6.0(@swc/core@1.16.2)(esbuild@0.24.0)(rollup@4.63.1)(vite@5.4.21(@types/node@22.20.2)(lightningcss@1.33.0)(terser@5.51.2)):
+  unplugin-swc@1.6.0(@swc/core@1.16.2)(esbuild@0.24.0)(rollup@4.63.1)(vite@6.0.5(@types/node@22.20.2)(lightningcss@1.33.0)(terser@5.51.2)(tsx@4.19.2)(yaml@2.9.0)):
     dependencies:
       '@rollup/pluginutils': 5.4.0(rollup@4.63.1)
       '@swc/core': 1.16.2
       load-tsconfig: 0.2.5
-      unplugin: 3.3.0(esbuild@0.24.0)(rollup@4.63.1)(vite@5.4.21(@types/node@22.20.2)(lightningcss@1.33.0)(terser@5.51.2))
+      unplugin: 3.3.0(esbuild@0.24.0)(rollup@4.63.1)(vite@6.0.5(@types/node@22.20.2)(lightningcss@1.33.0)(terser@5.51.2)(tsx@4.19.2)(yaml@2.9.0))
     transitivePeerDependencies:
       - '@farmfe/core'
       - '@rspack/core'
@@ -16792,7 +16795,7 @@ snapshots:
       - vite
       - webpack
 
-  unplugin@3.3.0(esbuild@0.24.0)(rollup@4.63.1)(vite@5.4.21(@types/node@22.20.2)(lightningcss@1.33.0)(terser@5.51.2)):
+  unplugin@3.3.0(esbuild@0.24.0)(rollup@4.63.1)(vite@6.0.5(@types/node@22.20.2)(lightningcss@1.33.0)(terser@5.51.2)(tsx@4.19.2)(yaml@2.9.0)):
     dependencies:
       '@jridgewell/remapping': 2.3.5
       picomatch: 4.0.7
@@ -16800,7 +16803,7 @@ snapshots:
     optionalDependencies:
       esbuild: 0.24.0
       rollup: 4.63.1
-      vite: 5.4.21(@types/node@22.20.2)(lightningcss@1.33.0)(terser@5.51.2)
+      vite: 6.0.5(@types/node@22.20.2)(lightningcss@1.33.0)(terser@5.51.2)(tsx@4.19.2)(yaml@2.9.0)
 
   update-browserslist-db@1.3.2(browserslist@4.28.9):
     dependencies:
