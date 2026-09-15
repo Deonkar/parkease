@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  buildCheckoutOptions,
-  CHECKOUT_HTML,
-  CHECKOUT_ORIGIN_ALLOWLIST,
-  checkoutResultSchema,
-} from '../checkout-html';
+import { buildCheckoutOptions, CHECKOUT_HTML, checkoutResultSchema } from '../checkout-html';
 import { formatCountdown } from '../hooks/useCountdown';
 
 const params = {
@@ -149,11 +144,6 @@ describe('checkoutResultSchema', () => {
         razorpaySignature: 'sig',
       }),
     ).toThrow();
-  });
-
-  it('only allows Razorpay origins to be navigated to', () => {
-    expect(CHECKOUT_ORIGIN_ALLOWLIST.every((origin) => origin.startsWith('https://'))).toBe(true);
-    expect(CHECKOUT_ORIGIN_ALLOWLIST.every((origin) => origin.endsWith('razorpay.com'))).toBe(true);
   });
 });
 

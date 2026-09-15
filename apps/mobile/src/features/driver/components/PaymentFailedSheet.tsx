@@ -101,7 +101,11 @@ export function PaymentFailedSheet({
             {canChangeMethod ? (
               <Button label="Change Method" variant="secondary" onPress={onChangeMethod} />
             ) : null}
-            <Button label="Back to the booking" variant="ghost" onPress={onDismiss} />
+            {/*
+              "Back to the booking" described where the driver already was.
+              This says what the tap does, and leaves the slot held.
+            */}
+            <Button label="Not now" variant="ghost" onPress={onDismiss} />
           </View>
         </Animated.View>
       </Animated.View>

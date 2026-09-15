@@ -37,7 +37,7 @@ export function SlotHeldBar({ deadlineAt, onExpired }: SlotHeldBarProps) {
     return (
       <View style={[styles.bar, styles.barExpired]}>
         <MaterialCommunityIcons name="timer-off-outline" size={15} color={colors.errorInk} />
-        <Text style={[styles.label, { color: colors.errorInk }]}>
+        <Text style={[styles.label, styles.expiredText, { color: colors.errorInk }]}>
           This hold has expired — the spot is back on the map
         </Text>
       </View>
@@ -58,11 +58,14 @@ export function SlotHeldBar({ deadlineAt, onExpired }: SlotHeldBarProps) {
         size={15}
         color={urgent ? colors.surge : colors.availableInk}
       />
+      {/*
+        Label and time sit together, centred — as the approved direction drew
+        them. An earlier build gave the label `flex: 1`, which pushed the time to
+        the far right edge and left "Spot held" and "9:41" separated by most of a
+        375px screen, reading as two unrelated things rather than one sentence.
+      */}
       <Text style={[styles.label, { color: urgent ? colors.surge : colors.availableInk }]}>
-        Spot held
-      </Text>
-      <Text style={[styles.time, { color: urgent ? colors.surge : colors.availableInk }]}>
-        {countdown.label}
+        Spot held · <Text style={styles.time}>{countdown.label}</Text>
       </Text>
     </View>
   );
@@ -72,6 +75,7 @@ const styles = StyleSheet.create({
   bar: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: spacing.sm,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
@@ -86,14 +90,18 @@ const styles = StyleSheet.create({
   barExpired: {
     backgroundColor: colors.errorLight,
   },
+  /** The only line here long enough to need wrapping room. */
+  expiredText: {
+    flex: 1,
+  },
   label: {
     fontSize: fontSize.sm,
     fontWeight: fontWeight.semibold,
-    flex: 1,
   },
   time: {
-    fontSize: fontSize.sm,
     fontWeight: fontWeight.bold,
+    // Tabular figures so the row does not twitch sideways once a second — the
+    // one piece of motion on this screen nobody asked for.
     fontVariant: ['tabular-nums'],
   },
 });

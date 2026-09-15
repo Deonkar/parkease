@@ -2,7 +2,13 @@ import { trace } from '@opentelemetry/api';
 import { pino } from 'pino';
 import type { LoggerOptions } from 'pino';
 
-const REDACT_PATHS = [
+/**
+ * Exported so `logger-redaction.spec.ts` asserts against *this* list rather than
+ * a copy of it. The test used to keep its own duplicate, which meant it passed
+ * whatever the real list said — the same shape of defect as a security control
+ * that is defined, tested and never wired up.
+ */
+export const REDACT_PATHS = [
   'phone',
   'otp',
   'token',
@@ -15,6 +21,14 @@ const REDACT_PATHS = [
   'upiId',
   'aadhaar',
   'razorpaySignature',
+  // Not secrets on their own, but they identify a specific movement of money and
+  // are the join key between our records and Razorpay's. A comment in
+  // `confirm-payment.command.ts` used to claim these were already redacted; a
+  // security pass found they were not, which is the worse failure of the two —
+  // a claimed control nobody re-checks (R-SEC-03).
+  'razorpayPaymentId',
+  'razorpayOrderId',
+  'razorpayRefundId',
   'password',
   'cookie',
 ];

@@ -163,8 +163,10 @@ export class ConfirmPaymentCommand {
         });
       });
 
-      // Booking id only. The Razorpay payment id is redacted by the Pino
-      // serialiser anyway (R-SEC-03), and naming it here would defeat that.
+      // Booking id only — enough to find the booking, nothing that identifies
+      // the movement of money. The Pino redact list also covers the Razorpay
+      // ids, but only because this pass added them: the comment that used to
+      // sit here claimed they were already redacted, and they were not.
       logger.error(
         { bookingId: payment.bookingId, expectedPaise: payment.expectedTotalPaise },
         'payment amount mismatch',

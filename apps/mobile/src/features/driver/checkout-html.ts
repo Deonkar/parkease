@@ -166,9 +166,22 @@ export const CHECKOUT_HTML = `<!doctype html>
 </body>
 </html>`;
 
-/** Razorpay's own origins. Nothing else may navigate inside the WebView. */
-export const CHECKOUT_ORIGIN_ALLOWLIST = [
-  'https://checkout.razorpay.com',
-  'https://api.razorpay.com',
-  'https://razorpay.com',
-] as const;
+/**
+ * Why the WebView is not origin-restricted, and what protects it instead.
+ *
+ * A card payment redirects to the issuing bank's 3-D Secure page, which lives on
+ * whatever domain that bank uses — so an allowlist of Razorpay origins would
+ * break every card transaction. An earlier version of this file exported one
+ * anyway, with a test asserting it was all-Razorpay. It was never wired to the
+ * WebView. A control that is defined, tested and unused is worse than no
+ * control: the test reads as assurance and there is none. A security pass found
+ * it; both are gone.
+ *
+ * What actually holds the boundary:
+ *   - the page is static and loads exactly one script, Razorpay's own;
+ *   - nothing user-written is interpolated into it;
+ *   - the bridge result is parsed by `checkoutResultSchema`, and has nowhere to
+ *     put an amount;
+ *   - the server re-fetches the order from Razorpay regardless, so nothing the
+ *     page says can change what we believe was paid (R-SEC-09).
+ */
