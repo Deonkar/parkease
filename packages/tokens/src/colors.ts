@@ -47,8 +47,16 @@ export const colors = {
   borderStrong: '#CBD5E1',
   borderFocused: '#0369A1',
 
+  /** Borders, icons and text on white. 4.83:1 — clears AA, but only on white. */
   error: '#DC2626',
   errorLight: '#FEF2F2',
+  /**
+   * Text on `errorLight`. The same two-tier split the availability green uses,
+   * and for the same reason: `error` on `errorLight` measures 4.41:1, under the
+   * 4.5:1 AA floor, so the tinted error panels the booking flow renders needed a
+   * darker ink rather than a slightly-too-light one nobody measured. 5.91:1.
+   */
+  errorInk: '#B91C1C',
   success: '#16A34A',
   successLight: '#F0FDF4',
   warning: '#B45309',

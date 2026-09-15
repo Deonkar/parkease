@@ -64,6 +64,20 @@ describe('contrast — coloured text on white', () => {
   it('surge is readable on surgeSoft', () => {
     expect(contrast(colors.surge, colors.surgeSoft)).toBeGreaterThanOrEqual(AA_NORMAL);
   });
+
+  it('errorInk is readable on errorLight', () => {
+    expect(contrast(colors.errorInk, colors.errorLight)).toBeGreaterThanOrEqual(AA_NORMAL);
+  });
+
+  /**
+   * The reason `errorInk` exists at all, pinned so nobody "simplifies" the two
+   * tiers back into one. `error` is tuned for white and lands at 4.41:1 on the
+   * tinted panel — close enough to look fine and still a real AA failure, which
+   * is exactly the kind that ships.
+   */
+  it('error is NOT readable on errorLight, which is why errorInk exists', () => {
+    expect(contrast(colors.error, colors.errorLight)).toBeLessThan(AA_NORMAL);
+  });
 });
 
 describe('contrast — non-text UI', () => {

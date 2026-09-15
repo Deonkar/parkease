@@ -1,6 +1,9 @@
 import type PgBoss from 'pg-boss';
 
 import type { JobDeps } from './deps.js';
+import { completeBooking } from './jobs/booking/complete.job.js';
+import { expireUnpaid } from './jobs/booking/expire-unpaid.job.js';
+import { remindBooking } from './jobs/booking/remind.job.js';
 import { pruneIdempotencyKeys } from './jobs/idempotency/prune.job.js';
 import { assertLedgerBalance } from './jobs/ledger/assert-balance.job.js';
 import {
@@ -9,6 +12,12 @@ import {
 } from './jobs/notification/dispatch.job.js';
 import { relayOutbox } from './jobs/outbox/relay.job.js';
 
+/**
+ * Booking jobs are handled one at a time rather than in a batch: each takes a
+ * FOR UPDATE row lock, and batching them would hold several at once inside a
+ * single handler for no gain. Every handler is idempotent, because pg-boss
+ * delivery is at-least-once (R-ASYNC-03).
+ */
 export async function registerHandlers(boss: PgBoss, deps: JobDeps): Promise<void> {
   await boss.work('outbox.relay', { pollingIntervalSeconds: 1 }, () => relayOutbox(deps));
   await boss.work<NotificationPayload>('notification.dispatch', { batchSize: 50 }, (jobs) =>
@@ -16,4 +25,14 @@ export async function registerHandlers(boss: PgBoss, deps: JobDeps): Promise<voi
   );
   await boss.work('ledger.assert-balance', {}, () => assertLedgerBalance(deps));
   await boss.work('idempotency.prune', {}, () => pruneIdempotencyKeys(deps));
+
+  await boss.work<unknown>('booking.expire-unpaid', { batchSize: 1 }, async (jobs) => {
+    for (const job of jobs) await expireUnpaid(deps, job.data);
+  });
+  await boss.work<unknown>('booking.complete', { batchSize: 1 }, async (jobs) => {
+    for (const job of jobs) await completeBooking(deps, job.data);
+  });
+  await boss.work<unknown>('booking.remind', { batchSize: 1 }, async (jobs) => {
+    for (const job of jobs) await remindBooking(deps, job.data);
+  });
 }

@@ -9,6 +9,10 @@ import unitConfig from './vitest.config.js';
  * three things worth testing.
  */
 export default defineConfig({
+  // Spreading `test` alone does not carry the plugins, and without the SWC
+  // transform NestJS DI cannot resolve a constructor dependency by type — which
+  // is exactly what the HTTP-level tests here need.
+  plugins: unitConfig.plugins,
   test: {
     ...unitConfig.test,
     include: ['test/integration/**/*.{test,spec}.ts'],

@@ -7,9 +7,10 @@
     "dev": "tsx watch src/main.ts",
     "build": "tsc --build",
     "start": "node dist/main.js",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit -p tsconfig.check.json",
     "lint": "eslint src/",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
@@ -23,6 +24,7 @@
   "devDependencies": {
     "@parkease/config": "workspace:*",
     "tsx": "4.19.2",
-    "vitest": "2.1.8"
+    "vitest": "2.1.8",
+    "@parkease/testing": "workspace:*"
   }
 }

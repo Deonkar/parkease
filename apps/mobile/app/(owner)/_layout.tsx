@@ -57,6 +57,7 @@ export default function OwnerLayout() {
           ),
         }}
       />
+      <Tabs.Screen name="scan" options={{ href: null }} />
       <Tabs.Screen name="listings/new" options={{ href: null }} />
       <Tabs.Screen name="listings/[id]" options={{ href: null }} />
       <Tabs.Screen name="earnings/payouts" options={{ href: null }} />

@@ -52,6 +52,8 @@ export {
   type PaginationQuery,
   pageMetaSchema,
   type PageMeta,
+  cursorPageMetaSchema,
+  type CursorPageMeta,
   single,
   page,
   errorEnvelopeSchema,

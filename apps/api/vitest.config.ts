@@ -1,6 +1,18 @@
+import swc from 'unplugin-swc';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  /**
+   * Vitest transforms with esbuild, which does not emit `design:paramtypes`.
+   * Without that metadata NestJS cannot resolve a constructor dependency by
+   * type, so `Test.createTestingModule` fails with "the argument at index [0]
+   * appears to be undefined at runtime" for every service that is not injected
+   * through an explicit `@Inject()` token.
+   *
+   * SWC emits it. This is what makes HTTP-level tests — the ones that exercise
+   * the real interceptor and guard stack — possible at all.
+   */
+  plugins: [swc.vite({ module: { type: 'es6' } })],
   test: {
     root: '.',
     globals: false,
@@ -17,6 +29,7 @@ export default defineConfig({
       DATABASE_URL: 'postgresql://parkease:parkease_local@localhost:5432/parkease_test',
       REDIS_URL: 'redis://localhost:6379',
       JWT_SECRET: 'test-secret-that-is-at-least-32-chars-long!!',
+      BOOKING_QR_SECRET: 'test-qr-secret-that-is-at-least-32-chars-long!!',
       JWT_ACCESS_TTL: '15m',
       JWT_REFRESH_TTL: '7d',
       FIREBASE_PROJECT_ID: 'test-project',

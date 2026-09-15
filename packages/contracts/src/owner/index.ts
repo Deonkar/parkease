@@ -43,3 +43,9 @@ export {
   spaceSlotSchema,
   type SpaceSlot,
 } from './space-slots.js';
+export {
+  ownerCheckInSchema,
+  type OwnerCheckIn,
+  ownerCheckInResultSchema,
+  type OwnerCheckInResult,
+} from './check-in.js';

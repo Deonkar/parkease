@@ -1,9 +1,11 @@
 import { z } from 'zod';
 
-import { bookingIdSchema } from '../primitives/ids.js';
-
+/**
+ * The booking id is a path parameter, not a body field — a body that can name a
+ * different booking than the URL is an authorisation question nobody wants to
+ * have to ask.
+ */
 export const extendBookingSchema = z.object({
-  bookingId: bookingIdSchema,
   newEndsAt: z.string().datetime(),
 });
 

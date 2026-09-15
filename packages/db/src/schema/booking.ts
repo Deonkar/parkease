@@ -1,3 +1,10 @@
+import type {
+  BookingStatus,
+  CheckInMethod,
+  DurationType,
+  SlotStatus,
+  VehicleType,
+} from '@parkease/contracts/enums';
 import { sql } from 'drizzle-orm';
 import { check, index, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
@@ -17,12 +24,12 @@ export const bookings = pgTable(
     spaceId: uuid('space_id')
       .notNull()
       .references(() => spaces.id),
-    vehicleType: text('vehicle_type').notNull(),
+    vehicleType: text('vehicle_type').$type<VehicleType>().notNull(),
     vehicleNumber: text('vehicle_number'),
-    durationType: text('duration_type').notNull(),
+    durationType: text('duration_type').$type<DurationType>().notNull(),
     startsAt: timestamp('starts_at', { withTimezone: true }).notNull(),
     endsAt: timestamp('ends_at', { withTimezone: true }).notNull(),
-    status: text('status').notNull().default('pending_payment'),
+    status: text('status').$type<BookingStatus>().notNull().default('pending_payment'),
 
     basePaise: paise('base_paise').notNull(),
     surgePremiumPaise: paise('surge_premium_paise').notNull().default(0),
@@ -33,6 +40,7 @@ export const bookings = pgTable(
     ownerEarningsPaise: paise('owner_earnings_paise').notNull(),
 
     checkedInAt: timestamp('checked_in_at', { withTimezone: true }),
+    checkInMethod: text('check_in_method').$type<CheckInMethod>(),
     completedAt: timestamp('completed_at', { withTimezone: true }),
     cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
     cancellationReason: text('cancellation_reason'),
@@ -58,6 +66,14 @@ export const bookings = pgTable(
       'bookings_duration_type_check',
       sql`${t.durationType} IN ('hourly','daily','weekly','monthly')`,
     ),
+    check(
+      'bookings_check_in_method_check',
+      sql`${t.checkInMethod} IS NULL OR ${t.checkInMethod} IN ('owner_scan','driver_fallback')`,
+    ),
+    check(
+      'bookings_check_in_method_present_check',
+      sql`(${t.checkedInAt} IS NULL) = (${t.checkInMethod} IS NULL)`,
+    ),
   ],
 );
 
@@ -71,10 +87,10 @@ export const bookingSlots = pgTable(
     spaceId: uuid('space_id')
       .notNull()
       .references(() => spaces.id),
-    vehicleType: text('vehicle_type').notNull(),
+    vehicleType: text('vehicle_type').$type<VehicleType>().notNull(),
     slotIndex: integer('slot_index').notNull(),
     period: tstzRange('period').notNull(),
-    status: text('status').notNull().default('held'),
+    status: text('status').$type<SlotStatus>().notNull().default('held'),
     ...timestamps,
   },
   (t) => [

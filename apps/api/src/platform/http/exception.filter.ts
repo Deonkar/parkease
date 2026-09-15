@@ -7,7 +7,9 @@ import {
 } from '@nestjs/common';
 import { trace } from '@opentelemetry/api';
 import type { FastifyReply } from 'fastify';
+import { ZodError } from 'zod';
 
+import { pgSqlState } from '../db/errors.js';
 import { logger } from '../observability/logger.js';
 
 interface MappedError {
@@ -39,16 +41,18 @@ const PG_ERROR_MAP: Readonly<Record<string, MappedError>> = {
   },
 };
 
-function extractSqlState(error: unknown): string | undefined {
-  if (
-    error !== null &&
-    typeof error === 'object' &&
-    'code' in error &&
-    typeof (error as Record<string, unknown>)['code'] === 'string'
-  ) {
-    return (error as Record<string, unknown>)['code'] as string;
-  }
-  return undefined;
+/**
+ * One issue, named by its field, in the caller's words.
+ *
+ * Not the whole issue array: a validation dump is a schema disclosure and it is
+ * not what a driver's phone should render. The full detail is in the log line
+ * the filter writes alongside the trace id (R-GEN-06).
+ */
+function firstIssueMessage(error: ZodError): string {
+  const issue = error.issues[0];
+  if (issue === undefined) return 'That request was not valid.';
+  const field = issue.path.join('.');
+  return field === '' ? issue.message : `${field}: ${issue.message}`;
 }
 
 function errorCodeFor(exception: HttpException): string {
@@ -87,10 +91,24 @@ export class AllExceptionsFilter implements ExceptionFilter {
   }
 
   private map(exception: unknown): MappedError {
-    const sqlState = extractSqlState(exception);
+    const sqlState = pgSqlState(exception);
     if (sqlState) {
       const pgMapped = PG_ERROR_MAP[sqlState];
       if (pgMapped) return pgMapped;
+    }
+
+    // A ZodError is not an HttpException, so without this every controller that
+    // validates with `schema.parse()` — which is all of them, R-CON-01 — answered
+    // 500 for a malformed body instead of 400. It read as "our fault" for what
+    // is plainly the caller's, and it hid real client bugs behind an alert.
+    // Found by the first HTTP-level test; unreachable from a test that calls a
+    // command directly.
+    if (exception instanceof ZodError) {
+      return {
+        status: HttpStatus.BAD_REQUEST,
+        code: 'VALIDATION_FAILED',
+        message: firstIssueMessage(exception),
+      };
     }
 
     if (exception instanceof HttpException) {

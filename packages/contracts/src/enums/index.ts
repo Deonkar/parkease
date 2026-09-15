@@ -37,3 +37,4 @@ export {
   LedgerDirection,
 } from './ledger-direction.js';
 export { OUTBOX_STATUS_VALUES, outboxStatusSchema, OutboxStatus } from './outbox-status.js';
+export { CHECK_IN_METHOD_VALUES, checkInMethodSchema, CheckInMethod } from './check-in-method.js';

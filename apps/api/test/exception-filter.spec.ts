@@ -1,10 +1,20 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { z } from 'zod';
 
 import { AllExceptionsFilter } from '../src/platform/http/exception.filter.js';
 
-function mockHost(sendFn: ReturnType<typeof vi.fn>) {
-  const statusFn = vi.fn().mockReturnValue({ send: sendFn });
+/**
+ * `statusFn` is a parameter so a test can assert the status code, not just the
+ * body. It used to be created inside here and thrown away, which is why nothing
+ * in this file checked a status — and why a ZodError answering 500 instead of
+ * 400 went unnoticed until the first HTTP-level test.
+ */
+function mockHost(
+  sendFn: ReturnType<typeof vi.fn>,
+  statusFn: ReturnType<typeof vi.fn> = vi.fn().mockReturnValue({ send: sendFn }),
+) {
+  statusFn.mockReturnValue({ send: sendFn });
   return {
     switchToHttp: () => ({
       getResponse: () => ({
@@ -54,6 +64,27 @@ describe('AllExceptionsFilter', () => {
 
     const call = sendFn.mock.calls[0] as [{ error: { code: string } }];
     expect(call[0].error.code).toBe('CONFLICT_RETRY');
+  });
+
+  /**
+   * A ZodError is not an HttpException, so before this mapping existed every
+   * controller that validates with `schema.parse()` — all of them, R-CON-01 —
+   * answered 500 for a malformed body. It read as our fault for what is plainly
+   * the caller's, and it hid client bugs behind an on-call alert.
+   */
+  it('maps a ZodError to 400 VALIDATION_FAILED, not 500', () => {
+    const schema = z.object({ vehicleType: z.enum(['car', 'two_wheeler']) });
+    const result = schema.safeParse({ vehicleType: 'hovercraft' });
+    if (result.success) throw new Error('fixture should not parse');
+
+    const statusFn = vi.fn();
+    filter.catch(result.error, mockHost(sendFn, statusFn));
+
+    const call = sendFn.mock.calls[0] as [{ error: { code: string; message: string } }];
+    expect(statusFn).toHaveBeenCalledWith(400);
+    expect(call[0].error.code).toBe('VALIDATION_FAILED');
+    // Names the offending field, without dumping the whole schema at the client.
+    expect(call[0].error.message).toContain('vehicleType');
   });
 
   it('carries traceId in every error response', () => {

@@ -26,7 +26,22 @@ describe('worker schedule and handler coverage', () => {
     await registerHandlers(bossMockForHandlers as never, deps);
     await registerSchedule(bossMockForSchedule as never);
 
-    const outboxEnqueued = new Set(['notification.dispatch']);
+    /**
+     * Handlers driven by an outbox message rather than by cron. A booking job is
+     * scheduled by the write that justifies it — the expiry commits with the
+     * booking insert, the completion with the check-in — so there is no cron
+     * entry to find and this list is what tells the orphan check so.
+     *
+     * Adding a handler without adding it here (or to the schedule) fails this
+     * test, which is the point: an unreachable handler is dead code that looks
+     * alive.
+     */
+    const outboxEnqueued = new Set([
+      'notification.dispatch',
+      'booking.expire-unpaid',
+      'booking.complete',
+      'booking.remind',
+    ]);
     const scheduledSet = new Set(scheduleNames);
 
     for (const handler of handlerNames) {
