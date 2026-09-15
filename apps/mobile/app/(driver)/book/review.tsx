@@ -1,20 +1,26 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import type { DriverBooking } from '@parkease/contracts/driver';
+import type { Paise } from '@parkease/contracts/primitives';
 import { colors, fontSize, fontWeight, lineHeight, radius, spacing } from '@parkease/tokens';
 import { Button, Skeleton } from '@parkease/ui-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { formatDateIST, formatTimeIST } from '@/lib/format';
 import { formatPaise } from '@/lib/money';
 
+import { CheckoutSheet } from '../../../src/features/driver/components/CheckoutSheet';
+import { PaymentFailedSheet } from '../../../src/features/driver/components/PaymentFailedSheet';
 import { PriceBreakdown } from '../../../src/features/driver/components/PriceBreakdown';
+import { SlotHeldBar } from '../../../src/features/driver/components/SlotHeldBar';
 import {
   useCreateBooking,
   useQuote,
   useSpaceDetail,
 } from '../../../src/features/driver/hooks/useBookings';
+import { useCheckout } from '../../../src/features/driver/hooks/useCheckout';
 import { recoveryFor, toApiFailure } from '../../../src/features/shared/api/errors';
 import { ScreenHeader } from '../../../src/features/shared/components/ScreenHeader';
 
@@ -52,9 +58,19 @@ const asDurationType = (value: string): DurationType =>
  * Every number on this screen comes from the server. The app never multiplies a
  * rate and never adds GST (R-FE-06).
  *
- * Until task 9 wires Razorpay the flow stops at `pending_payment`, which is why
- * the button says "hold" and not "pay": a Pay button that takes no money is a
- * lie the driver only discovers on the next screen.
+ * The whole flow is one screen: reserve the slot, then pay, with no method
+ * picker of our own. Razorpay owns which methods actually work for a given
+ * order, and a list of ours saying "Wallet" when Razorpay has disabled wallets
+ * is a promise we cannot keep.
+ *
+ * Once the slot is reserved, `SlotHeldBar` pins the countdown under the header
+ * and keeps it there. It answers the only question a driver has while paying —
+ * how long have I got — which used to be a line of body copy they had already
+ * scrolled past.
+ *
+ * A failure arrives as a sheet over this screen rather than a screen replacing
+ * it, so the total, the window and the countdown stay visible at exactly the
+ * moment the driver is deciding whether to spend money again.
  */
 export default function ReviewAndPayScreen() {
   const params = useLocalSearchParams<ReviewParams>();
@@ -63,6 +79,12 @@ export default function ReviewAndPayScreen() {
   const insets = useSafeAreaInsets();
   const { data: space } = useSpaceDetail(params.spaceId);
   const createBooking = useCreateBooking();
+
+  // The reserved booking stays on this screen rather than being navigated away
+  // from. Direction C: the countdown, the total and the window all have to stay
+  // visible while the driver pays, and a route change takes all three away.
+  const [held, setHeld] = useState<DriverBooking | null>(null);
+  const checkout = useCheckout(held?.id);
 
   const quote = useQuote({
     spaceId: params.spaceId,
@@ -88,19 +110,50 @@ export default function ReviewAndPayScreen() {
         ...(params.vehicleNumber === undefined ? {} : { vehicleNumber: params.vehicleNumber }),
       },
       {
-        onSuccess: (created) => {
-          router.replace({
-            pathname: '/(driver)/book/confirmed',
-            params: { bookingId: created.id },
-          });
-        },
+        // The slot is held; payment is the next step on this same screen.
+        onSuccess: setHeld,
       },
     );
   };
 
+  /** Reserve on the first tap, pay on every tap after it. */
+  const onPrimaryPress = (): void => {
+    if (held === null) {
+      reserve();
+      return;
+    }
+    checkout.start();
+  };
+
+  useEffect(() => {
+    if (checkout.state.phase !== 'confirmed') return;
+    router.replace({
+      pathname: '/(driver)/book/confirmed',
+      params: { bookingId: checkout.state.bookingId },
+    });
+  }, [checkout.state]);
+
   return (
     <>
       <ScreenHeader title="Review & pay" />
+
+      {/*
+        Pinned, not scrolled with the content. An answer that scrolls off screen
+        is the same as no answer.
+      */}
+      {held?.paymentDeadlineAt == null ? null : (
+        <View style={styles.holdBar}>
+          <SlotHeldBar
+            deadlineAt={held.paymentDeadlineAt}
+            onExpired={() => {
+              // The server already released the slot. Dropping back to the
+              // unreserved state is the honest thing to show — the alternative
+              // is a Pay button for a spot somebody else now has.
+              setHeld(null);
+            }}
+          />
+        </View>
+      )}
 
       <ScrollView
         style={styles.screen}
@@ -160,25 +213,62 @@ export default function ReviewAndPayScreen() {
 
       <View style={[styles.dock, { paddingBottom: insets.bottom + spacing.md }]}>
         {/*
-          The button says what it actually does. Payment lands in task 9, so
-          committing here reserves the slot and starts the ten-minute hold — and
-          a button labelled "Pay" that takes no money would be a lie the driver
-          only discovers on the next screen.
+          The button says what it actually does at each step: it holds the spot
+          before one is reserved and it pays once one is. A "Pay" label on a tap
+          that only reserves is a lie the driver discovers a screen later.
         */}
         <Button
-          label={
-            quote.data === undefined
-              ? 'Hold this spot'
-              : `Hold this spot · ${formatPaise(quote.data.quote.totalPaise, { alwaysDecimals: true })}`
+          label={payLabel(held !== null, quote.data?.quote.totalPaise)}
+          loading={
+            createBooking.isPending ||
+            checkout.state.phase === 'creating-order' ||
+            checkout.state.phase === 'verifying'
           }
-          loading={createBooking.isPending}
           disabled={quote.data === undefined}
-          onPress={reserve}
+          onPress={onPrimaryPress}
         />
         <Text style={styles.dockNote}>
-          We&rsquo;ll keep it for 10 minutes. Nothing is charged yet.
+          {held === null
+            ? 'We’ll keep it for 10 minutes. Nothing is charged yet.'
+            : 'Payments handled by Razorpay. Card details never reach ParkEase.'}
         </Text>
       </View>
+
+      {checkout.state.phase === 'checkout' ? (
+        <CheckoutSheet
+          visible
+          params={{
+            keyId: checkout.state.order.keyId,
+            razorpayOrderId: checkout.state.order.razorpayOrderId,
+            amountPaise: checkout.state.order.amountPaise,
+            spaceTitle: checkout.state.order.spaceTitle,
+            // From the tokens, never a hex at the call site (R-FE-09). Task 9's
+            // own mock says "brand orange"; orange was a direction that was not
+            // chosen, and CLAUDE.md rejects it.
+            themeColor: colors.primary,
+            prefill: { name: '', contact: '' },
+            ...(checkout.state.method === undefined ? {} : { method: checkout.state.method }),
+          }}
+          onResult={checkout.handleResult}
+        />
+      ) : null}
+
+      <PaymentFailedSheet
+        visible={checkout.state.phase === 'failed'}
+        canChangeMethod={checkout.state.phase === 'failed' && checkout.state.method !== null}
+        onTryAgain={() => {
+          // Same intent, same idempotency key, so the server reuses the order it
+          // already made rather than minting a second (R-FE-05).
+          checkout.start(
+            checkout.state.phase === 'failed' ? (checkout.state.method ?? undefined) : undefined,
+          );
+        }}
+        onChangeMethod={() => {
+          // No prefill, so Razorpay opens on its full method list.
+          checkout.start();
+        }}
+        onDismiss={checkout.dismissFailure}
+      />
     </>
   );
 }
@@ -230,6 +320,16 @@ function FailureNotice({
       </View>
     </View>
   );
+}
+
+/**
+ * One button, two jobs, and the label has to say which one it is doing. The
+ * amount is only ever a server field rendered back (R-FE-06).
+ */
+function payLabel(isHeld: boolean, totalPaise: Paise | undefined): string {
+  if (totalPaise === undefined) return isHeld ? 'Pay' : 'Hold this spot';
+  const amount = formatPaise(totalPaise, { alwaysDecimals: true });
+  return isHeld ? `Pay ${amount}` : `Hold this spot · ${amount}`;
 }
 
 const styles = StyleSheet.create({
@@ -306,6 +406,13 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     color: colors.errorInk,
     lineHeight: fontSize.sm * lineHeight.normal,
+  },
+  holdBar: {
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.surface,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
   dockNote: {
     fontSize: fontSize.xs,
