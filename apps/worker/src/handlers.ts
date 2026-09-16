@@ -13,6 +13,7 @@ import {
 import { relayOutbox } from './jobs/outbox/relay.job.js';
 import { issueRefund } from './jobs/payment/issue-refund.job.js';
 import { reconcileOrphanCapture } from './jobs/payment/reconcile-orphan.job.js';
+import { recalculateSurge, SURGE_RECALCULATE } from './jobs/surge/recalculate.job.js';
 
 /**
  * Booking jobs are handled one at a time rather than in a batch: each takes a
@@ -27,6 +28,10 @@ export async function registerHandlers(boss: PgBoss, deps: JobDeps): Promise<voi
   );
   await boss.work('ledger.assert-balance', {}, () => assertLedgerBalance(deps));
   await boss.work('idempotency.prune', {}, () => pruneIdempotencyKeys(deps));
+
+  // Cron-driven and payload-free: it recomputes every zone from current state,
+  // so there is nothing for a caller to pass and nothing to validate.
+  await boss.work(SURGE_RECALCULATE, {}, () => recalculateSurge(deps));
 
   await boss.work<unknown>('booking.expire-unpaid', { batchSize: 1 }, async (jobs) => {
     for (const job of jobs) await expireUnpaid(deps, job.data);
