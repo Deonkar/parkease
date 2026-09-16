@@ -1,3 +1,9 @@
+import {
+  BASIS_POINTS,
+  DEFAULT_SURGE_TIERS,
+  NO_SURGE_BP,
+  type SurgeSnapshot,
+} from '@parkease/contracts/admin';
 import type { Amenity } from '@parkease/contracts/enums';
 import { spacePricingSchema, type SpaceSchedule } from '@parkease/contracts/owner';
 import { drizzle } from 'drizzle-orm/postgres-js';
@@ -288,10 +294,28 @@ export async function seedBooking(h: Harness, opts: SeedBookingOptions): Promise
   return booking.id;
 }
 
+/**
+ * A `surge:{zone}` value exactly as the worker writes it: a `SurgeSnapshot` in
+ * integer basis points, carrying the tier's own badge.
+ *
+ * Tests still say `surgePayload(1.5)`, because "1.5x" is how the fixture reads
+ * — the conversion happens here, in one place. The badge is not decorative:
+ * `surgeSnapshotSchema` refuses a surging snapshot that names no tier, so a
+ * payload without one would be read back as no surge at all.
+ */
 export function surgePayload(multiplier: number): string {
-  return JSON.stringify({
-    multiplier,
-    tier: 'high_demand',
+  const multiplierBp = Math.round(multiplier * BASIS_POINTS);
+  const tier = [...DEFAULT_SURGE_TIERS]
+    .reverse()
+    .find((t) => t.multiplierBp <= multiplierBp && t.badge !== null);
+
+  const snapshot: SurgeSnapshot = {
+    multiplierBp,
+    badge: multiplierBp === NO_SURGE_BP ? null : (tier?.badge ?? 'very_high_demand'),
+    occupancyBp: 8_000,
+    appliedModifiers: [],
     calculatedAt: new Date().toISOString(),
-  });
+  };
+
+  return JSON.stringify(snapshot);
 }

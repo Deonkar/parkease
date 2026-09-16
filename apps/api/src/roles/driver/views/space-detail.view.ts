@@ -1,7 +1,10 @@
+import type { SurgeSnapshot } from '@parkease/contracts/admin';
 import type { DefaultBooking, DriverRateCard, SpaceDetail } from '@parkease/contracts/driver';
 import type { Amenity } from '@parkease/contracts/enums';
 import type { DurationPricing, SpacePricing, SpaceSchedule } from '@parkease/contracts/owner';
+import { spaceIdSchema } from '@parkease/contracts/primitives';
 
+import { surgeRateOf } from '../../../domains/pricing/surge-rate.js';
 import { RATING_BP_PER_STAR } from '../../../domains/space/search-sql.js';
 
 interface SpaceRow {
@@ -26,7 +29,8 @@ export interface SpaceDetailInput {
   readonly isOpenNow: boolean;
   readonly availableNow: { car: number; twoWheeler: number };
   readonly totalSlots: { car: number; twoWheeler: number };
-  readonly surgeMultiplier: number;
+  /** The zone's snapshot, whole. The banner needs the tier, not just the number. */
+  readonly surge: SurgeSnapshot;
   readonly photos: readonly { url: string; isPrimary: boolean }[];
   readonly defaultBooking: DefaultBooking | null;
 }
@@ -55,7 +59,10 @@ export function toSpaceDetailView(input: SpaceDetailInput): SpaceDetail {
   const { space } = input;
 
   return {
-    id: space.id,
+    // Branded at the boundary rather than carried through the cast below: the
+    // id is the one field the cast cannot bridge, and parsing it here is what
+    // keeps `as SpaceDetail` a shape assertion rather than a claim about data.
+    id: spaceIdSchema.parse(space.id),
     title: space.title,
     description: space.description,
     addressLine: space.addressLine,
@@ -73,7 +80,11 @@ export function toSpaceDetailView(input: SpaceDetailInput): SpaceDetail {
     },
     availableNow: input.availableNow,
     totalSlots: input.totalSlots,
-    surgeMultiplier: input.surgeMultiplier,
+    // Displayed, never applied: the rate card above is untouched base pricing.
+    // The tier travels with the number so the §2.6 banner names the demand the
+    // server actually measured instead of inferring one from the multiplier.
+    surgeMultiplier: surgeRateOf(input.surge.multiplierBp),
+    surgeBadge: input.surge.badge,
     // null means never reviewed. The client renders "New", never a zero score.
     rating: space.ratingAvgBp === null ? null : space.ratingAvgBp / RATING_BP_PER_STAR,
     reviewCount: space.ratingCount,

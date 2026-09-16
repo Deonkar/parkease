@@ -1,4 +1,5 @@
 import { Controller, Get, NotFoundException, Param, ParseUUIDPipe, Query } from '@nestjs/common';
+import { NO_SURGE_SNAPSHOT } from '@parkease/contracts/admin';
 import {
   type DefaultBooking,
   searchSpacesQuerySchema,
@@ -72,7 +73,7 @@ export class DriverSearchController {
     if (row === undefined) throw new NotFoundException('That space is no longer listed.');
 
     const now = new Date();
-    const [related, availableNow, multipliers] = await Promise.all([
+    const [related, availableNow, snapshots] = await Promise.all([
       this.spaces.loadRelated(id),
       this.spaces.availabilityAt(id, now),
       this.surge.multipliersFor([row.space.zoneId]),
@@ -85,7 +86,7 @@ export class DriverSearchController {
       isOpenNow: isOpenAt(row.space.schedule, now),
       availableNow,
       totalSlots: countSlots(related.slots),
-      surgeMultiplier: multipliers.get(row.space.zoneId) ?? 1,
+      surge: snapshots.get(row.space.zoneId) ?? NO_SURGE_SNAPSHOT,
       photos: related.photos,
       defaultBooking:
         row.space.approvalStatus === 'active'

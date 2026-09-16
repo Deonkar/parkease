@@ -1,24 +1,17 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { SURGE_MULTIPLIER_MAX, SURGE_MULTIPLIER_MIN } from '@parkease/contracts/money';
-import { z } from 'zod';
+import {
+  NO_SURGE_SNAPSHOT,
+  surgeSnapshotSchema,
+  type SurgeSnapshot,
+  type ZoneId,
+} from '@parkease/contracts/admin';
 
 import { logger } from '../../platform/observability/logger.js';
 import { REDIS, type RedisClient } from '../../platform/redis/redis.module.js';
 
 export const SURGE_KEY_PREFIX = 'surge:';
 
-/** No surge key, no surge. This is the value every degraded path returns. */
-export const NO_SURGE = 1;
-
-/**
- * The value task 10's worker writes. Only `multiplier` is read here; the rest
- * of the record is task 10's to shape. It is cached, third-party-shaped data,
- * so it parses through a schema rather than being cast (R-VAL-01) — and the
- * range bound is load-bearing: a corrupt 9x would otherwise be charged.
- */
-const surgeRecordSchema = z.object({
-  multiplier: z.number().min(SURGE_MULTIPLIER_MIN).max(SURGE_MULTIPLIER_MAX),
-});
+export const surgeKey = (zoneId: ZoneId): string => `${SURGE_KEY_PREFIX}${zoneId}`;
 
 @Injectable()
 export class SurgeService {
@@ -27,26 +20,32 @@ export class SurgeService {
   /**
    * One MGET over the distinct zones on the page, never one call per space.
    *
-   * Redis is a cache (ADR-010): an empty, corrupt or unreachable Redis degrades
-   * to base pricing and never fails the search.
+   * The whole snapshot comes back, not just its multiplier: the badge is the
+   * tier's own name, and a caller that re-derived a tier from the number is how
+   * the chip and the price come to disagree. `surgeSnapshotSchema` already
+   * refuses a surging snapshot with no badge, so a value that would produce a
+   * price the product cannot explain degrades like any other corrupt one.
+   *
+   * Redis is a cache (ADR-010): a missing, corrupt or unreachable key all mean
+   * the same thing — no surge — and none of them fails a search or a booking.
    */
-  async multipliersFor(zoneIds: readonly string[]): Promise<Map<string, number>> {
+  async multipliersFor(zoneIds: readonly string[]): Promise<Map<ZoneId, SurgeSnapshot>> {
     const distinct = [...new Set(zoneIds)];
     if (distinct.length === 0) return new Map();
 
     const raw = await this.read(distinct);
     if (raw === undefined) {
-      return new Map(distinct.map((zoneId) => [zoneId, NO_SURGE]));
+      return new Map(distinct.map((zoneId) => [zoneId, NO_SURGE_SNAPSHOT]));
     }
 
     return new Map(
-      distinct.map((zoneId, index) => [zoneId, this.parseMultiplier(zoneId, raw[index])]),
+      distinct.map((zoneId, index) => [zoneId, this.parseSnapshot(zoneId, raw[index])]),
     );
   }
 
-  private async read(zoneIds: readonly string[]): Promise<(string | null)[] | undefined> {
+  private async read(zoneIds: readonly ZoneId[]): Promise<(string | null)[] | undefined> {
     try {
-      const values = await this.redis.mget(zoneIds.map((id) => `${SURGE_KEY_PREFIX}${id}`));
+      const values = await this.redis.mget(zoneIds.map(surgeKey));
       if (!Array.isArray(values)) {
         logger.warn({ zoneCount: zoneIds.length }, 'surge MGET returned a non-array — no surge');
         return undefined;
@@ -63,26 +62,28 @@ export class SurgeService {
     }
   }
 
-  private parseMultiplier(zoneId: string, value: string | null | undefined): number {
-    if (value === null || value === undefined) return NO_SURGE;
+  private parseSnapshot(zoneId: ZoneId, value: string | null | undefined): SurgeSnapshot {
+    if (value === null || value === undefined) return NO_SURGE_SNAPSHOT;
 
-    let parsed: unknown;
+    let decoded: unknown;
     try {
-      parsed = JSON.parse(value);
+      decoded = JSON.parse(value);
     } catch (err) {
       logger.warn({ err, zoneId }, 'surge value is not JSON — pricing without surge');
-      return NO_SURGE;
+      return NO_SURGE_SNAPSHOT;
     }
 
-    const record = surgeRecordSchema.safeParse(parsed);
-    if (!record.success) {
+    // Cached data crossing a process boundary parses rather than casts
+    // (R-VAL-01). The worker wrote it, but the cache is not the worker.
+    const snapshot = surgeSnapshotSchema.safeParse(decoded);
+    if (!snapshot.success) {
       logger.warn(
-        { zoneId, issues: record.error.issues },
+        { zoneId, issues: snapshot.error.issues },
         'surge value failed validation — pricing without surge',
       );
-      return NO_SURGE;
+      return NO_SURGE_SNAPSHOT;
     }
 
-    return record.data.multiplier;
+    return snapshot.data;
   }
 }
