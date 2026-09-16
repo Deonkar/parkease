@@ -40,8 +40,14 @@ export const surgeConfig = pgTable(
     check('surge_config_weekend_check', sql`${t.weekendModifierBp} BETWEEN 10000 AND 20000`),
     check('surge_config_event_check', sql`${t.eventModifierBp} BETWEEN 10000 AND 20000`),
     check('surge_config_window_check', sql`${t.occupancyWindowMinutes} BETWEEN 5 AND 1440`),
-    check('surge_config_tiers_check', sql`jsonb_typeof(${t.tiers}) = 'array'`),
-    check('surge_config_peak_windows_check', sql`jsonb_typeof(${t.peakWindows}) = 'array'`),
+    check(
+      'surge_config_tiers_check',
+      sql`jsonb_typeof(${t.tiers}) = 'array' AND jsonb_array_length(${t.tiers}) BETWEEN 2 AND 12`,
+    ),
+    check(
+      'surge_config_peak_windows_check',
+      sql`jsonb_typeof(${t.peakWindows}) = 'array' AND jsonb_array_length(${t.peakWindows}) <= 24`,
+    ),
   ],
 );
 
@@ -97,7 +103,7 @@ export const surgeZoneOverrides = pgTable(
     ),
     check(
       'surge_zone_overrides_tiers_check',
-      sql`${t.tiers} IS NULL OR jsonb_typeof(${t.tiers}) = 'array'`,
+      sql`${t.tiers} IS NULL OR (jsonb_typeof(${t.tiers}) = 'array' AND jsonb_array_length(${t.tiers}) BETWEEN 2 AND 12)`,
     ),
     check('surge_zone_overrides_reason_check', sql`length(btrim(${t.reason})) > 0`),
   ],

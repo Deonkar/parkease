@@ -91,8 +91,15 @@ CREATE TABLE surge_config (
   CONSTRAINT surge_config_weekend_check CHECK (weekend_modifier_bp BETWEEN 10000 AND 20000),
   CONSTRAINT surge_config_event_check CHECK (event_modifier_bp BETWEEN 10000 AND 20000),
   CONSTRAINT surge_config_window_check CHECK (occupancy_window_minutes BETWEEN 5 AND 1440),
-  CONSTRAINT surge_config_tiers_check CHECK (jsonb_typeof(tiers) = 'array'),
-  CONSTRAINT surge_config_peak_windows_check CHECK (jsonb_typeof(peak_windows) = 'array')
+  -- Length as well as type. The calculator scans the ladder linearly for every
+  -- zone on every five-minute run, and the global ladder applies to every zone
+  -- without an override — so an unbounded array here is one admin request
+  -- setting recurring work for the whole platform. Every other column in this
+  -- table is bounded; these two were the exception.
+  CONSTRAINT surge_config_tiers_check
+    CHECK (jsonb_typeof(tiers) = 'array' AND jsonb_array_length(tiers) BETWEEN 2 AND 12),
+  CONSTRAINT surge_config_peak_windows_check
+    CHECK (jsonb_typeof(peak_windows) = 'array' AND jsonb_array_length(peak_windows) <= 24)
 );
 
 -- A per-zone amendment. Every multiplier column is nullable so a zone can raise
@@ -127,7 +134,8 @@ CREATE TABLE surge_zone_overrides (
   CONSTRAINT surge_zone_overrides_event_check
     CHECK (event_modifier_bp IS NULL OR event_modifier_bp BETWEEN 10000 AND 20000),
   CONSTRAINT surge_zone_overrides_tiers_check
-    CHECK (tiers IS NULL OR jsonb_typeof(tiers) = 'array'),
+    CHECK (tiers IS NULL OR (jsonb_typeof(tiers) = 'array'
+                             AND jsonb_array_length(tiers) BETWEEN 2 AND 12)),
   CONSTRAINT surge_zone_overrides_reason_check CHECK (length(btrim(reason)) > 0)
 );
 

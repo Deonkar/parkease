@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DEFAULT_SURGE_TIERS,
+  MAX_SURGE_TIERS,
   surgeConfigSchema,
   surgeSnapshotSchema,
   surgeTierLadderSchema,
@@ -63,6 +64,25 @@ describe('surgeTierLadderSchema', () => {
 
   it('rejects a ladder of fewer than two tiers', () => {
     expect(surgeTierLadderSchema.safeParse([floor]).success).toBe(false);
+  });
+
+  it('bounds the ladder, so one admin request cannot set unbounded recurring work', () => {
+    // The calculator scans the ladder linearly per zone per five-minute run, and
+    // the global ladder applies to every zone without an override. Every other
+    // field in this schema is bounded; this one was the exception.
+    const ladderOf = (count: number) =>
+      Array.from({ length: count }, (_unused, i) =>
+        i === 0
+          ? floor
+          : {
+              minOccupancyBp: i * 100,
+              multiplierBp: 10_000 + i * 100,
+              badge: SurgeBadge.MODERATE_DEMAND,
+            },
+      );
+
+    expect(surgeTierLadderSchema.safeParse(ladderOf(MAX_SURGE_TIERS)).success).toBe(true);
+    expect(surgeTierLadderSchema.safeParse(ladderOf(MAX_SURGE_TIERS + 1)).success).toBe(false);
   });
 });
 

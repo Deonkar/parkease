@@ -42,9 +42,27 @@ export type SurgeTier = z.infer<typeof surgeTierSchema>;
 const isStrictlyAscending = (values: readonly number[]): boolean =>
   values.every((value, i) => i === 0 || value > (values[i - 1] ?? Number.NEGATIVE_INFINITY));
 
+/**
+ * There are three badges, so a ladder is a 1.0x floor plus a tier per badge —
+ * four rows, as seeded. Finer occupancy granularity that reuses a badge is
+ * legitimate (an airport cell adding a 2.5x `very_high_demand` row is the
+ * worked example in the task file), so the bound is generous rather than tight.
+ *
+ * It exists because the calculator scans the ladder linearly for every zone on
+ * every five-minute run, and the global ladder applies to every zone without an
+ * override. Unbounded here means one admin request sets recurring work for the
+ * whole platform. Every other field in this schema is bounded; these two arrays
+ * were the exception, which is the only reason they needed saying out loud.
+ */
+export const MAX_SURGE_TIERS = 12;
+
+/** Seven days, and no day has more than a few distinct bands worth naming. */
+export const MAX_PEAK_WINDOWS = 24;
+
 export const surgeTierLadderSchema = z
   .array(surgeTierSchema)
   .min(2)
+  .max(MAX_SURGE_TIERS)
   .refine((tiers) => tiers[0]?.minOccupancyBp === 0 && tiers[0]?.multiplierBp === NO_SURGE_BP, {
     message: 'The ladder must start at occupancy 0 with a 1.0x floor',
   })
@@ -112,7 +130,7 @@ const surgeConfigShape = {
     .int()
     .min(5)
     .max(24 * 60),
-  peakWindows: z.array(peakWindowSchema),
+  peakWindows: z.array(peakWindowSchema).max(MAX_PEAK_WINDOWS),
   tiers: surgeTierLadderSchema,
 };
 
