@@ -1,5 +1,11 @@
-import { type CanActivate, type ExecutionContext, Injectable, Module } from '@nestjs/common';
-import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import {
+  type CanActivate,
+  type ExecutionContext,
+  Injectable,
+  Module,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, Reflector } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 import type { FastifyRequest } from 'fastify';
@@ -11,6 +17,7 @@ import { PricingModule } from '../../src/domains/pricing/pricing.module.js';
 import { SpaceModule } from '../../src/domains/space/space.module.js';
 import { SurgeModule } from '../../src/domains/surge/surge.module.js';
 import type { AuthUser } from '../../src/platform/auth/current-user.decorator.js';
+import { IS_PUBLIC_KEY } from '../../src/platform/auth/public.decorator.js';
 import { DB, DbModule } from '../../src/platform/db/db.module.js';
 import { AllExceptionsFilter } from '../../src/platform/http/exception.filter.js';
 import { TransformInterceptor } from '../../src/platform/http/transform.interceptor.js';
@@ -18,7 +25,10 @@ import { IdempotencyInterceptor } from '../../src/platform/idempotency/idempoten
 import { IdempotencyModule } from '../../src/platform/idempotency/idempotency.module.js';
 import { ObservabilityModule } from '../../src/platform/observability/observability.module.js';
 import { OutboxModule } from '../../src/platform/outbox/outbox.module.js';
+import { ActiveRoleGuard } from '../../src/platform/rbac/active-role.guard.js';
+import { RolesGuard } from '../../src/platform/rbac/roles.guard.js';
 import { REDIS, RedisModule } from '../../src/platform/redis/redis.module.js';
+import { AdminSurgeController } from '../../src/roles/admin/surge.controller.js';
 import { DriverBookingsController } from '../../src/roles/driver/bookings.controller.js';
 import { DriverPaymentsController } from '../../src/roles/driver/payments.controller.js';
 import { DriverQuotesController } from '../../src/roles/driver/quotes.controller.js';
@@ -36,19 +46,30 @@ import type { Harness } from './harness.js';
 export const actingAs = { user: null as AuthUser | null };
 
 /**
- * Stands in for JwtAuthGuard, RolesGuard and ActiveRoleGuard.
+ * Stands in for JwtAuthGuard only.
  *
- * Those three are covered by `rbac-guards.spec.ts` and bootstrapping the real
- * ones drags in FirebaseVerifierService, which throws on fake credentials and
- * takes DI down with it (learnings.md). Everything downstream of authentication
- * — the interceptors, the exception filter, validation, the controllers — is
- * the real thing.
+ * Bootstrapping the real one drags in FirebaseVerifierService, which throws on
+ * fake credentials and takes DI down with it (learnings.md), so what it does
+ * instead is what JwtAuthGuard does once a token has been verified: attach the
+ * user, or refuse the request. `RolesGuard` and `ActiveRoleGuard` below are the
+ * real classes — an authorisation test that stubs the authoriser proves nothing
+ * about the status code a real caller gets.
  */
 @Injectable()
 class StubAuthGuard implements CanActivate {
+  constructor(private readonly reflector: Reflector) {}
+
   canActivate(context: ExecutionContext): boolean {
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (isPublic) return true;
+
+    if (actingAs.user === null) throw new UnauthorizedException('Authentication required.');
+
     const request = context.switchToHttp().getRequest<FastifyRequest & { user?: AuthUser }>();
-    if (actingAs.user !== null) request.user = actingAs.user;
+    request.user = actingAs.user;
     return true;
   }
 }
@@ -77,6 +98,7 @@ class StubAuthGuard implements CanActivate {
     PaymentModule,
   ],
   controllers: [
+    AdminSurgeController,
     DriverBookingsController,
     DriverQuotesController,
     DriverSearchController,
@@ -85,11 +107,15 @@ class StubAuthGuard implements CanActivate {
     RazorpayWebhookController,
   ],
   providers: [
-    // Registered exactly as AppModule does. This is the whole point of these
-    // tests: the interceptor stack a real request actually passes through.
+    // Registered exactly as AppModule does, and in its order. This is the whole
+    // point of these tests: the interceptor and guard stack a real request
+    // actually passes through. Only RateLimitModule's guard is absent —
+    // `ratelimit-policies.spec.ts` covers the policy table on its own.
     { provide: APP_INTERCEPTOR, useClass: TransformInterceptor },
     { provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor },
     { provide: APP_GUARD, useClass: StubAuthGuard },
+    { provide: APP_GUARD, useClass: RolesGuard },
+    { provide: APP_GUARD, useClass: ActiveRoleGuard },
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
   ],
 })
@@ -100,7 +126,7 @@ export interface HttpApp {
   readonly app: NestFastifyApplication;
   /** Fires a request through the real Fastify pipeline. No socket needed. */
   request(options: {
-    method: 'GET' | 'POST';
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
     url: string;
     headers?: Record<string, string>;
     payload?: unknown;

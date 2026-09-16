@@ -1,3 +1,4 @@
+import { NO_SURGE_BP, NO_SURGE_SNAPSHOT, type SurgeSnapshot } from '@parkease/contracts/admin';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SURGE_KEY_PREFIX, SurgeService } from '../src/domains/surge/surge.service.js';
@@ -16,13 +17,23 @@ function serviceWith(mget: ReturnType<typeof vi.fn>): {
   return { service: new SurgeService(redis as unknown as RedisClient), redis };
 }
 
-function surgeValue(multiplier: number): string {
-  return JSON.stringify({
-    multiplier,
-    tier: 'high_demand',
-    calculatedAt: '2026-09-06T10:00:00.000Z',
-  });
+const HIGH_DEMAND_BP = 15_000;
+const VERY_HIGH_DEMAND_BP = 20_000;
+const CALCULATED_AT = '2026-09-06T10:00:00.000Z';
+
+function snapshot(overrides: Partial<SurgeSnapshot> = {}): SurgeSnapshot {
+  return {
+    multiplierBp: HIGH_DEMAND_BP,
+    badge: 'high_demand',
+    occupancyBp: 8_000,
+    appliedModifiers: [],
+    calculatedAt: CALCULATED_AT,
+    ...overrides,
+  };
 }
+
+const written = (overrides: Partial<SurgeSnapshot> = {}): string =>
+  JSON.stringify(snapshot(overrides));
 
 let warn: ReturnType<typeof vi.spyOn>;
 
@@ -62,88 +73,143 @@ describe('SurgeService.multipliersFor', () => {
     expect(mget).toHaveBeenCalledWith([`${SURGE_KEY_PREFIX}tdr1vk`]);
   });
 
-  it('returns 1.0 for a zone with no surge key — an empty Redis means no surge', async () => {
+  it('returns the no-surge snapshot for a zone with no key', async () => {
     const { service } = serviceWith(vi.fn().mockResolvedValue([null]));
 
-    expect(await service.multipliersFor(['tdr1vk'])).toEqual(new Map([['tdr1vk', 1]]));
+    expect(await service.multipliersFor(['tdr1vk'])).toEqual(
+      new Map([['tdr1vk', NO_SURGE_SNAPSHOT]]),
+    );
   });
 
-  it('returns the written multiplier for a zone that has one', async () => {
-    const { service } = serviceWith(vi.fn().mockResolvedValue([surgeValue(1.5)]));
+  it('returns the whole written snapshot, not just its multiplier', async () => {
+    // The badge travels with the number. A caller deriving a tier from the
+    // multiplier is how the chip and the price drift apart.
+    const { service } = serviceWith(vi.fn().mockResolvedValue([written()]));
 
-    expect(await service.multipliersFor(['tdr1vk'])).toEqual(new Map([['tdr1vk', 1.5]]));
+    expect(await service.multipliersFor(['tdr1vk'])).toEqual(new Map([['tdr1vk', snapshot()]]));
   });
 
-  it('maps each value back to its own zone', async () => {
+  it('keeps the applied modifiers the worker recorded', async () => {
     const { service } = serviceWith(
-      vi.fn().mockResolvedValue([surgeValue(1.5), null, surgeValue(2)]),
+      vi.fn().mockResolvedValue([written({ appliedModifiers: ['peak_hour', 'weekend'] })]),
     );
 
-    expect(await service.multipliersFor(['a1', 'b2', 'c3'])).toEqual(
+    const result = await service.multipliersFor(['tdr1vk']);
+
+    expect(result.get('tdr1vk')?.appliedModifiers).toEqual(['peak_hour', 'weekend']);
+  });
+
+  it('maps each snapshot back to its own zone', async () => {
+    const { service } = serviceWith(
+      vi
+        .fn()
+        .mockResolvedValue([
+          written(),
+          null,
+          written({ multiplierBp: VERY_HIGH_DEMAND_BP, badge: 'very_high_demand' }),
+        ]),
+    );
+
+    expect(await service.multipliersFor(['tdr1va', 'tdr1vb', 'tdr1vc'])).toEqual(
       new Map([
-        ['a1', 1.5],
-        ['b2', 1],
-        ['c3', 2],
+        ['tdr1va', snapshot()],
+        ['tdr1vb', NO_SURGE_SNAPSHOT],
+        ['tdr1vc', snapshot({ multiplierBp: VERY_HIGH_DEMAND_BP, badge: 'very_high_demand' })],
       ]),
     );
   });
 
-  it('falls back to 1.0 and warns on a value that is not the surge shape', async () => {
+  it('degrades a value that is not JSON to no surge, and warns', async () => {
+    const { service } = serviceWith(vi.fn().mockResolvedValue(['not json at all']));
+
+    expect(await service.multipliersFor(['tdr1vk'])).toEqual(
+      new Map([['tdr1vk', NO_SURGE_SNAPSHOT]]),
+    );
+    expect(warn).toHaveBeenCalled();
+  });
+
+  it('degrades a value that is not the snapshot shape to no surge, and warns', async () => {
     const { service } = serviceWith(
-      vi.fn().mockResolvedValue(['not json at all', JSON.stringify({ tier: 'high_demand' })]),
+      vi.fn().mockResolvedValue([JSON.stringify({ multiplier: 1.5, tier: 'high_demand' })]),
     );
 
-    expect(await service.multipliersFor(['a1', 'b2'])).toEqual(
-      new Map([
-        ['a1', 1],
-        ['b2', 1],
-      ]),
+    expect(await service.multipliersFor(['tdr1vk'])).toEqual(
+      new Map([['tdr1vk', NO_SURGE_SNAPSHOT]]),
+    );
+    expect(warn).toHaveBeenCalled();
+  });
+
+  it('rejects a surging snapshot that names no tier', async () => {
+    // A price the product has no words for is corrupt, and corrupt means no
+    // surge. This is the invariant that stops v1's bare multipliers returning.
+    const { service } = serviceWith(vi.fn().mockResolvedValue([written({ badge: null })]));
+
+    expect(await service.multipliersFor(['tdr1vk'])).toEqual(
+      new Map([['tdr1vk', NO_SURGE_SNAPSHOT]]),
     );
     expect(warn).toHaveBeenCalled();
   });
 
   it('rejects an out-of-range multiplier rather than charging it', async () => {
-    // The contract caps surge at 3x. A 9x value is corrupt data, and failing
-    // safe means the driver pays base price, not nine times it.
-    const { service } = serviceWith(vi.fn().mockResolvedValue([surgeValue(9), surgeValue(0.2)]));
+    const { service } = serviceWith(
+      vi.fn().mockResolvedValue([written({ multiplierBp: 90_000 }), written({ multiplierBp: 100 })]),
+    );
 
-    expect(await service.multipliersFor(['a1', 'b2'])).toEqual(
+    expect(await service.multipliersFor(['tdr1va', 'tdr1vb'])).toEqual(
       new Map([
-        ['a1', 1],
-        ['b2', 1],
+        ['tdr1va', NO_SURGE_SNAPSHOT],
+        ['tdr1vb', NO_SURGE_SNAPSHOT],
       ]),
     );
     expect(warn).toHaveBeenCalled();
   });
 
-  it('degrades to base pricing with one warning when Redis is unreachable', async () => {
+  it('rejects a fractional multiplier — basis points are integers', async () => {
+    const { service } = serviceWith(vi.fn().mockResolvedValue([written({ multiplierBp: 15_000.5 })]));
+
+    expect(await service.multipliersFor(['tdr1vk'])).toEqual(
+      new Map([['tdr1vk', NO_SURGE_SNAPSHOT]]),
+    );
+  });
+
+  it('degrades to no surge with one warning when Redis is unreachable', async () => {
     // ADR-010: Redis is a cache. It being down must never fail a search.
     const { service } = serviceWith(vi.fn().mockRejectedValue(new Error('ECONNREFUSED')));
 
-    expect(await service.multipliersFor(['a1', 'b2'])).toEqual(
+    expect(await service.multipliersFor(['tdr1va', 'tdr1vb'])).toEqual(
       new Map([
-        ['a1', 1],
-        ['b2', 1],
+        ['tdr1va', NO_SURGE_SNAPSHOT],
+        ['tdr1vb', NO_SURGE_SNAPSHOT],
       ]),
     );
     expect(warn).toHaveBeenCalledTimes(1);
   });
 
-  it('degrades to base pricing when Redis returns a short array', async () => {
-    const { service } = serviceWith(vi.fn().mockResolvedValue([surgeValue(1.5)]));
+  it('degrades the zones a short MGET did not answer for', async () => {
+    const { service } = serviceWith(vi.fn().mockResolvedValue([written()]));
 
-    expect(await service.multipliersFor(['a1', 'b2'])).toEqual(
+    expect(await service.multipliersFor(['tdr1va', 'tdr1vb'])).toEqual(
       new Map([
-        ['a1', 1.5],
-        ['b2', 1],
+        ['tdr1va', snapshot()],
+        ['tdr1vb', NO_SURGE_SNAPSHOT],
       ]),
     );
   });
 
-  it('degrades to base pricing when Redis returns something that is not an array', async () => {
+  it('degrades to no surge when Redis returns something that is not an array', async () => {
     const { service } = serviceWith(vi.fn().mockResolvedValue('nonsense'));
 
-    expect(await service.multipliersFor(['a1'])).toEqual(new Map([['a1', 1]]));
+    expect(await service.multipliersFor(['tdr1vk'])).toEqual(
+      new Map([['tdr1vk', NO_SURGE_SNAPSHOT]]),
+    );
     expect(warn).toHaveBeenCalled();
+  });
+
+  it('never returns a multiplier below the 1.0x floor', async () => {
+    const { service } = serviceWith(vi.fn().mockResolvedValue([null, written()]));
+
+    for (const snap of (await service.multipliersFor(['tdr1va', 'tdr1vb'])).values()) {
+      expect(snap.multiplierBp).toBeGreaterThanOrEqual(NO_SURGE_BP);
+    }
   });
 });

@@ -1,3 +1,4 @@
+import { NO_SURGE_SNAPSHOT, type SurgeSnapshot } from '@parkease/contracts/admin';
 import { spaceSearchItemSchema } from '@parkease/contracts/driver';
 import { spaceIdSchema } from '@parkease/contracts/primitives';
 import { describe, expect, it } from 'vitest';
@@ -23,11 +24,22 @@ const candidate: Candidate = {
   thumbnailUrl: 'https://res.cloudinary.com/parkease/image/upload/v1/a.jpg',
 };
 
+/** The shape the worker writes and `SurgeService` hands back, per tier. */
+function surging(multiplierBp: number, badge: SurgeSnapshot['badge']): SurgeSnapshot {
+  return {
+    multiplierBp,
+    badge,
+    occupancyBp: 8_000,
+    appliedModifiers: [],
+    calculatedAt: '2026-09-06T10:00:00.000Z',
+  };
+}
+
 function result(overrides: Partial<SearchResult> = {}): SearchResult {
   return {
     candidate,
     availableSlots: { car: 1, twoWheeler: 3 },
-    surgeMultiplier: 1,
+    surge: NO_SURGE_SNAPSHOT,
     isOpenNow: true,
     ...overrides,
   };
@@ -82,18 +94,50 @@ describe('toSpaceResultView', () => {
     expect(item.effectivePricePaise).toBe(3000);
   });
 
+  it('emits no badge when the zone is not surging', () => {
+    // `SurgeBadge` renders nothing for null, so a 1.0x zone gets no empty chip.
+    expect(toSpaceResultView(result()).surgeBadge).toBeNull();
+  });
+
   it('applies surge to the base price', () => {
-    const item = toSpaceResultView(result({ surgeMultiplier: 1.5 }));
+    const item = toSpaceResultView(result({ surge: surging(15_000, 'high_demand') }));
 
     expect(item.basePricePaise).toBe(3000);
     expect(item.surgeMultiplier).toBe(1.5);
     expect(item.effectivePricePaise).toBe(4500);
   });
 
+  it('carries the tier the server named rather than deriving one', () => {
+    expect(toSpaceResultView(result({ surge: surging(12_500, 'moderate_demand') })).surgeBadge).toBe(
+      'moderate_demand',
+    );
+    expect(toSpaceResultView(result({ surge: surging(15_000, 'high_demand') })).surgeBadge).toBe(
+      'high_demand',
+    );
+    expect(
+      toSpaceResultView(result({ surge: surging(20_000, 'very_high_demand') })).surgeBadge,
+    ).toBe('very_high_demand');
+  });
+
+  it('never pairs a badge with a 1.0x price, nor a surging price with no badge', () => {
+    for (const snap of [
+      NO_SURGE_SNAPSHOT,
+      surging(12_500, 'moderate_demand'),
+      surging(15_000, 'high_demand'),
+      surging(20_000, 'very_high_demand'),
+    ]) {
+      const item = toSpaceResultView(result({ surge: snap }));
+      expect(item.surgeMultiplier === 1).toBe(item.surgeBadge === null);
+    }
+  });
+
   it('keeps the effective price an integer number of paise', () => {
     // 333 * 1.5 is 499.5. Money never carries a fraction of a paisa.
     const item = toSpaceResultView(
-      result({ candidate: { ...candidate, basePricePaise: 333 }, surgeMultiplier: 1.5 }),
+      result({
+        candidate: { ...candidate, basePricePaise: 333 },
+        surge: surging(15_000, 'high_demand'),
+      }),
     );
 
     expect(Number.isInteger(item.effectivePricePaise)).toBe(true);
@@ -103,14 +147,17 @@ describe('toSpaceResultView', () => {
   it('never float-multiplies the money', () => {
     // 1.1 * 2999 is 3298.9000000000005 in binary floating point.
     const item = toSpaceResultView(
-      result({ candidate: { ...candidate, basePricePaise: 2999 }, surgeMultiplier: 1.1 }),
+      result({
+        candidate: { ...candidate, basePricePaise: 2999 },
+        surge: surging(11_000, 'moderate_demand'),
+      }),
     );
 
     expect(item.effectivePricePaise).toBe(3299);
   });
 
   it('adds no GST and no platform fee — that is Review & Pay, not discovery', () => {
-    const item = toSpaceResultView(result({ surgeMultiplier: 2 }));
+    const item = toSpaceResultView(result({ surge: surging(20_000, 'very_high_demand') }));
 
     // Base plus surge only (ADR-009). 18% GST on top would be 7080.
     expect(item.effectivePricePaise).toBe(6000);
