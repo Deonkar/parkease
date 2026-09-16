@@ -40,28 +40,27 @@ export class FakeRedis {
    * thing that can tell one MGET from twenty GETs after the fact — both return
    * the same answer, and only one of them is affordable.
    */
-  readonly commands = new Map<string, number>();
-
   /**
-   * Every read, with the keys it touched. The counts alone are not enough: the
-   * search *cache* legitimately issues its own GET on every request, so a bare
-   * "no GETs" assertion fails on correct code. What the guard actually means is
-   * "no GET against a `surge:` key", which needs the keys, not just a tally.
+   * Every command issued since the last reset, with the keys it touched.
+   *
+   * The keys matter, not just a tally: the search *cache* legitimately issues
+   * its own GET on every request, so a bare "no GETs" assertion fails on
+   * entirely correct code. What the N+1 guard actually means is "no GET against
+   * a `surge:` key". A separate count map alongside this was a second copy of
+   * the same fact — `countOf` derives it instead.
    */
   readonly reads: { command: string; keys: string[] }[] = [];
 
   private record(command: string, keys: string[]): void {
-    this.commands.set(command, (this.commands.get(command) ?? 0) + 1);
     this.reads.push({ command, keys });
   }
 
   resetCommands(): void {
-    this.commands.clear();
     this.reads.length = 0;
   }
 
   countOf(command: string): number {
-    return this.commands.get(command) ?? 0;
+    return this.reads.filter((r) => r.command === command).length;
   }
 
   /** Reads of keys under a prefix, by command — the per-path N+1 guard. */

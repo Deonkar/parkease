@@ -59,10 +59,29 @@ describe('durationSuffix', () => {
 });
 
 describe('spaceAccessibilityLabel', () => {
-  it('names the space, distance, price and free slots', () => {
+  it('names the space, distance, price, free slots and the surge tier', () => {
     expect(spaceAccessibilityLabel(makeItem(), 'hourly')).toBe(
-      'Basement Parking, 450 metres, ₹45 per hour, 1 car slot free, 3 two-wheeler slots free',
+      'Basement Parking, 450 metres, ₹45 per hour, 1 car slot free, 3 two-wheeler slots free, ' +
+        'High demand, prices are 1.5 times the usual rate',
     );
+  });
+
+  it('says why the price is high, because the badge cannot say it here', () => {
+    // The list row wraps the whole card in a Pressable carrying this label,
+    // which collapses the subtree — so `SurgeBadge`'s own spoken label never
+    // reaches TalkBack on this surface. Without the tier in this string a
+    // screen-reader user is read a surged price and never told it is surged.
+    const label = spaceAccessibilityLabel(makeItem({ surgeBadge: 'very_high_demand' }), 'hourly');
+    expect(label).toContain('Very high demand, prices are 1.5 times the usual rate');
+  });
+
+  it('says nothing about surge when the zone is not surging', () => {
+    const label = spaceAccessibilityLabel(
+      makeItem({ surgeBadge: null, surgeMultiplier: 1 }),
+      'hourly',
+    );
+    expect(label).not.toContain('demand');
+    expect(label).not.toContain('usual rate');
   });
 
   it('pluralises slot counts', () => {

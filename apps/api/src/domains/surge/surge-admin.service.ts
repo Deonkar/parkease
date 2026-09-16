@@ -25,6 +25,20 @@ export interface SurgeAdminActor {
   readonly ipAddress: string | null;
 }
 
+/**
+ * The three attribution fields every audit row on this surface carries, in the
+ * shape `AuditService` wants them. Extracted at the fifth repetition rather
+ * than the second (R-ARCH-07) — and they do have to change together, since
+ * "who did this and from where" is one fact split across three keys.
+ */
+const attribution = (
+  actor: SurgeAdminActor,
+): { actorUserId: string; actorRole: string | null; ipAddress: string | null } => ({
+  actorUserId: actor.userId,
+  actorRole: actor.role,
+  ipAddress: actor.ipAddress,
+});
+
 /** Type aliases, not interfaces: an audit `before`/`after` needs an index signature. */
 export type SurgeConfigRecord = SurgeConfig & {
   readonly updatedAt: string;
@@ -131,14 +145,12 @@ export class SurgeAdminService {
       // A read of the pricing model is attributable too: "who looked at this,
       // and when" is half of any answer to "who changed it" (R-SEC-10).
       await this.audit.record(tx, {
-        actorUserId: actor.userId,
-        actorRole: actor.role,
+        ...attribution(actor),
         action: SURGE_AUDIT_ACTIONS.configRead,
         targetType: AUDIT_TARGET_CONFIG,
         targetId: row.id,
         before: null,
         after: null,
-        ipAddress: actor.ipAddress,
       });
 
       return record;
@@ -168,14 +180,12 @@ export class SurgeAdminService {
       if (updated === undefined) throw new MissingSurgeConfigError();
 
       await this.audit.record(tx, {
-        actorUserId: actor.userId,
-        actorRole: actor.role,
+        ...attribution(actor),
         action: SURGE_AUDIT_ACTIONS.configReplace,
         targetType: AUDIT_TARGET_CONFIG,
         targetId: updated.id,
         before,
         after: next,
-        ipAddress: actor.ipAddress,
       });
 
       return toConfigRecord(updated);
@@ -194,14 +204,12 @@ export class SurgeAdminService {
       const found = await tx.select().from(surgeZoneOverrides).orderBy(surgeZoneOverrides.zoneId);
 
       await this.audit.record(tx, {
-        actorUserId: actor.userId,
-        actorRole: actor.role,
+        ...attribution(actor),
         action: SURGE_AUDIT_ACTIONS.zonesList,
         targetType: AUDIT_TARGET_ZONE,
         targetId: null,
         before: null,
         after: null,
-        ipAddress: actor.ipAddress,
       });
 
       return found;
@@ -224,23 +232,24 @@ export class SurgeAdminService {
     return withTransaction(this.db, async (tx) => {
       // The unique index on zone_id is what makes a duplicate a 23505 the
       // filter turns into a 409, rather than a read-then-write race (R-DB-05).
-      const [created] = await tx.insert(surgeZoneOverrides).values({
-        ...columnsFor(input),
-        updatedBy: actor.userId,
-      }).returning();
+      const [created] = await tx
+        .insert(surgeZoneOverrides)
+        .values({
+          ...columnsFor(input),
+          updatedBy: actor.userId,
+        })
+        .returning();
 
       if (created === undefined) throw new ZoneOverrideNotFoundError();
       const record = toOverrideRecord(created);
 
       await this.audit.record(tx, {
-        actorUserId: actor.userId,
-        actorRole: actor.role,
+        ...attribution(actor),
         action: SURGE_AUDIT_ACTIONS.zoneCreate,
         targetType: AUDIT_TARGET_ZONE,
         targetId: created.id,
         before: null,
         after: record,
-        ipAddress: actor.ipAddress,
       });
 
       return record;
@@ -276,14 +285,12 @@ export class SurgeAdminService {
       const after = toOverrideRecord(updated);
 
       await this.audit.record(tx, {
-        actorUserId: actor.userId,
-        actorRole: actor.role,
+        ...attribution(actor),
         action: SURGE_AUDIT_ACTIONS.zoneUpdate,
         targetType: AUDIT_TARGET_ZONE,
         targetId: updated.id,
         before,
         after,
-        ipAddress: actor.ipAddress,
       });
 
       return after;

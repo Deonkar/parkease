@@ -240,6 +240,21 @@ export const surgeSnapshotSchema = z
   });
 export type SurgeSnapshot = z.infer<typeof surgeSnapshotSchema>;
 
+/**
+ * The Redis key a zone's snapshot lives at — the join between two deployables.
+ *
+ * Defined here rather than in either of them, and for a sharper reason than
+ * tidiness: the worker writes these keys and the API reads them, and if the two
+ * ever spelled the prefix differently the write and the read would simply stop
+ * meeting. Redis is a cache (ADR-010), so every miss degrades silently to base
+ * pricing — no error, no failed request, just surge quietly never appearing.
+ * Exactly the failure mode the geohash precision has, and it gets the same
+ * answer: one definition, imported by both.
+ */
+export const SURGE_KEY_PREFIX = 'surge:';
+
+export const surgeKey = (zoneId: ZoneId): string => `${SURGE_KEY_PREFIX}${zoneId}`;
+
 export const NO_SURGE_SNAPSHOT: SurgeSnapshot = {
   multiplierBp: NO_SURGE_BP,
   badge: null,

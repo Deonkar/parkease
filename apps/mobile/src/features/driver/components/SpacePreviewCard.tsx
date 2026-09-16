@@ -73,7 +73,11 @@ export function SpacePreviewCard({ item, duration, onBook, onDismiss }: SpacePre
     });
   };
 
-  const surged = item.surgeMultiplier > 1;
+  // The tier, not the number. `SurgeBadge` and `SurgeBanner` both gate on the
+  // badge, and two independent answers to "is this surging" in one component is
+  // how the struck-through base price and the chip end up disagreeing once the
+  // ladder becomes admin-editable (task-10 §10.4).
+  const surged = item.surgeBadge !== null;
 
   return (
     <Animated.View style={[styles.card, animatedStyle]}>

@@ -3,8 +3,8 @@ import {
   daySchema,
   NO_SURGE_BP,
   type PeakWindow,
+  surgeKey,
   type SurgeSnapshot,
-  type ZoneId,
 } from '@parkease/contracts/admin';
 import { calculateSurge } from '@parkease/contracts/money';
 
@@ -22,7 +22,11 @@ export const SURGE_RECALCULATE = 'surge.recalculate';
  */
 export const SURGE_TTL_SECONDS = 600;
 
-export const surgeKey = (zoneId: ZoneId): string => `surge:${zoneId}`;
+// Re-exported for callers and tests that already reach for it here. The
+// definition lives in contracts because this job writes the keys the API reads,
+// and two spellings of the prefix would mean writes and reads never meeting —
+// silently, since Redis is a cache and a miss just means no surge (ADR-010).
+export { surgeKey };
 
 const IST = 'Asia/Kolkata';
 const WEEKEND_DAYS: readonly Day[] = ['sat', 'sun'];
@@ -51,9 +55,7 @@ interface IstMoment {
 
 function istMoment(at: Date): IstMoment {
   const parts = new Map(istParts.formatToParts(at).map((part) => [part.type, part.value]));
-  const weekday = (parts.get('weekday') ?? '')
-    .slice(0, DAY_ABBREVIATION_LENGTH)
-    .toLowerCase();
+  const weekday = (parts.get('weekday') ?? '').slice(0, DAY_ABBREVIATION_LENGTH).toLowerCase();
 
   return {
     day: daySchema.parse(weekday),

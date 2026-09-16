@@ -6,6 +6,7 @@ import { and, eq, isNull } from 'drizzle-orm';
 
 import { DB, type Database } from '../../../platform/db/db.module.js';
 import { withTransaction } from '../../../platform/db/transaction.js';
+import { zoneIdFor } from '../../../platform/geo/geohash.js';
 import { OutboxService } from '../../../platform/outbox/outbox.service.js';
 import { expandSlotRows } from '../slots.js';
 
@@ -48,10 +49,16 @@ export class UpdateSpaceCommand {
         set['city'] = b.address.city;
         set['state'] = b.address.city;
         set['pincode'] = b.address.pincode;
-        set['zoneId'] = `zone_${b.address.pincode}`;
       }
       if (b.location !== undefined) {
         set['location'] = { lng: b.location.lng, lat: b.location.lat };
+        // The zone follows the pin, not the address text. This used to be
+        // derived from the pincode in the block above, which was wrong twice
+        // over: `zone_<pincode>` cannot match a geohash-6 `surge:{zoneId}` key
+        // at all (migration 0013 replaced that format and this write path was
+        // never updated with it), and correcting a landmark or a spelling would
+        // have re-zoned a space that had not moved.
+        set['zoneId'] = zoneIdFor(b.location);
       }
       if (b.pricing !== undefined) set['pricing'] = b.pricing;
       if (b.schedule !== undefined) set['schedule'] = b.schedule;

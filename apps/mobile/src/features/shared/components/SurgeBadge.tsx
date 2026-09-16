@@ -8,6 +8,8 @@ import { colors, duration, fontSize, fontWeight, radius, spacing } from '@parkea
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, useReducedMotion } from 'react-native-reanimated';
 
+import { formatSurgeMultiplier, surgeSpokenLabel } from '../surge-copy';
+
 interface SurgeBadgeProps {
   readonly badge: SurgeBadgeTier | null;
   /** Displayed, never applied. The client does not compute prices (R-FE-06). */
@@ -62,31 +64,17 @@ export function SurgeBadge({ badge, multiplier }: SurgeBadgeProps) {
   );
 }
 
-/**
- * The multiplier, as words, without overstating it.
- *
- * `toFixed(1)` turns the ladder's own 1.25x tier into "1.3x" — the client
- * claiming a higher price than the server issued, which is the inverse of
- * R-FE-06. Two decimals, with a single trailing zero trimmed, gives 1.25x,
- * 1.5x and 2.0x: exact where it has to be, and still matching `website.md`
- * §2.6's "1.5x" where that is what the number is.
- *
- * The tier ladder is admin-editable (task-10 §10.4), so a two-decimal
- * multiplier is an ordinary configuration, not a hypothetical.
- */
-export function formatSurgeMultiplier(multiplier: number): string {
-  return multiplier.toFixed(2).replace(/0$/, '');
-}
-
-/**
- * "High demand, prices are 1.5 times the usual rate" — the tier and the number,
- * because the meter is decorative to a screen reader and the bare tier name
- * would not say how much more this costs.
- */
-export function surgeSpokenLabel(badge: SurgeBadgeTier, multiplier: number): string {
-  const label = SURGE_BADGE_LABELS[badge];
-  return `${label.charAt(0).toUpperCase()}${label.slice(1)}, prices are ${formatSurgeMultiplier(multiplier)} times the usual rate`;
-}
+// Both live in `../surge-copy`, which imports no React and no `react-native`.
+//
+// They moved there when the search row's accessibility label needed the spoken
+// string: `space-display.ts` is deliberately React-free, and importing them
+// from this file dragged `react-native` into every node-environment suite that
+// touched it — which fails as `Expected 'from', got 'typeOf'` naming the test
+// file rather than the import (learnings.md). A string is not a component
+// concern; the chip and the row are both just consumers of the same copy.
+//
+// Re-exported here so existing call sites keep working.
+export { formatSurgeMultiplier, surgeSpokenLabel } from '../surge-copy';
 
 /**
  * Three bars, of which `SURGE_BADGE_INTENSITY` are filled. Drawn, never an emoji

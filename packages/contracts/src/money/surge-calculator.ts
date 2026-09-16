@@ -90,21 +90,23 @@ export function calculateSurge(input: SurgeInput): SurgeResult {
 
   const cappedBp = Math.min(escalatedBp, config.maxMultiplierBp);
 
-  // Snap DOWN to the highest tier at or below the escalated value, and never
-  // below the tier occupancy alone already earned. This is what guarantees the
-  // output is always a value the product has a badge and a price line for —
-  // and snapping down rather than to the nearest means a driver is never
-  // charged above the tier the demand actually reached.
-  const finalTier = snapDownToTier(cappedBp, baseTier, ladder);
+  // Snap DOWN to the highest tier at or below the escalated value. This is what
+  // guarantees the output is always a value the product has a badge and a price
+  // line for — and snapping down rather than to the nearest means a driver is
+  // never charged above the tier the demand actually reached.
+  const finalTier = snapDownToTier(cappedBp, ladder);
 
-  // A cap below the base tier (a zone disabled at 1.0x) snaps to the floor,
-  // where the badge must go too — a 1.0x price with a "high demand" chip is
-  // exactly the unexplainable pairing the ladder schema forbids.
+  // A cap below the base tier (a zone disabled at 1.0x) snaps back to the
+  // floor, and the badge and the modifier list have to follow it down: a 1.0x
+  // price wearing a "high demand" chip is exactly the unexplainable pairing the
+  // ladder schema forbids.
+  const noSurge = finalTier.multiplierBp === NO_SURGE_BP;
+
   return {
     multiplierBp: finalTier.multiplierBp,
-    badge: finalTier.multiplierBp === NO_SURGE_BP ? null : finalTier.badge,
+    badge: noSurge ? null : finalTier.badge,
     occupancyBp,
-    appliedModifiers: finalTier.multiplierBp === NO_SURGE_BP ? [] : appliedModifiers,
+    appliedModifiers: noSurge ? [] : appliedModifiers,
   };
 }
 
@@ -145,24 +147,22 @@ function tierForOccupancy(occupancy: SurgeOccupancy, ladder: readonly SurgeTier[
   return match;
 }
 
-function snapDownToTier(
-  valueBp: number,
-  floor: SurgeTier,
-  ladder: readonly SurgeTier[],
-): SurgeTier {
-  // A cap below the base tier has to win, or a zone disabled at 1.0x would
-  // still surge. Start from the lowest tier at or below the value instead.
-  if (valueBp < floor.multiplierBp) {
-    let belowFloor = ladder[0] as SurgeTier;
-    for (const tier of ladder) {
-      if (tier.multiplierBp <= valueBp) belowFloor = tier;
-    }
-    return belowFloor;
-  }
-
-  let match = floor;
+/**
+ * The highest tier at or below `valueBp` — one loop, no special case.
+ *
+ * This used to branch on whether the value had fallen below the tier occupancy
+ * alone earned (a zone capped at 1.0x), on the reasoning that the cap has to
+ * win or a disabled zone would still surge. The branch was real but redundant:
+ * the ladder is schema-enforced ascending and starts at the 1.0x floor, and
+ * `valueBp` can never fall below that floor because `maxMultiplierBp`'s own
+ * minimum is `NO_SURGE_BP`. So "the highest tier at or below the value" already
+ * describes both cases, and taking the last match over an ascending ladder
+ * finds it either way.
+ */
+function snapDownToTier(valueBp: number, ladder: readonly SurgeTier[]): SurgeTier {
+  let match = ladder[0] as SurgeTier;
   for (const tier of ladder) {
-    if (tier.multiplierBp <= valueBp && tier.multiplierBp >= floor.multiplierBp) match = tier;
+    if (tier.multiplierBp <= valueBp) match = tier;
   }
   return match;
 }

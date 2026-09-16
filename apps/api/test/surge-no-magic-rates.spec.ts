@@ -23,14 +23,23 @@ import { describe, expect, it } from 'vitest';
 const SURGE_DIR = join(import.meta.dirname, '..', 'src', 'domains', 'surge');
 
 /**
- * Numbers that cannot express a rate, a tier threshold or a cap.
+ * A rate, tier threshold or cap in this codebase is one of two shapes, and this
+ * recognises both rather than keeping a list of exempt values.
  *
- * `0` and `1` are the usual exemptions (R-GEN-05 names them). Small integers
- * are array and string offsets. HTTP status codes are not rates. Anything that
- * looks like basis points — four or five digits — is exactly what this test is
- * hunting, so nothing in that range is exempt.
+ * A denylist of harmless numbers was the first attempt and it is a maintenance
+ * trap: every future array index or status code added under `domains/surge/`
+ * would fail an unrelated suite until someone extended the set.
+ *
+ * - **Basis points** — every persisted rate here is `bp` (`12_500`, `10_000`),
+ *   so any integer of four digits or more is suspect. Nothing legitimate in
+ *   this domain is a bare 1000+ literal.
+ * - **A decimal** — `0.15`, `1.5`. The codebase does not store rates this way,
+ *   which is precisely why one appearing would be worth stopping for. A
+ *   magnitude test alone would wave these through, since they are all < 1000.
+ *
+ * Small integers are left alone: they are offsets, lengths and status codes.
  */
-const HARMLESS = new Set([0, 1, 2, 3, 100, 200, 201, 204, 400, 403, 404, 409, 500]);
+const looksLikeARate = (n: number): boolean => !Number.isInteger(n) || Math.abs(n) >= 1000;
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((entry) => {
@@ -62,7 +71,7 @@ describe('no rate, tier or cap is compiled into domains/surge', () => {
     (_label, path) => {
       const numbers = [...code(readFileSync(path, 'utf8')).matchAll(/\b\d[\d_]*(?:\.\d+)?\b/g)]
         .map((m) => Number(m[0].replace(/_/g, '')))
-        .filter((n) => !HARMLESS.has(n));
+        .filter(looksLikeARate);
 
       expect(numbers).toEqual([]);
     },

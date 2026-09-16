@@ -43,6 +43,8 @@ export {
   surgeSnapshotSchema,
   type SurgeSnapshot,
   NO_SURGE_SNAPSHOT,
+  SURGE_KEY_PREFIX,
+  surgeKey,
 } from './surge-config.js';
 export { moderateReviewSchema, type ModerateReview } from './moderate-review.js';
 export {

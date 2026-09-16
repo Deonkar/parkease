@@ -1,6 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import {
   NO_SURGE_SNAPSHOT,
+  SURGE_KEY_PREFIX,
+  surgeKey,
   surgeSnapshotSchema,
   type SurgeSnapshot,
   type ZoneId,
@@ -9,9 +11,11 @@ import {
 import { logger } from '../../platform/observability/logger.js';
 import { REDIS, type RedisClient } from '../../platform/redis/redis.module.js';
 
-export const SURGE_KEY_PREFIX = 'surge:';
-
-export const surgeKey = (zoneId: ZoneId): string => `${SURGE_KEY_PREFIX}${zoneId}`;
+// Re-exported for the tests and callers that already import them from here.
+// The definitions live in contracts because the worker writes the keys this
+// service reads, and two spellings of the prefix would mean writes and reads
+// silently never meeting.
+export { SURGE_KEY_PREFIX, surgeKey };
 
 @Injectable()
 export class SurgeService {
