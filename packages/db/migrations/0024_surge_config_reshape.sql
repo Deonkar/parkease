@@ -18,6 +18,15 @@
 -- would add three migrations and a fortnight of double-write code to preserve
 -- zero rows. The honest operation is a replace, and it is stated as one.
 --
+-- FORWARD-ONLY, and the recovery path is stated rather than assumed. Migrations
+-- are immutable and there is no down file in this project. If 0024 needs to be
+-- undone after it has committed, the recovery is to re-run 0009's two CREATE
+-- TABLE statements and 0011's two triggers; nothing else referenced these
+-- tables, so nothing else has to be unwound. Before it commits there is nothing
+-- to recover: migrate.ts runs each file through a single `sql.unsafe`, which
+-- Postgres wraps in one implicit transaction, so a failure anywhere in this
+-- file rolls the whole thing back.
+--
 -- Both DROPs take ACCESS EXCLUSIVE, which on an unreferenced empty table is
 -- acquired and released in microseconds. `migrate.ts` sets lock_timeout to 5s
 -- on the connection, so if either table is unexpectedly busy this fails fast
@@ -26,6 +35,31 @@
 -- CASCADE is deliberately NOT used: if either table has acquired a dependent
 -- object since 0009, this migration should fail and be read by a human rather
 -- than silently dropping whatever that object was.
+--
+-- The emptiness above is the load-bearing claim, and `git grep` is evidence
+-- about the code, not about the database. 0020 set the precedent for exactly
+-- this gap: turn the claim in the comment into a precondition the database
+-- checks, and fail loudly rather than destroying rows nobody knew were there.
+-- A migration that stops here has broken nothing — the DROPs have not run and
+-- the schema is unchanged (R-FAIL-01).
+DO $$
+DECLARE
+  config_rows bigint := 0;
+  override_rows bigint := 0;
+BEGIN
+  IF to_regclass('public.surge_config') IS NOT NULL THEN
+    EXECUTE 'SELECT count(*) FROM surge_config' INTO config_rows;
+  END IF;
+  IF to_regclass('public.surge_zone_overrides') IS NOT NULL THEN
+    EXECUTE 'SELECT count(*) FROM surge_zone_overrides' INTO override_rows;
+  END IF;
+
+  IF config_rows > 0 OR override_rows > 0 THEN
+    RAISE EXCEPTION
+      'surge_config holds % row(s) and surge_zone_overrides holds % row(s). This migration replaces both tables and was written on the basis that they have never been written to. Export whatever is there and port it by hand before re-running.',
+      config_rows, override_rows;
+  END IF;
+END $$;
 
 DROP TABLE IF EXISTS surge_zone_overrides;
 DROP TABLE IF EXISTS surge_config;
@@ -99,6 +133,13 @@ CREATE TABLE surge_zone_overrides (
 
 -- The recalculation job reads `WHERE enabled = true` once per run; the FK index
 -- is here because Drizzle does not create them and every FK must have one.
+--
+-- Plain CREATE INDEX, not CONCURRENTLY, and that is correct here rather than an
+-- oversight: the table was created four statements ago inside this same
+-- implicit transaction (migrate.ts runs each file through one `sql.unsafe`), so
+-- no other session can hold a reference to it and there is no concurrent write
+-- for the lock to block. CONCURRENTLY would in fact *break* this migration —
+-- it cannot run inside a transaction block at all.
 CREATE INDEX surge_zone_overrides_enabled_idx ON surge_zone_overrides (enabled);
 CREATE INDEX surge_zone_overrides_updated_by_idx ON surge_zone_overrides (updated_by);
 
