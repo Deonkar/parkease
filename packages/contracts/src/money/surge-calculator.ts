@@ -113,6 +113,25 @@ const applyModifier = (multiplierBp: number, modifierBp: number): number =>
 
 function tierForOccupancy(occupancy: SurgeOccupancy, ladder: readonly SurgeTier[]): SurgeTier {
   const floor = ladder[0] as SurgeTier;
+
+  // A zone with no bookable slots is empty, not full.
+  //
+  // Without this, multiplying by `totalSlots === 0` zeroes the right-hand side
+  // of every comparison below, so `occupiedSlots * 10000 > 0` holds for every
+  // tier and the last write wins — the top of the ladder. The function would
+  // return 2.0x `very_high_demand` while `occupancyBpOf` reported 0% for the
+  // same input, which is the two halves of this file disagreeing about what a
+  // listing-less zone means. `occupancyBpOf` already guards it; this is the
+  // other half of the same guard.
+  //
+  // The worker cannot currently produce such a row — the occupancy SQL groups
+  // over rows that exist and `zoneRowSchema` requires a positive total — but
+  // this function is exported for both deployables and its own docstring calls
+  // `totalSlots: 0` a valid input meaning "the zone has no listings". A public
+  // function that contradicts its own contract is a defect waiting for a
+  // second caller.
+  if (occupancy.totalSlots <= 0) return floor;
+
   let match = floor;
 
   for (const tier of ladder) {

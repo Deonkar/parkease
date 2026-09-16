@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { surgeBadgeSchema } from '../enums/surge-badge.js';
+import { SURGE_MULTIPLIER_MAX } from '../money/rates.js';
 
 /**
  * Multipliers and occupancy thresholds are integer basis points, not floats.
@@ -18,6 +19,19 @@ export const BASIS_POINTS = 10_000;
 /** 1.0x. Below the first occupancy threshold this is the whole answer. */
 export const NO_SURGE_BP = BASIS_POINTS;
 
+/**
+ * The ceiling, derived from `rates.ts` rather than retyped here (R-MONEY-03).
+ *
+ * This file originally carried its own `5 * BASIS_POINTS`, which disagreed with
+ * `SURGE_MULTIPLIER_MAX`. The gap was reachable entirely through the supported
+ * admin API: a 4x zone override passed every admin-side validation, the worker
+ * wrote it to Redis, and then `parkEaseFee` threw a `RangeError` on the next
+ * booking in that zone — a 500 on the payment path, and separately a search
+ * response that would not serialise. Three schemas have to agree on what a
+ * valid multiplier is, so exactly one of them gets to define it.
+ */
+export const MAX_SURGE_MULTIPLIER_BP = SURGE_MULTIPLIER_MAX * BASIS_POINTS;
+
 export const SURGE_MODIFIER_VALUES = ['peak_hour', 'weekend', 'event'] as const;
 export const surgeModifierSchema = z.enum(SURGE_MODIFIER_VALUES);
 export type SurgeModifier = z.infer<typeof surgeModifierSchema>;
@@ -30,11 +44,7 @@ export const SurgeModifier = {
 
 export const surgeTierSchema = z.object({
   minOccupancyBp: z.number().int().min(0).max(BASIS_POINTS),
-  multiplierBp: z
-    .number()
-    .int()
-    .min(NO_SURGE_BP)
-    .max(5 * BASIS_POINTS),
+  multiplierBp: z.number().int().min(NO_SURGE_BP).max(MAX_SURGE_MULTIPLIER_BP),
   badge: surgeBadgeSchema.nullable(),
 });
 export type SurgeTier = z.infer<typeof surgeTierSchema>;
@@ -117,11 +127,7 @@ const modifierBpSchema = z
   .max(2 * BASIS_POINTS);
 
 const surgeConfigShape = {
-  maxMultiplierBp: z
-    .number()
-    .int()
-    .min(NO_SURGE_BP)
-    .max(5 * BASIS_POINTS),
+  maxMultiplierBp: z.number().int().min(NO_SURGE_BP).max(MAX_SURGE_MULTIPLIER_BP),
   peakHourModifierBp: modifierBpSchema,
   weekendModifierBp: modifierBpSchema,
   eventModifierBp: modifierBpSchema,
@@ -200,11 +206,7 @@ export type SurgeZoneOverridePatch = z.infer<typeof surgeZoneOverridePatchSchema
  */
 export const surgeSnapshotSchema = z
   .object({
-    multiplierBp: z
-      .number()
-      .int()
-      .min(NO_SURGE_BP)
-      .max(5 * BASIS_POINTS),
+    multiplierBp: z.number().int().min(NO_SURGE_BP).max(MAX_SURGE_MULTIPLIER_BP),
     badge: surgeBadgeSchema.nullable(),
     occupancyBp: z.number().int().min(0).max(BASIS_POINTS),
     appliedModifiers: z.array(surgeModifierSchema),

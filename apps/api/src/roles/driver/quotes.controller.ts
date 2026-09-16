@@ -56,6 +56,7 @@ export class DriverQuotesController {
         totalPaise: quote.driverTotalPaise,
         ownerEarningsPaise: quote.ownerEarningsPaise,
         surgeMultiplierBp: quote.surgeMultiplierBp,
+        surgeBadge: quote.surgeBadge,
       },
       startsAt: startsAt.toISOString(),
       endsAt: endsAt.toISOString(),

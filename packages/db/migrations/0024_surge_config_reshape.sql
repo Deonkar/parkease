@@ -86,7 +86,7 @@ CREATE TABLE surge_config (
   updated_by uuid REFERENCES users (id),
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT surge_config_max_check CHECK (max_multiplier_bp BETWEEN 10000 AND 50000),
+  CONSTRAINT surge_config_max_check CHECK (max_multiplier_bp BETWEEN 10000 AND 30000),
   CONSTRAINT surge_config_peak_check CHECK (peak_hour_modifier_bp BETWEEN 10000 AND 20000),
   CONSTRAINT surge_config_weekend_check CHECK (weekend_modifier_bp BETWEEN 10000 AND 20000),
   CONSTRAINT surge_config_event_check CHECK (event_modifier_bp BETWEEN 10000 AND 20000),
@@ -126,7 +126,7 @@ CREATE TABLE surge_zone_overrides (
   CONSTRAINT surge_zone_overrides_zone_id_check
     CHECK (zone_id ~ '^[0-9bcdefghjkmnpqrstuvwxyz]{6}$'),
   CONSTRAINT surge_zone_overrides_max_check
-    CHECK (max_multiplier_bp IS NULL OR max_multiplier_bp BETWEEN 10000 AND 50000),
+    CHECK (max_multiplier_bp IS NULL OR max_multiplier_bp BETWEEN 10000 AND 30000),
   CONSTRAINT surge_zone_overrides_peak_check
     CHECK (peak_hour_modifier_bp IS NULL OR peak_hour_modifier_bp BETWEEN 10000 AND 20000),
   CONSTRAINT surge_zone_overrides_weekend_check
@@ -150,6 +150,13 @@ CREATE TABLE surge_zone_overrides (
 -- it cannot run inside a transaction block at all.
 CREATE INDEX surge_zone_overrides_enabled_idx ON surge_zone_overrides (enabled);
 CREATE INDEX surge_zone_overrides_updated_by_idx ON surge_zone_overrides (updated_by);
+
+-- surge_config holds exactly one row, so this index will never be used for
+-- lookup. It exists because "every FK must have an index" is unconditional in
+-- .claude/rules/database.md, and an FK without one also blocks: a DELETE of a
+-- referenced users row has to scan the child table to enforce the constraint.
+-- A rule with a case-by-case exemption is a rule nobody can check mechanically.
+CREATE INDEX surge_config_updated_by_idx ON surge_config (updated_by);
 
 -- DROP TABLE took the two updated_at triggers 0011 installed down with it.
 -- Without these, an admin editing the config through the API would leave a

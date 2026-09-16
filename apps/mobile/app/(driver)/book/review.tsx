@@ -204,7 +204,16 @@ export default function ReviewAndPayScreen() {
           ) : quote.isError ? (
             <Text style={styles.quoteError}>{toApiFailure(quote.error).message}</Text>
           ) : (
-            <PriceBreakdown quote={quote.data.quote} surgeBadge={space?.surgeBadge ?? null} />
+            /*
+              The badge comes from the quote, not from the space.
+              `useSpaceDetail` and `useQuote` are separate requests and the
+              worker rewrites the zone's snapshot every five minutes, so
+              sourcing the tier from the space could pair this quote's
+              multiplier with the previous tier's word — "1.5x moderate demand"
+              — on the one screen whose job is to stop the driver being
+              surprised by the price.
+            */
+            <PriceBreakdown quote={quote.data.quote} surgeBadge={quote.data.quote.surgeBadge} />
           )}
         </View>
 

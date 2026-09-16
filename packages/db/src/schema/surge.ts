@@ -35,7 +35,8 @@ export const surgeConfig = pgTable(
     ...timestamps,
   },
   (t) => [
-    check('surge_config_max_check', sql`${t.maxMultiplierBp} BETWEEN 10000 AND 50000`),
+    index('surge_config_updated_by_idx').on(t.updatedBy),
+    check('surge_config_max_check', sql`${t.maxMultiplierBp} BETWEEN 10000 AND 30000`),
     check('surge_config_peak_check', sql`${t.peakHourModifierBp} BETWEEN 10000 AND 20000`),
     check('surge_config_weekend_check', sql`${t.weekendModifierBp} BETWEEN 10000 AND 20000`),
     check('surge_config_event_check', sql`${t.eventModifierBp} BETWEEN 10000 AND 20000`),
@@ -87,7 +88,7 @@ export const surgeZoneOverrides = pgTable(
     ),
     check(
       'surge_zone_overrides_max_check',
-      sql`${t.maxMultiplierBp} IS NULL OR ${t.maxMultiplierBp} BETWEEN 10000 AND 50000`,
+      sql`${t.maxMultiplierBp} IS NULL OR ${t.maxMultiplierBp} BETWEEN 10000 AND 30000`,
     ),
     check(
       'surge_zone_overrides_peak_check',

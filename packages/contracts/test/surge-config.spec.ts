@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  BASIS_POINTS,
   DEFAULT_SURGE_TIERS,
   MAX_SURGE_TIERS,
   surgeConfigSchema,
@@ -9,6 +10,7 @@ import {
   surgeZoneOverrideInputSchema,
 } from '../src/admin/surge-config.js';
 import { SurgeBadge } from '../src/enums/index.js';
+import { SURGE_MULTIPLIER_MAX } from '../src/money/rates.js';
 
 const floor = { minOccupancyBp: 0, multiplierBp: 10_000, badge: null };
 
@@ -83,6 +85,55 @@ describe('surgeTierLadderSchema', () => {
 
     expect(surgeTierLadderSchema.safeParse(ladderOf(MAX_SURGE_TIERS)).success).toBe(true);
     expect(surgeTierLadderSchema.safeParse(ladderOf(MAX_SURGE_TIERS + 1)).success).toBe(false);
+  });
+});
+
+describe('the config ceiling agrees with the money ceiling', () => {
+  // These three schemas must agree on "what is a valid surge multiplier", and
+  // for a while they did not: this file allowed 5.0x while rates.ts capped the
+  // money path at 3.0x. An admin configuring a 4x airport override passed every
+  // admin-side validation, the worker wrote it to Redis, and then parkEaseFee
+  // threw a RangeError on the next booking in that zone — a 500 on the payment
+  // path, produced entirely through the supported admin API.
+  const ceilingBp = SURGE_MULTIPLIER_MAX * BASIS_POINTS;
+
+  const ladderTo = (multiplierBp: number) => [
+    { minOccupancyBp: 0, multiplierBp: 10_000, badge: null },
+    { minOccupancyBp: 9_000, multiplierBp: multiplierBp, badge: SurgeBadge.VERY_HIGH_DEMAND },
+  ];
+
+  it('accepts a ladder reaching exactly the money ceiling', () => {
+    expect(surgeTierLadderSchema.safeParse(ladderTo(ceilingBp)).success).toBe(true);
+  });
+
+  it('rejects a tier above the ceiling parkEaseFee would throw on', () => {
+    expect(surgeTierLadderSchema.safeParse(ladderTo(ceilingBp + 100)).success).toBe(false);
+  });
+
+  it('rejects a cap above the ceiling, whatever the ladder says', () => {
+    expect(
+      surgeConfigSchema.safeParse({
+        maxMultiplierBp: ceilingBp + 100,
+        peakHourModifierBp: 11_000,
+        weekendModifierBp: 10_500,
+        eventModifierBp: 12_000,
+        occupancyWindowMinutes: 60,
+        peakWindows: [],
+        tiers: ladderTo(ceilingBp + 100),
+      }).success,
+    ).toBe(false);
+  });
+
+  it('rejects a zone override cap above the ceiling', () => {
+    expect(
+      surgeZoneOverrideInputSchema.safeParse({
+        zoneId: 'tdr1v0',
+        label: 'Airport',
+        reason: 'Structural scarcity',
+        maxMultiplierBp: ceilingBp + 100,
+        tiers: ladderTo(ceilingBp + 100),
+      }).success,
+    ).toBe(false);
   });
 });
 
