@@ -18,6 +18,7 @@ export function makeItem(overrides: Record<string, unknown> = {}): SpaceSearchIt
     availableSlots: { car: 1, twoWheeler: 3 },
     basePricePaise: 3000,
     surgeMultiplier: 1.5,
+    surgeBadge: 'high_demand',
     effectivePricePaise: 4500,
     isOpenNow: true,
     ...overrides,

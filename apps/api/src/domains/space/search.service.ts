@@ -1,4 +1,5 @@
 import { BadRequestException, Inject, Injectable } from '@nestjs/common';
+import { NO_SURGE_SNAPSHOT, type SurgeSnapshot } from '@parkease/contracts/admin';
 import type { SearchSpacesQuery } from '@parkease/contracts/driver';
 import { sql } from 'drizzle-orm';
 
@@ -28,7 +29,8 @@ export interface SlotAvailability {
 export interface SearchResult {
   readonly candidate: Candidate;
   readonly availableSlots: SlotAvailability;
-  readonly surgeMultiplier: number;
+  /** The zone's whole snapshot — the badge is the tier's own name, not a guess. */
+  readonly surge: SurgeSnapshot;
   readonly isOpenNow: boolean;
 }
 
@@ -111,7 +113,7 @@ export class SearchService {
       .map((candidate) => ({
         candidate,
         availableSlots: availability.get(candidate.id) ?? NO_AVAILABILITY,
-        surgeMultiplier: surge.get(candidate.zoneId) ?? 1,
+        surge: surge.get(candidate.zoneId) ?? NO_SURGE_SNAPSHOT,
         isOpenNow: isOpenAt(candidate.schedule, now),
       }))
       // A space with nothing free of the requested vehicle type is not a

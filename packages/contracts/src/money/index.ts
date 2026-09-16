@@ -43,6 +43,14 @@ export {
 
 export { allocateProportionally } from './allocate.js';
 
+export {
+  calculateSurge,
+  occupancyBpOf,
+  type SurgeInput,
+  type SurgeOccupancy,
+  type SurgeResult,
+} from './surge-calculator.js';
+
 // `RefundTier` is a merged type and const: exporting only the value carries the
 // type with it, and naming both is a TS2300 duplicate identifier (learnings.md).
 export {

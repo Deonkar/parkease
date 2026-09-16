@@ -15,6 +15,7 @@ import { scheduleOnRN } from 'react-native-worklets';
 
 import { formatPaise } from '@/lib/money';
 
+import { SurgeBadge } from '../../shared/components/SurgeBadge';
 import {
   durationSuffix,
   formatDistance,
@@ -23,7 +24,6 @@ import {
 } from '../space-display';
 
 import { SlotPill } from './SlotPill';
-import { SurgeBadge } from './SurgeBadge';
 
 const OFFSCREEN = 320;
 
@@ -73,7 +73,11 @@ export function SpacePreviewCard({ item, duration, onBook, onDismiss }: SpacePre
     });
   };
 
-  const surged = item.surgeMultiplier > 1;
+  // The tier, not the number. `SurgeBadge` and `SurgeBanner` both gate on the
+  // badge, and two independent answers to "is this surging" in one component is
+  // how the struck-through base price and the chip end up disagreeing once the
+  // ladder becomes admin-editable (task-10 §10.4).
+  const surged = item.surgeBadge !== null;
 
   return (
     <Animated.View style={[styles.card, animatedStyle]}>
@@ -125,7 +129,7 @@ export function SpacePreviewCard({ item, duration, onBook, onDismiss }: SpacePre
           </View>
         )}
 
-        <SurgeBadge multiplier={item.surgeMultiplier} />
+        <SurgeBadge badge={item.surgeBadge} multiplier={item.surgeMultiplier} />
 
         {item.isOpenNow ? null : (
           <View style={styles.inlineMeta}>

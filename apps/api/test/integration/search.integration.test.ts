@@ -1,3 +1,4 @@
+import { NO_SURGE_BP } from '@parkease/contracts/admin';
 import { searchSpacesQuerySchema } from '@parkease/contracts/driver';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -597,7 +598,7 @@ describe('surge', () => {
     await space({ title: 'Second' });
 
     const page = await search();
-    expect(page.items.map((i) => i.surgeMultiplier)).toEqual([1, 1]);
+    expect(page.items.map((i) => i.surge.multiplierBp)).toEqual([NO_SURGE_BP, NO_SURGE_BP]);
   });
 
   it('picks up a hand-written surge key with no code change', async () => {
@@ -609,7 +610,8 @@ describe('surge', () => {
     await h.redis.set(`${SURGE_KEY_PREFIX}${zone}`, surgePayload(1.5));
 
     const item = (await search()).items[0];
-    expect(item?.surgeMultiplier).toBe(1.5);
+    expect(item?.surge.multiplierBp).toBe(15_000);
+    expect(item?.surge.badge).toBe('high_demand');
 
     const view = toSpaceResultView(item!);
     expect(view.basePricePaise).toBe(3000);
@@ -621,10 +623,10 @@ describe('surge', () => {
     await space(point);
 
     await h.redis.set(`${SURGE_KEY_PREFIX}${zoneIdFor(point)}`, surgePayload(1.5));
-    expect((await search()).items[0]?.surgeMultiplier).toBe(1.5);
+    expect((await search()).items[0]?.surge.multiplierBp).toBe(15_000);
 
     h.redis.clear();
-    expect((await search()).items[0]?.surgeMultiplier).toBe(1);
+    expect((await search()).items[0]?.surge.multiplierBp).toBe(NO_SURGE_BP);
   });
 
   it('carries no GST in the effective price', async () => {
@@ -647,10 +649,10 @@ describe('surge', () => {
     await h.redis.set(`${SURGE_KEY_PREFIX}${zoneIdFor(far)}`, surgePayload(2));
 
     const page = await search({ radiusM: 25_000, sortBy: 'distance' });
-    const byTitle = new Map(page.items.map((i) => [i.candidate.title, i.surgeMultiplier]));
+    const byTitle = new Map(page.items.map((i) => [i.candidate.title, i.surge.multiplierBp]));
 
-    expect(byTitle.get('Near')).toBe(1);
-    expect(byTitle.get('Far')).toBe(2);
+    expect(byTitle.get('Near')).toBe(NO_SURGE_BP);
+    expect(byTitle.get('Far')).toBe(20_000);
   });
 });
 
@@ -673,7 +675,7 @@ describe('Redis unreachable', () => {
     const page = await search();
 
     expect(page.items).toHaveLength(1);
-    expect(page.items[0]?.surgeMultiplier).toBe(1);
+    expect(page.items[0]?.surge.multiplierBp).toBe(NO_SURGE_BP);
     expect(warn).toHaveBeenCalled();
   });
 

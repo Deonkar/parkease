@@ -17,6 +17,7 @@ import { ActiveRoleGuard } from './platform/rbac/active-role.guard.js';
 import { RbacModule } from './platform/rbac/rbac.module.js';
 import { RolesGuard } from './platform/rbac/roles.guard.js';
 import { RedisModule } from './platform/redis/redis.module.js';
+import { AdminModule } from './roles/admin/admin.module.js';
 import { DriverModule } from './roles/driver/driver.module.js';
 import { OwnerModule } from './roles/owner/owner.module.js';
 import { PublicModule } from './roles/public/public.module.js';
@@ -33,6 +34,7 @@ import { SharedModule } from './roles/shared/shared.module.js';
     IdempotencyModule,
     OutboxModule,
     NotificationModule,
+    AdminModule,
     DriverModule,
     OwnerModule,
     PublicModule,

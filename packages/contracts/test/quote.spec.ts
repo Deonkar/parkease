@@ -15,6 +15,31 @@ describe('canonical ADR-009 vector', () => {
     expect(q.ownerEarningsPaise).toBe(5100);
   });
 
+  it('matches task 10 §10.8 at 2.0x', () => {
+    // The task file states these figures explicitly and nothing asserted them.
+    // The formula was covered; the specific numbers the product quotes were not,
+    // and a worked example nobody checks is a worked example that drifts.
+    const q = quote({ basePaise: toPaise(6000), surgeMultiplier: toRate(2) });
+
+    expect(q.basePaise).toBe(6000);
+    expect(q.surgePremiumPaise).toBe(6000);
+    expect(q.parkeaseFeePaise).toBe(6900);
+    expect(q.gstPaise).toBe(1242);
+    expect(q.driverTotalPaise).toBe(13_242);
+    expect(q.ownerEarningsPaise).toBe(5100);
+  });
+
+  it('pays the owner 5100 at every multiplier — surge is the platform’s alone', () => {
+    // ADR-009's actual claim, asserted as one statement rather than inferred
+    // from three separate cases: the owner's earnings expression contains no
+    // surge term, so the entire premium accrues to the platform.
+    for (const multiplier of [1, 1.25, 1.5, 2]) {
+      const q = quote({ basePaise: toPaise(6000), surgeMultiplier: toRate(multiplier) });
+      expect(q.ownerEarningsPaise).toBe(5100);
+      expect(q.parkeaseFeePaise).toBe(900 + q.surgePremiumPaise);
+    }
+  });
+
   it('5100 + 3900 + 702 === 9702', () => {
     const q = quote({ basePaise: toPaise(6000), surgeMultiplier: toRate(1.5) });
     expect(q.ownerEarningsPaise + q.parkeaseFeePaise + q.gstPaise).toBe(9702);

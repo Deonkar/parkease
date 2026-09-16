@@ -145,12 +145,19 @@ describe('razorpay webhook over HTTP', () => {
     });
 
     it('still demands one on a driver route', async () => {
+      // Authenticated on purpose. Guards run before interceptors, so an
+      // anonymous call to this route is a 401 and never reaches the
+      // idempotency check — which would make this assertion pass for the
+      // wrong reason and say nothing about the interceptor.
+      actingAs.user = { id: h.driverId, roles: ['driver'], activeRole: 'driver' };
+
       const response = await http.request({
         method: 'POST',
         url: '/api/v1/driver/bookings',
         payload: {},
       });
 
+      actingAs.user = null;
       expect(response.status).toBe(400);
     });
   });

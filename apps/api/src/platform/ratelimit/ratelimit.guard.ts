@@ -14,28 +14,13 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { logger } from '../observability/logger.js';
 import { REDIS, type RedisClient } from '../redis/redis.module.js';
 
-import { DEFAULT_POLICY, RATE_LIMIT_POLICIES, type RateLimitPolicy } from './policies.js';
+import { resolvePolicy, type RateLimitPolicy } from './policies.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const LUA_SCRIPT = readFileSync(join(__dirname, 'token-bucket.lua'), 'utf8');
 
 interface AuthUser {
   readonly id: string;
-}
-
-function resolvePolicy(method: string, url: string): RateLimitPolicy {
-  const pathOnly = url.split('?')[0] ?? url;
-  const routeKey = `${method} ${pathOnly}`;
-
-  for (const [pattern, policy] of Object.entries(RATE_LIMIT_POLICIES)) {
-    if (routeKey === pattern || routeKey.startsWith(pattern.replace(':*', ''))) {
-      return policy;
-    }
-  }
-
-  if (pathOnly.startsWith('/api/v1/admin')) return RATE_LIMIT_POLICIES['ADMIN:*'] ?? DEFAULT_POLICY;
-
-  return DEFAULT_POLICY;
 }
 
 function bucketKey(policy: RateLimitPolicy, request: FastifyRequest): string {

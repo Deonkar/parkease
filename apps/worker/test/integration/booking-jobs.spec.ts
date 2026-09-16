@@ -135,7 +135,12 @@ describe('booking worker jobs', () => {
   beforeAll(async () => {
     pg = await startPgContainer();
     await runMigrations(pg.connectionString);
-    deps = { db: drizzle(pg.sql) as unknown as JobDeps['db'], boss: {} as JobDeps['boss'] };
+    deps = {
+      db: drizzle(pg.sql) as unknown as JobDeps['db'],
+      boss: {} as JobDeps['boss'],
+      // No booking job touches the cache; only surge does.
+      redis: {} as JobDeps['redis'],
+    };
   }, 300_000);
 
   afterAll(async () => {

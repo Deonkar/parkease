@@ -113,6 +113,8 @@ beforeAll(async () => {
   deps = {
     db: drizzle(pg.sql) as unknown as JobDeps['db'],
     boss: {} as JobDeps['boss'],
+    // No payment job touches the cache; only surge does.
+    redis: {} as JobDeps['redis'],
   };
 }, 300_000);
 

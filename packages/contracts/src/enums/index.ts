@@ -38,3 +38,11 @@ export {
 } from './ledger-direction.js';
 export { OUTBOX_STATUS_VALUES, outboxStatusSchema, OutboxStatus } from './outbox-status.js';
 export { CHECK_IN_METHOD_VALUES, checkInMethodSchema, CheckInMethod } from './check-in-method.js';
+export {
+  SURGE_BADGE_VALUES,
+  surgeBadgeSchema,
+  SurgeBadge,
+  SURGE_BADGE_LABELS,
+  SURGE_BADGE_INTENSITY,
+  SURGE_METER_SEGMENTS,
+} from './surge-badge.js';

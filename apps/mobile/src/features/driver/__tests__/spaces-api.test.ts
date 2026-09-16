@@ -28,6 +28,7 @@ const ITEM = {
   availableSlots: { car: 1, twoWheeler: 3 },
   basePricePaise: 3000,
   surgeMultiplier: 1,
+  surgeBadge: null,
   effectivePricePaise: 3000,
   isOpenNow: true,
 };

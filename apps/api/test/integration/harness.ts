@@ -1,3 +1,9 @@
+import {
+  BASIS_POINTS,
+  DEFAULT_SURGE_TIERS,
+  NO_SURGE_BP,
+  type SurgeSnapshot,
+} from '@parkease/contracts/admin';
 import type { Amenity } from '@parkease/contracts/enums';
 import { spacePricingSchema, type SpaceSchedule } from '@parkease/contracts/owner';
 import { drizzle } from 'drizzle-orm/postgres-js';
@@ -27,27 +33,68 @@ export class FakeRedis {
   private readonly store = new Map<string, string>();
   private failing = false;
 
+  /**
+   * Commands issued since the last reset, by name. This is the N+1 guard for
+   * the surge path (R-PERF-02): v1 issued one GET per space, up to 20 round
+   * trips on the endpoint with a 200ms p95 budget, and a counter is the only
+   * thing that can tell one MGET from twenty GETs after the fact — both return
+   * the same answer, and only one of them is affordable.
+   */
+  /**
+   * Every command issued since the last reset, with the keys it touched.
+   *
+   * The keys matter, not just a tally: the search *cache* legitimately issues
+   * its own GET on every request, so a bare "no GETs" assertion fails on
+   * entirely correct code. What the N+1 guard actually means is "no GET against
+   * a `surge:` key". A separate count map alongside this was a second copy of
+   * the same fact — `countOf` derives it instead.
+   */
+  readonly reads: { command: string; keys: string[] }[] = [];
+
+  private record(command: string, keys: string[]): void {
+    this.reads.push({ command, keys });
+  }
+
+  resetCommands(): void {
+    this.reads.length = 0;
+  }
+
+  countOf(command: string): number {
+    return this.reads.filter((r) => r.command === command).length;
+  }
+
+  /** Reads of keys under a prefix, by command — the per-path N+1 guard. */
+  readsMatching(command: string, prefix: string): number {
+    return this.reads.filter(
+      (r) => r.command === command && r.keys.some((k) => k.startsWith(prefix)),
+    ).length;
+  }
+
   fail(): void {
     this.failing = true;
   }
 
   clear(): void {
     this.store.clear();
+    this.resetCommands();
     this.failing = false;
   }
 
   get(key: string): Promise<string | null> {
+    this.record('get', [key]);
     if (this.failing) return Promise.reject(new Error('ECONNREFUSED'));
     return Promise.resolve(this.store.get(key) ?? null);
   }
 
   set(key: string, value: string): Promise<string> {
+    this.record('set', [key]);
     if (this.failing) return Promise.reject(new Error('ECONNREFUSED'));
     this.store.set(key, value);
     return Promise.resolve('OK');
   }
 
   mget(keys: string[]): Promise<(string | null)[]> {
+    this.record('mget', keys);
     if (this.failing) return Promise.reject(new Error('ECONNREFUSED'));
     return Promise.resolve(keys.map((k) => this.store.get(k) ?? null));
   }
@@ -288,10 +335,28 @@ export async function seedBooking(h: Harness, opts: SeedBookingOptions): Promise
   return booking.id;
 }
 
+/**
+ * A `surge:{zone}` value exactly as the worker writes it: a `SurgeSnapshot` in
+ * integer basis points, carrying the tier's own badge.
+ *
+ * Tests still say `surgePayload(1.5)`, because "1.5x" is how the fixture reads
+ * — the conversion happens here, in one place. The badge is not decorative:
+ * `surgeSnapshotSchema` refuses a surging snapshot that names no tier, so a
+ * payload without one would be read back as no surge at all.
+ */
 export function surgePayload(multiplier: number): string {
-  return JSON.stringify({
-    multiplier,
-    tier: 'high_demand',
+  const multiplierBp = Math.round(multiplier * BASIS_POINTS);
+  const tier = [...DEFAULT_SURGE_TIERS]
+    .reverse()
+    .find((t) => t.multiplierBp <= multiplierBp && t.badge !== null);
+
+  const snapshot: SurgeSnapshot = {
+    multiplierBp,
+    badge: multiplierBp === NO_SURGE_BP ? null : (tier?.badge ?? 'very_high_demand'),
+    occupancyBp: 8_000,
+    appliedModifiers: [],
     calculatedAt: new Date().toISOString(),
-  });
+  };
+
+  return JSON.stringify(snapshot);
 }

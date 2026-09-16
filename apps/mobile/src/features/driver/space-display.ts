@@ -1,6 +1,10 @@
 import type { SpaceSearchItem } from '@parkease/contracts/driver';
 import type { Amenity, DurationType } from '@parkease/contracts/enums';
 
+// From the copy module, not the component: this file is deliberately free of
+// React, and reaching into a .tsx would drag `react-native` into every
+// node-environment suite that imports it (learnings.md).
+import { surgeSpokenLabel } from '@/features/shared/surge-copy';
 import { formatPaise } from '@/lib/money';
 
 /**
@@ -95,6 +99,18 @@ export function spaceAccessibilityLabel(item: SpaceSearchItem, duration: Duratio
     slotPhrase(item.availableSlots.car, 'car'),
     slotPhrase(item.availableSlots.twoWheeler, 'two-wheeler'),
   ];
+  // Surge belongs in *this* label, not only on the badge.
+  //
+  // The list row wraps the whole card in a Pressable carrying an explicit
+  // accessibilityLabel, which collapses the subtree into one accessible node —
+  // so `SurgeBadge`'s own spoken label is unreachable to TalkBack here, even
+  // though it works on `SpacePreviewCard`, which scopes its grouping to the
+  // header instead. Without this line a screen-reader user is read a surged
+  // price and never told it is surged, which is the one thing about a surged
+  // price that matters.
+  if (item.surgeBadge !== null) {
+    parts.push(surgeSpokenLabel(item.surgeBadge, item.surgeMultiplier));
+  }
   if (!item.isOpenNow) parts.push('closed now');
   return parts.join(', ');
 }

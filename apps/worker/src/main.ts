@@ -2,7 +2,7 @@ import { db } from '@parkease/db';
 import PgBoss from 'pg-boss';
 
 import { env } from './config/env.js';
-import type { JobDeps } from './deps.js';
+import { closeRedis, type JobDeps, redisClient } from './deps.js';
 import { registerHandlers } from './handlers.js';
 import { logger } from './logger.js';
 import { registerSchedule } from './schedule.js';
@@ -20,7 +20,7 @@ boss.on('error', (error: Error) => {
 
 await boss.start();
 
-const deps: JobDeps = { db, boss };
+const deps: JobDeps = { db, boss, redis: redisClient() };
 
 await registerHandlers(boss, deps);
 await registerSchedule(boss);
@@ -29,8 +29,11 @@ logger.info({ schema: 'pgboss' }, 'worker started');
 
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
-    void boss.stop({ graceful: true }).then(() => {
-      process.exit(0);
-    });
+    void boss
+      .stop({ graceful: true })
+      .then(closeRedis)
+      .then(() => {
+        process.exit(0);
+      });
   });
 }

@@ -1,12 +1,14 @@
 import { Injectable } from '@nestjs/common';
-import type { DurationType, VehicleType } from '@parkease/contracts/enums';
+import { NO_SURGE_SNAPSHOT } from '@parkease/contracts/admin';
+import type { DurationType, SurgeBadge, VehicleType } from '@parkease/contracts/enums';
 import { type Quote, quote } from '@parkease/contracts/money';
 import type { SpacePricing } from '@parkease/contracts/owner';
-import { toPaise, toRate } from '@parkease/contracts/primitives';
+import { toPaise } from '@parkease/contracts/primitives';
 
-import { NO_SURGE, SurgeService } from '../surge/surge.service.js';
+import { SurgeService } from '../surge/surge.service.js';
 
 import { basePriceFor } from './duration.js';
+import { surgeRateOf } from './surge-rate.js';
 
 export interface QuoteForBookingInput {
   readonly pricing: SpacePricing;
@@ -28,7 +30,16 @@ export interface QuoteForExtensionInput {
   readonly surgeMultiplierBp: number;
 }
 
-const BASIS_POINTS = 10_000;
+/**
+ * A quote plus the name of the tier its multiplier came from.
+ *
+ * The badge is not derivable from `surgeMultiplierBp` without re-implementing
+ * the ladder, and a ladder re-implemented in a second place is how the chip and
+ * the price come to disagree. It rides along with the number it belongs to.
+ */
+export interface BookingQuote extends Quote {
+  readonly surgeBadge: SurgeBadge | null;
+}
 
 @Injectable()
 export class PricingQuoteService {
@@ -43,9 +54,9 @@ export class PricingQuoteService {
    * Holding a Postgres transaction across a Redis round trip is how connection
    * pools die (R-BE-04).
    */
-  async forBooking(input: QuoteForBookingInput): Promise<Quote> {
-    const multipliers = await this.surge.multipliersFor([input.zoneId]);
-    const surgeMultiplier = multipliers.get(input.zoneId) ?? NO_SURGE;
+  async forBooking(input: QuoteForBookingInput): Promise<BookingQuote> {
+    const snapshots = await this.surge.multipliersFor([input.zoneId]);
+    const snapshot = snapshots.get(input.zoneId) ?? NO_SURGE_SNAPSHOT;
 
     const basePaise = basePriceFor(
       input.pricing,
@@ -55,7 +66,10 @@ export class PricingQuoteService {
       input.endsAt,
     );
 
-    return quote({ basePaise, surgeMultiplier: toRate(surgeMultiplier) });
+    return {
+      ...quote({ basePaise, surgeMultiplier: surgeRateOf(snapshot.multiplierBp) }),
+      surgeBadge: snapshot.badge,
+    };
   }
 
   /**
@@ -72,7 +86,7 @@ export class PricingQuoteService {
    * multiplier to consult, by design.
    */
   forExtension(input: QuoteForExtensionInput): Quote {
-    const surgeMultiplier = toRate(input.surgeMultiplierBp / BASIS_POINTS);
+    const surgeMultiplier = surgeRateOf(input.surgeMultiplierBp);
 
     const priceUpTo = (endsAt: Date): number =>
       basePriceFor(input.pricing, input.vehicleType, input.durationType, input.startsAt, endsAt);

@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { bookingStatusSchema } from '../enums/booking-status.js';
 import { durationTypeSchema } from '../enums/duration-type.js';
+import { surgeBadgeSchema } from '../enums/surge-badge.js';
 import { vehicleTypeSchema } from '../enums/vehicle-type.js';
 import { bookingIdSchema, spaceIdSchema } from '../primitives/ids.js';
 import { vehicleNumberSchema } from '../primitives/indian.js';
@@ -34,6 +35,16 @@ export const quoteBreakdownSchema = z.object({
   totalPaise: paiseSchema,
   ownerEarningsPaise: paiseSchema,
   surgeMultiplierBp: z.number().int().min(10_000).max(30_000),
+  /**
+   * The tier the multiplier belongs to, travelling with the number it names.
+   *
+   * Without it the Review & Pay screen had to source the badge from a separate
+   * space-detail fetch, so a surge recalculation landing between the two
+   * requests rendered "Surge (1.5x moderate demand)" — the current multiplier
+   * beside the previous tier's word, on the one screen whose purpose is to stop
+   * the driver being surprised. One fetch, one fact.
+   */
+  surgeBadge: surgeBadgeSchema.nullable(),
 });
 
 export type QuoteBreakdown = z.infer<typeof quoteBreakdownSchema>;
