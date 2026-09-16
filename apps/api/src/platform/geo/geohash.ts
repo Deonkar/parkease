@@ -8,11 +8,20 @@
  * set — a silent disagreement would mean "no surge, ever".
  */
 
+import { ZONE_GEOHASH_PRECISION } from '@parkease/contracts/admin';
+
 const BASE32 = '0123456789bcdefghjkmnpqrstuvwxyz';
 const BITS_PER_CHAR = 5;
 
-/** Precision 6 is a ~1.2km x 0.6km cell — the surge zone granularity. */
-export const ZONE_PRECISION = 6;
+/**
+ * Re-exported, not redeclared. This value, the worker's `ST_GeoHash(location, N)`
+ * and the zone id regex all have to agree, and two of them live in a different
+ * deployable — so contracts owns it and everyone imports. They each used to
+ * carry their own `6`; all three were right, and nothing would have caught it if
+ * one had drifted, because a mismatch means every lookup misses and surge simply
+ * never appears.
+ */
+export const ZONE_PRECISION = ZONE_GEOHASH_PRECISION;
 
 export interface GeoPointInput {
   readonly lat: number;

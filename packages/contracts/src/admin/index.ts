@@ -33,6 +33,7 @@ export {
   type PeakWindow,
   surgeConfigSchema,
   type SurgeConfig,
+  ZONE_GEOHASH_PRECISION,
   zoneIdSchema,
   type ZoneId,
   surgeZoneOverrideInputSchema,

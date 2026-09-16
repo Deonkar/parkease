@@ -153,10 +153,32 @@ export const surgeConfigSchema = z.object(surgeConfigShape).refine(capIsReachabl
 });
 export type SurgeConfig = z.infer<typeof surgeConfigSchema>;
 
-/** Lowercase geohash base32, exactly six characters — ZONE_PRECISION. */
+/**
+ * Surge zones are geohash cells, and this is the one place the precision is
+ * stated. Precision 6 is ~1.22km x 0.61km, matching the intended 1-2km zone;
+ * precision 5 is ~4.9km x 4.9km, roughly sixteen times the area, which averaged
+ * a blocked street together with a half-empty neighbourhood and produced no
+ * surge for either.
+ *
+ * It lives in contracts because three separate places have to agree on it and
+ * two of them are different deployables: the API's `zoneIdFor`, the worker's
+ * `ST_GeoHash(location, N)`, and the zone id regex below. They each used to
+ * declare their own `6`. All three were correct, and nothing would have caught
+ * it if one had changed — a mismatch means every zone lookup misses, so surge
+ * simply never appears, with no error anywhere to explain why.
+ *
+ * Changing this re-partitions every zone and invalidates every override, so it
+ * is a migration with an admin communication, not an edit.
+ */
+export const ZONE_GEOHASH_PRECISION = 6;
+
+/** Lowercase geohash base32, exactly `ZONE_GEOHASH_PRECISION` characters. */
 export const zoneIdSchema = z
   .string()
-  .regex(/^[0-9bcdefghjkmnpqrstuvwxyz]{6}$/, 'Not a geohash-6 zone');
+  .regex(
+    new RegExp(`^[0-9bcdefghjkmnpqrstuvwxyz]{${String(ZONE_GEOHASH_PRECISION)}}$`),
+    `Not a geohash-${String(ZONE_GEOHASH_PRECISION)} zone`,
+  );
 export type ZoneId = z.infer<typeof zoneIdSchema>;
 
 /**

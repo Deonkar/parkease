@@ -1,4 +1,4 @@
-import { zoneIdSchema, type ZoneId } from '@parkease/contracts/admin';
+import { ZONE_GEOHASH_PRECISION, zoneIdSchema, type ZoneId } from '@parkease/contracts/admin';
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 
@@ -16,7 +16,7 @@ import type { JobDeps } from '../../deps.js';
  * geohash over WGS84, so they agree (learnings.md verified `ST_GeoHash` against
  * a plain base32 encoder).
  */
-export const ZONE_GEOHASH_PRECISION = 6;
+export { ZONE_GEOHASH_PRECISION } from '@parkease/contracts/admin';
 
 export interface ZoneOccupancy {
   readonly zoneId: ZoneId;
