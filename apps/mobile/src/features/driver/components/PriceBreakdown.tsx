@@ -1,12 +1,23 @@
 import type { QuoteBreakdown } from '@parkease/contracts/driver';
+import { SURGE_BADGE_LABELS, type SurgeBadge } from '@parkease/contracts/enums';
 import type { Paise } from '@parkease/contracts/primitives';
 import { colors, fontSize, fontWeight, spacing } from '@parkease/tokens';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { formatPaise } from '@/lib/money';
 
+import { formatSurgeMultiplier } from '../../shared/components/SurgeBadge';
+
 interface PriceBreakdownProps {
   readonly quote: QuoteBreakdown;
+  /**
+   * The tier the server priced this quote at, when the screen has it. A booking
+   * read back from history does not — the quote carries the multiplier, not the
+   * tier — so the line degrades to the bare number rather than guessing a tier
+   * from it. Which multiplier means which tier is a DB-backed ladder the client
+   * has no copy of (task-10 §10.4).
+   */
+  readonly surgeBadge: SurgeBadge | null;
 }
 
 const BASIS_POINTS = 10_000;
@@ -23,9 +34,10 @@ const BASIS_POINTS = 10_000;
  * is exactly the bug the corrected model exists to remove (ADR-009,
  * website.md §2.7). If you are adding one, read the ADR first.
  */
-export function PriceBreakdown({ quote }: PriceBreakdownProps) {
+export function PriceBreakdown({ quote, surgeBadge }: PriceBreakdownProps) {
   const multiplier = quote.surgeMultiplierBp / BASIS_POINTS;
   const hasSurge = quote.surgePremiumPaise > 0;
+  const tier = surgeBadge === null ? '' : ` ${SURGE_BADGE_LABELS[surgeBadge]}`;
 
   return (
     <View style={styles.container}>
@@ -36,7 +48,7 @@ export function PriceBreakdown({ quote }: PriceBreakdownProps) {
       <Row label="Base price" value={quote.basePaise} />
       {hasSurge ? (
         <Row
-          label={`Surge (${multiplier.toFixed(1)}x high demand)`}
+          label={`Surge (${formatSurgeMultiplier(multiplier)}x${tier})`}
           value={quote.surgePremiumPaise}
         />
       ) : null}

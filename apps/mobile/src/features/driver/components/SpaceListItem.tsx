@@ -24,6 +24,7 @@ import Animated, {
 
 import { formatPaise } from '@/lib/money';
 
+import { SurgeBadge } from '../../shared/components/SurgeBadge';
 import {
   AMENITY_ICONS,
   AMENITY_LABELS,
@@ -34,7 +35,6 @@ import {
 } from '../space-display';
 
 import { SlotPill } from './SlotPill';
-import { SurgeBadge } from './SurgeBadge';
 
 const MAX_AMENITY_CHIPS = 2;
 
@@ -130,7 +130,7 @@ function SpaceListItemBase({ item, duration, index, onPress }: SpaceListItemProp
               open={item.isOpenNow}
             />
             {item.isOpenNow ? null : (
-              <View style={styles.inlineMeta}>
+              <View style={styles.closedChip}>
                 <MaterialCommunityIcons
                   name="clock-outline"
                   size={13}
@@ -141,7 +141,7 @@ function SpaceListItemBase({ item, duration, index, onPress }: SpaceListItemProp
             )}
           </View>
 
-          <SurgeBadge multiplier={item.surgeMultiplier} />
+          <SurgeBadge badge={item.surgeBadge} multiplier={item.surgeMultiplier} />
 
           <View style={styles.priceRow}>
             <Text style={styles.price}>
@@ -233,17 +233,38 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.primaryDark,
   },
-  // Closed means this space cannot be used at all, so it reads as a status
-  // rather than as another grey detail line like the address.
+  /**
+   * "Closed now" wears the same muted chip as an empty `SlotPill`, because it
+   * says the same thing: this space is not usable right now.
+   *
+   * It used to wear `colors.surge` on `colors.surgeSoft`. That was survivable
+   * while surge had no chip of its own; now a surging space shows a warm chip
+   * one row below, and two identically-coloured chips in one card meaning
+   * "expensive" and "shut" is exactly the glance the list cannot afford. The
+   * split is by role, not by loudness: warm belongs to the one element that
+   * explains the price, neutral to availability.
+   *
+   * Suppressing one when the other applies would be worse. A closed space still
+   * shows its surged price, and removing the badge would leave that number with
+   * nothing explaining it.
+   *
+   * The ink is `textTertiary` (4.94:1 on `mutedSoft`, AA) rather than
+   * `colors.muted`, which measures 4.34:1 there and misses — the same trap
+   * `errorInk` exists for. Weight 700 keeps it leading its own group.
+   */
+  closedChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.sm,
+    backgroundColor: colors.mutedSoft,
+  },
   closedText: {
     fontSize: fontSize.xs,
     fontWeight: '700',
-    color: colors.surge,
-    backgroundColor: colors.surgeSoft,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    borderRadius: radius.sm,
-    overflow: 'hidden',
+    color: colors.textTertiary,
   },
   priceRow: {
     flexDirection: 'row',

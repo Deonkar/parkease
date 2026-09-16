@@ -204,7 +204,7 @@ export default function ReviewAndPayScreen() {
           ) : quote.isError ? (
             <Text style={styles.quoteError}>{toApiFailure(quote.error).message}</Text>
           ) : (
-            <PriceBreakdown quote={quote.data.quote} />
+            <PriceBreakdown quote={quote.data.quote} surgeBadge={space?.surgeBadge ?? null} />
           )}
         </View>
 
