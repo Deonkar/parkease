@@ -33,27 +33,69 @@ export class FakeRedis {
   private readonly store = new Map<string, string>();
   private failing = false;
 
+  /**
+   * Commands issued since the last reset, by name. This is the N+1 guard for
+   * the surge path (R-PERF-02): v1 issued one GET per space, up to 20 round
+   * trips on the endpoint with a 200ms p95 budget, and a counter is the only
+   * thing that can tell one MGET from twenty GETs after the fact — both return
+   * the same answer, and only one of them is affordable.
+   */
+  readonly commands = new Map<string, number>();
+
+  /**
+   * Every read, with the keys it touched. The counts alone are not enough: the
+   * search *cache* legitimately issues its own GET on every request, so a bare
+   * "no GETs" assertion fails on correct code. What the guard actually means is
+   * "no GET against a `surge:` key", which needs the keys, not just a tally.
+   */
+  readonly reads: { command: string; keys: string[] }[] = [];
+
+  private record(command: string, keys: string[]): void {
+    this.commands.set(command, (this.commands.get(command) ?? 0) + 1);
+    this.reads.push({ command, keys });
+  }
+
+  resetCommands(): void {
+    this.commands.clear();
+    this.reads.length = 0;
+  }
+
+  countOf(command: string): number {
+    return this.commands.get(command) ?? 0;
+  }
+
+  /** Reads of keys under a prefix, by command — the per-path N+1 guard. */
+  readsMatching(command: string, prefix: string): number {
+    return this.reads.filter(
+      (r) => r.command === command && r.keys.some((k) => k.startsWith(prefix)),
+    ).length;
+  }
+
   fail(): void {
     this.failing = true;
   }
 
   clear(): void {
     this.store.clear();
+    this.resetCommands();
     this.failing = false;
   }
 
   get(key: string): Promise<string | null> {
+    this.record('get', [key]);
     if (this.failing) return Promise.reject(new Error('ECONNREFUSED'));
     return Promise.resolve(this.store.get(key) ?? null);
   }
 
   set(key: string, value: string): Promise<string> {
+    this.record('set', [key]);
     if (this.failing) return Promise.reject(new Error('ECONNREFUSED'));
     this.store.set(key, value);
     return Promise.resolve('OK');
   }
 
   mget(keys: string[]): Promise<(string | null)[]> {
+    this.record('mget', keys);
     if (this.failing) return Promise.reject(new Error('ECONNREFUSED'));
     return Promise.resolve(keys.map((k) => this.store.get(k) ?? null));
   }
