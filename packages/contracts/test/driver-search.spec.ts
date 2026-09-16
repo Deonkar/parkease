@@ -181,6 +181,7 @@ describe('spaceSearchItemSchema', () => {
     availableSlots: { car: 1, twoWheeler: 3 },
     basePricePaise: 3000,
     surgeMultiplier: 1,
+    surgeBadge: null,
     effectivePricePaise: 3000,
     isOpenNow: true,
   };
@@ -212,6 +213,25 @@ describe('spaceSearchItemSchema', () => {
 
   it('rejects a surge multiplier above the documented ceiling', () => {
     expect(spaceSearchItemSchema.safeParse({ ...item, surgeMultiplier: 3.1 }).success).toBe(false);
+  });
+
+  it('accepts each of the three surge tiers', () => {
+    for (const badge of ['moderate_demand', 'high_demand', 'very_high_demand'] as const) {
+      expect(spaceSearchItemSchema.safeParse({ ...item, surgeBadge: badge }).success).toBe(true);
+    }
+  });
+
+  it('rejects a surge tier the product has no badge for', () => {
+    // The client renders the badge from this field rather than deriving a tier
+    // from the multiplier, so an unknown tier would be a price with no words.
+    expect(spaceSearchItemSchema.safeParse({ ...item, surgeBadge: 'extreme' }).success).toBe(false);
+    expect(spaceSearchItemSchema.safeParse({ ...item, surgeBadge: '' }).success).toBe(false);
+  });
+
+  it('rejects a missing surge tier, so null is stated rather than implied', () => {
+    const withoutBadge: Record<string, unknown> = { ...item };
+    delete withoutBadge['surgeBadge'];
+    expect(spaceSearchItemSchema.safeParse(withoutBadge).success).toBe(false);
   });
 
   it('rejects a rating outside 1..5', () => {
