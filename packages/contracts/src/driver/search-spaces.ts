@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { amenitySchema } from '../enums/amenity.js';
 import { durationTypeSchema } from '../enums/duration-type.js';
+import { surgeBadgeSchema } from '../enums/surge-badge.js';
 import { vehicleTypeSchema } from '../enums/vehicle-type.js';
 import { SURGE_MULTIPLIER_MAX, SURGE_MULTIPLIER_MIN } from '../money/rates.js';
 import { spaceIdSchema } from '../primitives/ids.js';
@@ -81,6 +82,12 @@ export const spaceSearchItemSchema = z.object({
   }),
   basePricePaise: paiseSchema,
   surgeMultiplier: z.number().min(SURGE_MULTIPLIER_MIN).max(SURGE_MULTIPLIER_MAX),
+  /**
+   * The tier the multiplier belongs to, or null when the zone is not surging.
+   * The client renders the badge from this rather than deriving a tier from the
+   * number — one source for the words, so the badge always matches the price.
+   */
+  surgeBadge: surgeBadgeSchema.nullable(),
   /** basePricePaise x surgeMultiplier. Base plus surge, never GST (ADR-009). */
   effectivePricePaise: paiseSchema,
   isOpenNow: z.boolean(),

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { amenitySchema } from '../enums/amenity.js';
+import { surgeBadgeSchema } from '../enums/surge-badge.js';
 import { spaceScheduleSchema } from '../owner/space-schedule.js';
 import { spaceIdSchema } from '../primitives/ids.js';
 import { paiseSchema } from '../primitives/paise.js';
@@ -84,6 +85,8 @@ export const spaceDetailSchema = z.object({
   }),
   /** Displayed, never applied. The client does not compute prices (R-FE-06). */
   surgeMultiplier: z.number(),
+  /** The tier, or null when the zone is not surging. Drives the §2.6 banner. */
+  surgeBadge: surgeBadgeSchema.nullable(),
   /** null means never reviewed — the client renders "New", never a zero score. */
   rating: z.number().nullable(),
   reviewCount: z.number().int().nonnegative(),
