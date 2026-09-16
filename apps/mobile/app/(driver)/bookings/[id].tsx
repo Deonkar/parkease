@@ -125,7 +125,13 @@ export default function BookingDetailScreen() {
         )}
 
         <View style={styles.card}>
-          <PriceBreakdown quote={booking.quote} />
+          {/*
+            A booking read back from history carries the multiplier it was
+            priced at, but not the tier — the tier lives on the live space, and
+            re-deriving it here would mean the client owning a copy of a ladder
+            the admin can change (task-10 §10.4). The line names the number.
+          */}
+          <PriceBreakdown quote={booking.quote} surgeBadge={null} />
         </View>
 
         {actionError === null ? null : (

@@ -1,5 +1,5 @@
 import { spaceSearchItemSchema, type SpaceSearchItem } from '@parkease/contracts/driver';
-import type { Amenity } from '@parkease/contracts/enums';
+import type { Amenity, SurgeBadge } from '@parkease/contracts/enums';
 
 import type { SearchQueryParams, SpaceSearchPage } from './spaces';
 
@@ -51,6 +51,25 @@ const AMENITY_SETS: readonly (readonly Amenity[])[] = [
 
 const FIXTURE_COUNT = 64;
 
+/**
+ * The default ladder from task-10 §10.3, weighted so most spaces are not
+ * surging. Dev only — the live ladder is `surge_config.tiers` in the database
+ * and the client never derives a tier from a multiplier.
+ */
+const SURGE_FIXTURE_TIERS: readonly {
+  readonly surgeMultiplier: number;
+  readonly surgeBadge: SurgeBadge | null;
+}[] = [
+  { surgeMultiplier: 1, surgeBadge: null },
+  { surgeMultiplier: 1, surgeBadge: null },
+  { surgeMultiplier: 1.25, surgeBadge: 'moderate_demand' },
+  { surgeMultiplier: 1, surgeBadge: null },
+  { surgeMultiplier: 1.5, surgeBadge: 'high_demand' },
+  { surgeMultiplier: 1, surgeBadge: null },
+  { surgeMultiplier: 2, surgeBadge: 'very_high_demand' },
+  { surgeMultiplier: 1, surgeBadge: null },
+];
+
 /** Deterministic pseudo-random in [0,1) so the fixture set is stable across reloads. */
 function noise(seed: number): number {
   return (Math.sin(seed * 12.9898) * 43758.5453) % 1;
@@ -74,8 +93,14 @@ function buildFixture(index: number, originLat: number, originLng: number): Spac
   const rating = reviewCount === 0 ? null : Math.round((3 + positive(index + 97) * 2) * 10) / 10;
 
   const basePricePaise = (1 + Math.round(positive(index + 13) * 7)) * 1000;
-  const surged = positive(index + 53) > 0.78;
-  const surgeMultiplier = surged ? 1.5 : 1;
+  // Stands in for the server's tier snapshot, so every badge tier is walkable
+  // in a dev session. The real ladder is DB-backed and lives in the API.
+  const { surgeMultiplier, surgeBadge } = SURGE_FIXTURE_TIERS[
+    index % SURGE_FIXTURE_TIERS.length
+  ] ?? {
+    surgeMultiplier: 1,
+    surgeBadge: null,
+  };
 
   const car = Math.round(positive(index + 17) * 3);
   const twoWheeler = Math.round(positive(index + 23) * 4);
@@ -95,6 +120,7 @@ function buildFixture(index: number, originLat: number, originLng: number): Spac
     availableSlots: { car, twoWheeler },
     basePricePaise,
     surgeMultiplier,
+    surgeBadge,
     effectivePricePaise: Math.round(basePricePaise * surgeMultiplier),
     isOpenNow: positive(index + 41) > 0.15,
   });

@@ -12,7 +12,7 @@ import { formatPaise } from '@/lib/money';
 import { PhotoCarousel } from '../../../src/features/driver/components/PhotoCarousel';
 import { RateCardTable } from '../../../src/features/driver/components/RateCardTable';
 import { SlotPill } from '../../../src/features/driver/components/SlotPill';
-import { SurgeBadge } from '../../../src/features/driver/components/SurgeBadge';
+import { SurgeBanner } from '../../../src/features/driver/components/SurgeBanner';
 import { useSpaceDetail } from '../../../src/features/driver/hooks/useBookings';
 import { ScreenHeader } from '../../../src/features/shared/components/ScreenHeader';
 
@@ -100,8 +100,6 @@ export default function SpaceDetailScreen() {
             </Text>
           </View>
 
-          <SurgeBadge multiplier={space.surgeMultiplier} />
-
           <Section title="Available now">
             <View style={styles.pillRow}>
               {space.totalSlots.car > 0 ? (
@@ -123,6 +121,17 @@ export default function SpaceDetailScreen() {
                   : 'Closed right now'}
             </Text>
           </Section>
+
+          {/*
+            website.md §2.6: the surge banner sits above pricing, because the
+            rate card below it is base rates only. The driver has to meet the
+            multiplier before the numbers it applies to, not at Review & Pay.
+          */}
+          <SurgeBanner
+            badge={space.surgeBadge}
+            multiplier={space.surgeMultiplier}
+            style={styles.surgeBanner}
+          />
 
           {space.pricing.car !== null ? (
             <Section title="Car pricing">
@@ -294,6 +303,11 @@ const styles = StyleSheet.create({
   },
   section: {
     gap: spacing.sm,
+    marginTop: spacing.xl,
+  },
+  // Same rhythm as a section heading, so the banner reads as belonging to the
+  // pricing block below it rather than floating between two of them.
+  surgeBanner: {
     marginTop: spacing.xl,
   },
   sectionTitle: {
