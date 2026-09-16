@@ -16,7 +16,33 @@ export {
   ledgerEntrySchema,
   type LedgerEntry,
 } from './ledger-query.js';
-export { updateSurgeConfigSchema, type UpdateSurgeConfig } from './surge-config.js';
+export {
+  BASIS_POINTS,
+  NO_SURGE_BP,
+  SURGE_MODIFIER_VALUES,
+  surgeModifierSchema,
+  SurgeModifier,
+  surgeTierSchema,
+  type SurgeTier,
+  surgeTierLadderSchema,
+  DEFAULT_SURGE_TIERS,
+  DAY_VALUES,
+  daySchema,
+  type Day,
+  peakWindowSchema,
+  type PeakWindow,
+  surgeConfigSchema,
+  type SurgeConfig,
+  zoneIdSchema,
+  type ZoneId,
+  surgeZoneOverrideInputSchema,
+  type SurgeZoneOverrideInput,
+  surgeZoneOverridePatchSchema,
+  type SurgeZoneOverridePatch,
+  surgeSnapshotSchema,
+  type SurgeSnapshot,
+  NO_SURGE_SNAPSHOT,
+} from './surge-config.js';
 export { moderateReviewSchema, type ModerateReview } from './moderate-review.js';
 export {
   auditQuerySchema,
