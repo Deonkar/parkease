@@ -16,8 +16,15 @@
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#4F46E5"
-      }
+        "backgroundColor": "#0369A1"
+      },
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION"
+      ]
     },
     "plugins": [
       "@react-native-firebase/app",
@@ -26,6 +33,14 @@
       "expo-router",
       "expo-secure-store",
       "expo-status-bar",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "ParkEase uses your location to find nearby parking and to show drivers where their car is.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
       [
         "expo-camera",
         {
