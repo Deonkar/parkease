@@ -64,3 +64,14 @@ export {
   RefundTier,
   resolveRefund,
 } from './refund-policy.js';
+
+export {
+  VALET_BASE_FEE_PAISE,
+  VALET_PER_KM_PAISE,
+  VALET_NO_SHOW_FEE_PAISE,
+  PARTNER_RATING_FLOOR_BP,
+} from './rates.js';
+
+export { computeValetLegFee, computeValetNoShowFee, type ValetLegFee } from './valet-fee.js';
+
+export { valetLegEntries, valetChargeAdjustmentEntries } from './ledger-entries.js';

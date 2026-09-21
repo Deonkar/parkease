@@ -16,6 +16,8 @@
     "@nestjs/common": "12.0.1",
     "@nestjs/core": "12.0.1",
     "@nestjs/platform-fastify": "12.0.1",
+    "@nestjs/platform-socket.io": "12.0.1",
+    "@nestjs/websockets": "12.0.1",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/auto-instrumentations-node": "^0.55.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.57.0",
@@ -24,6 +26,7 @@
     "@opentelemetry/semantic-conventions": "^1.30.0",
     "@parkease/contracts": "workspace:*",
     "@parkease/db": "workspace:*",
+    "@socket.io/redis-adapter": "8.3.0",
     "cloudinary": "^2.5.0",
     "fastify": "5.12.1",
     "firebase-admin": "^13.0.0",
@@ -33,6 +36,7 @@
     "razorpay": "2.9.8",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.1",
+    "socket.io": "4.8.3",
     "zod": "3.24.1"
   },
   "devDependencies": {
@@ -43,6 +47,7 @@
     "@types/supertest": "6.0.2",
     "file-type": "^19.6.0",
     "pino-pretty": "^13.0.0",
+    "socket.io-client": "4.8.3",
     "supertest": "7.0.0",
     "tsx": "4.19.2",
     "unplugin-swc": "1.6.0",

@@ -10,3 +10,12 @@ export {
   type ValetEarningEntry,
 } from './earnings.js';
 export { uploadDocumentSchema, type UploadDocument } from './profile-documents.js';
+
+export {
+  VALET_TRANSITIONS,
+  nextValetStatus,
+  isTerminalValetStatus,
+  valetHoldsVehicle,
+  TRACKED_VALET_STATUSES,
+  IllegalValetTransitionError,
+} from './lifecycle.js';
