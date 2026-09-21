@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   NotFoundException,
   Param,
   ParseUUIDPipe,
@@ -61,6 +63,7 @@ export class ValetJobsController {
   }
 
   @Post(':id/accept')
+  @HttpCode(HttpStatus.OK)
   async accept(
     @CurrentUser() user: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,
@@ -83,6 +86,7 @@ export class ValetJobsController {
    * should land — see `advanceValetJobSchema`.
    */
   @Post(':id/status')
+  @HttpCode(HttpStatus.OK)
   async status(
     @CurrentUser() user: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,
@@ -109,6 +113,7 @@ export class ValetJobsController {
    * loses signal should not have to re-upload to retry the status change.
    */
   @Post(':id/proof')
+  @HttpCode(HttpStatus.OK)
   async proof(
     @CurrentUser() user: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,

@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   NotFoundException,
   Param,
   ParseUUIDPipe,
@@ -81,6 +83,7 @@ export class DriverValetController {
   }
 
   @Post('requests/:id/return')
+  @HttpCode(HttpStatus.OK)
   async return(
     @CurrentUser() user: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,
@@ -99,6 +102,7 @@ export class DriverValetController {
   }
 
   @Post('requests/:id/cancel')
+  @HttpCode(HttpStatus.OK)
   async cancel(
     @CurrentUser() user: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,
