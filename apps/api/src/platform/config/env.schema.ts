@@ -40,6 +40,21 @@ const envSchema = z.object({
       .filter(Boolean),
   ),
 
+  /**
+   * §11.9. Valet ships without in-app calling if no telephony provider is ready,
+   * and the behaviour in that case is defined rather than improvised: the
+   * [Call Valet] control is hidden rather than rendered disabled, and its place
+   * is taken by a support thread carrying the job id.
+   *
+   * Defaults to false, so calling is off unless somebody turns it on. Flipping
+   * it with the no-op provider still bound changes nothing — ContactChannelService
+   * requires both the flag and a provider that reports itself enabled.
+   */
+  MASKED_CALLING_ENABLED: z
+    .string()
+    .optional()
+    .transform((value) => value === 'true'),
+
   OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
   SENTRY_DSN: z.string().url().optional(),
 });

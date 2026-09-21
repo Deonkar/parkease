@@ -3,9 +3,11 @@ import {
   LedgerAccount as Account,
   type LedgerDirection,
 } from '../enums/index.js';
+import { subPaise } from '../primitives/paise.js';
 
 import { allocateProportionally } from './allocate.js';
 import { type RefundOutcome, RefundTier } from './refund-policy.js';
+import type { ValetLegFee } from './valet-fee.js';
 
 /**
  * Not an HTTP-shaped failure with friendly copy: an unbalanced posting is a bug
@@ -26,6 +28,17 @@ export interface LedgerEntryDraft {
   readonly direction: LedgerDirection;
   readonly amountPaise: number;
   readonly description: string;
+  /**
+   * Whose side of this account the row belongs to, when the posting as a whole
+   * has no single answer.
+   *
+   * A booking posting has one counterparty and `LedgerService` stamps it on
+   * every row. A valet leg does not: `owner_payable` belongs to the valet and
+   * the other three belong to nobody, so tagging the whole posting would put
+   * the valet's id on the driver's receivable and the earnings query would
+   * count it twice (§11.6). Set here, this wins over the posting-level value.
+   */
+  readonly counterpartyUserId?: string;
 }
 
 /**
@@ -51,8 +64,19 @@ const leg = (
   direction: LedgerDirection,
   amountPaise: number,
   description: string,
+  counterpartyUserId?: string,
 ): readonly LedgerEntryDraft[] =>
-  amountPaise > 0 ? [{ account, direction, amountPaise, description }] : [];
+  amountPaise > 0
+    ? [
+        {
+          account,
+          direction,
+          amountPaise,
+          description,
+          ...(counterpartyUserId === undefined ? {} : { counterpartyUserId }),
+        },
+      ]
+    : [];
 
 /**
  * A booking is created: the driver owes us the total, and that total is already
@@ -107,6 +131,12 @@ export function reverseEntries(
     direction: entry.direction === 'debit' ? ('credit' as const) : ('debit' as const),
     amountPaise: entry.amountPaise,
     description,
+    // Carried, not dropped. A reversal that loses the counterparty leaves the
+    // credit attributed to a valet and the debit attributed to nobody, so the
+    // earnings balance never comes back down and the ledger still "balances".
+    ...(entry.counterpartyUserId === undefined
+      ? {}
+      : { counterpartyUserId: entry.counterpartyUserId }),
   }));
 }
 
@@ -282,5 +312,91 @@ export function promoBookingEntries(
     ...leg(Account.OWNER_PAYABLE, 'credit', totals.ownerEarningsPaise, description),
     ...leg(Account.PLATFORM_REVENUE, 'credit', totals.parkeaseFeePaise, description),
     ...leg(Account.GST_PAYABLE, 'credit', totals.gstPaise, description),
+  ];
+}
+
+/**
+ * One valet leg, on the books. §11.6.
+ *
+ * The driver owes the fee plus GST; the valet is credited the fee less our
+ * commission; we take the commission; the tax authority is owed GST on the
+ * commission alone. `computeValetLegFee` has already asserted that the three
+ * credits sum to the debit, so this function recomputes nothing.
+ *
+ * `owner_payable` is the platform's payable-to-supplier account, not an
+ * owner-only account (ADR-008). A valet's balance and a space owner's balance
+ * are the same query with a different `counterparty_user_id`, which is why this
+ * does not invent a `partner_payable` that would fork every payout,
+ * reconciliation and statement query in tasks 15 and 16.
+ */
+export function valetLegEntries(
+  fee: ValetLegFee,
+  valetUserId: string,
+  description: string,
+): readonly LedgerEntryDraft[] {
+  return [
+    ...leg(Account.DRIVER_RECEIVABLE, 'debit', fee.driverTotalPaise, description),
+    ...leg(Account.OWNER_PAYABLE, 'credit', fee.valetEarningsPaise, description, valetUserId),
+    ...leg(Account.PLATFORM_REVENUE, 'credit', fee.commissionPaise, description),
+    ...leg(Account.GST_PAYABLE, 'credit', fee.gstPaise, description),
+  ];
+}
+
+/**
+ * The driver did not turn up, or cancelled after the valet was dispatched. §11.8.
+ *
+ * The outbound leg was already charged at accept, so this gives back the
+ * *difference* between what was charged and what is retained rather than
+ * charging the call-out on top of a full leg. Each of the three credits the
+ * original posting made is debited by its own overage, and the total goes to
+ * `refunds_payable` — the liability we owe the driver, discharged when the
+ * gateway confirms the money moved (`refundSettledEntries`).
+ *
+ * Returns an empty posting when there is nothing to give back. That is not a
+ * balanced zero set: `assertEntriesBalance` rejects an empty posting, so the
+ * caller must skip the write rather than hand this straight to the ledger.
+ */
+export function valetChargeAdjustmentEntries(
+  charged: ValetLegFee,
+  retained: ValetLegFee,
+  valetUserId: string,
+  description: string,
+): readonly LedgerEntryDraft[] {
+  if (retained.driverTotalPaise > charged.driverTotalPaise) {
+    throw new RangeError(
+      `Refusing to retain ${String(retained.driverTotalPaise)} paise against a charge of ` +
+        `${String(charged.driverTotalPaise)} paise: an adjustment cannot refund more than was charged`,
+    );
+  }
+
+  // subPaise, not a raw minus. Paise is a non-negative brand and subPaise is
+  // where that brand is enforced; subtracting with `-` bypasses the underflow
+  // guard and leans on an unstated monotonicity argument between two separate
+  // computeValetLegFee calls. One edit to the fee model away from that
+  // invariant would post a silently negative ledger entry instead of throwing.
+  const refundPaise = subPaise(charged.driverTotalPaise, retained.driverTotalPaise);
+  if (refundPaise === 0) return [];
+
+  return [
+    ...leg(
+      Account.OWNER_PAYABLE,
+      'debit',
+      subPaise(charged.valetEarningsPaise, retained.valetEarningsPaise),
+      description,
+      valetUserId,
+    ),
+    ...leg(
+      Account.PLATFORM_REVENUE,
+      'debit',
+      subPaise(charged.commissionPaise, retained.commissionPaise),
+      description,
+    ),
+    ...leg(
+      Account.GST_PAYABLE,
+      'debit',
+      subPaise(charged.gstPaise, retained.gstPaise),
+      description,
+    ),
+    ...leg(Account.REFUNDS_PAYABLE, 'credit', refundPaise, description),
   ];
 }

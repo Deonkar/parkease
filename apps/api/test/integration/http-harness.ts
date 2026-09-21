@@ -16,6 +16,7 @@ import { RAZORPAY } from '../../src/domains/payment/razorpay.client.js';
 import { PricingModule } from '../../src/domains/pricing/pricing.module.js';
 import { SpaceModule } from '../../src/domains/space/space.module.js';
 import { SurgeModule } from '../../src/domains/surge/surge.module.js';
+import { ValetModule } from '../../src/domains/valet/valet.module.js';
 import type { AuthUser } from '../../src/platform/auth/current-user.decorator.js';
 import { IS_PUBLIC_KEY } from '../../src/platform/auth/public.decorator.js';
 import { DB, DbModule } from '../../src/platform/db/db.module.js';
@@ -28,13 +29,19 @@ import { OutboxModule } from '../../src/platform/outbox/outbox.module.js';
 import { ActiveRoleGuard } from '../../src/platform/rbac/active-role.guard.js';
 import { RolesGuard } from '../../src/platform/rbac/roles.guard.js';
 import { REDIS, RedisModule } from '../../src/platform/redis/redis.module.js';
+import { TelephonyModule } from '../../src/platform/telephony/telephony.module.js';
 import { AdminSurgeController } from '../../src/roles/admin/surge.controller.js';
 import { DriverBookingsController } from '../../src/roles/driver/bookings.controller.js';
 import { DriverPaymentsController } from '../../src/roles/driver/payments.controller.js';
 import { DriverQuotesController } from '../../src/roles/driver/quotes.controller.js';
 import { DriverSearchController } from '../../src/roles/driver/search.controller.js';
+import { DriverValetController } from '../../src/roles/driver/valet.controller.js';
 import { OwnerBookingsController } from '../../src/roles/owner/bookings.controller.js';
 import { RazorpayWebhookController } from '../../src/roles/public/webhooks/razorpay.controller.js';
+import { ValetAvailabilityController } from '../../src/roles/valet/availability.controller.js';
+import { ValetEarningsController } from '../../src/roles/valet/earnings.controller.js';
+import { ValetJobsController } from '../../src/roles/valet/jobs.controller.js';
+import { ValetProfileController } from '../../src/roles/valet/profile.controller.js';
 
 import type { Harness } from './harness.js';
 
@@ -91,11 +98,20 @@ class StubAuthGuard implements CanActivate {
     ObservabilityModule,
     OutboxModule,
     IdempotencyModule,
+    // Binds the no-op masked-call provider, so contact resolution in the driver
+    // view answers the support path exactly as it does at launch.
+    TelephonyModule,
     SpaceModule,
     SurgeModule,
     PricingModule,
     BookingModule,
     PaymentModule,
+    // Domain only. The tracking gateway is deliberately absent: it needs
+    // AuthModule, which is out of this module because FirebaseVerifierService
+    // throws on fake credentials. The controllers depend on
+    // ValetTrackingPublisher, which ValetModule provides — so a status push in
+    // a test is a no-op with no server attached, exactly as it is at boot.
+    ValetModule,
   ],
   controllers: [
     AdminSurgeController,
@@ -105,6 +121,11 @@ class StubAuthGuard implements CanActivate {
     DriverPaymentsController,
     OwnerBookingsController,
     RazorpayWebhookController,
+    DriverValetController,
+    ValetJobsController,
+    ValetAvailabilityController,
+    ValetEarningsController,
+    ValetProfileController,
   ],
   providers: [
     // Registered exactly as AppModule does, and in its order. This is the whole

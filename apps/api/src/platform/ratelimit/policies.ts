@@ -30,7 +30,30 @@ export const RATE_LIMIT_POLICIES: Readonly<Record<string, RateLimitPolicy>> = {
   // user to key by, and `failClosed` is deliberately absent: dropping a capture
   // event because Redis blinked is worse than serving it.
   'POST /api/v1/webhooks/razorpay': { limit: 300, windowSeconds: 60, keyBy: 'ip' },
+  // Valet (task 11 §11.10).
+  //
+  // The accept budget is the loose one on purpose: losing a race is a 409, and a
+  // valet whose first four taps lose should not then be rate-limited out of the
+  // fifth job they might actually win.
+  //
+  // Documents are the tight one, for the opposite reason: it is the only
+  // unauthenticated-in-spirit write here — anyone with a valet token can push a
+  // file id at it — and five a minute is more than any honest partner needs.
+  'GET /api/v1/valet/jobs/offers': { limit: 60, windowSeconds: 60, keyBy: 'user' },
+  'GET /api/v1/valet/jobs/active': { limit: 60, windowSeconds: 60, keyBy: 'user' },
   'POST /api/v1/valet/jobs/:id/accept': { limit: 30, windowSeconds: 60, keyBy: 'user' },
+  'POST /api/v1/valet/jobs/:id/status': { limit: 30, windowSeconds: 60, keyBy: 'user' },
+  'POST /api/v1/valet/jobs/:id/proof': { limit: 10, windowSeconds: 60, keyBy: 'user' },
+  // A heartbeat, so this is the one route a healthy client hits on a timer.
+  'PATCH /api/v1/valet/availability': { limit: 60, windowSeconds: 60, keyBy: 'user' },
+  'GET /api/v1/valet/earnings': { limit: 30, windowSeconds: 60, keyBy: 'user' },
+  'GET /api/v1/valet/profile': { limit: 30, windowSeconds: 60, keyBy: 'user' },
+  'POST /api/v1/valet/profile/documents': { limit: 5, windowSeconds: 60, keyBy: 'user' },
+
+  'POST /api/v1/driver/valet/requests': { limit: 10, windowSeconds: 60, keyBy: 'user' },
+  'GET /api/v1/driver/valet/requests/:id': { limit: 60, windowSeconds: 60, keyBy: 'user' },
+  'POST /api/v1/driver/valet/requests/:id/return': { limit: 10, windowSeconds: 60, keyBy: 'user' },
+  'POST /api/v1/driver/valet/requests/:id/cancel': { limit: 10, windowSeconds: 60, keyBy: 'user' },
   'POST /api/v1/owner/spaces': { limit: 10, windowSeconds: 60, keyBy: 'user' },
   'PUT /api/v1/owner/spaces/:id': { limit: 20, windowSeconds: 60, keyBy: 'user' },
   'DELETE /api/v1/owner/spaces/:id': { limit: 10, windowSeconds: 60, keyBy: 'user' },

@@ -36,7 +36,16 @@ export async function postLedger(
       amountPaise: entry.amountPaise,
       description: entry.description,
       bookingId: posting.bookingId ?? null,
-      counterpartyUserId: posting.counterpartyUserId ?? null,
+      /**
+       * Entry-level wins over posting-level.
+       *
+       * A booking posting has one counterparty and stamps it on every row. A
+       * valet leg does not: `owner_payable` belongs to the valet and the other
+       * three belong to nobody, so a posting-level stamp would put the valet's
+       * id on the driver's receivable and the earnings query — which filters
+       * `owner_payable` by counterparty — would count the wrong rows (§11.6).
+       */
+      counterpartyUserId: entry.counterpartyUserId ?? posting.counterpartyUserId ?? null,
     })),
   );
 
