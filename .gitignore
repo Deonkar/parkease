@@ -44,3 +44,6 @@ Thumbs.db
 # Keeping it untracked preserves CNG; committing it means owning these files forever.
 apps/mobile/android/
 apps/mobile/ios/
+
+# Graphify knowledge graph — generated locally, each machine builds its own (ADR-028)
+graphify-out/

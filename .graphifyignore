@@ -1,0 +1,47 @@
+# Graphify extraction excludes — ParkEase (ADR-028)
+#
+# This file is authoritative when graphify runs with --no-gitignore, which is how
+# ParkEase builds its graph: docs/, CLAUDE.md and learnings.md are .gitignore'd here
+# (they are kept local), but they are the governance chain and the single most
+# valuable thing in the graph. So .gitignore is bypassed and THIS file carries the
+# exclusions instead.
+#
+# Rule: secrets never enter the graph. graph.json is plain text on disk and the
+# semantic pass can send file content to a model backend. R-ENV-05.
+
+# Secrets — never extract, never infer, never embed
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.keystore
+*.jks
+google-services.json
+**/secrets/
+
+# Dependencies and stores
+node_modules/
+.pnpm-store/
+.venv/
+__pycache__/
+
+# Build output
+dist/
+build/
+.next/
+.turbo/
+.expo/
+coverage/
+*.tsbuildinfo
+apps/mobile/android/
+apps/mobile/ios/
+
+# VCS and tooling internals
+.git/
+graphify-out/
+
+# Lockfiles — huge, no architectural signal
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
