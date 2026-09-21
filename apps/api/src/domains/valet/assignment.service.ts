@@ -43,6 +43,14 @@ export class AssignmentService {
    * visibly*: a single query that silently accepted anyone when the filtered set
    * came back empty would be indistinguishable from having no floor at all,
    * which is how v1 shipped a rating rule that existed only in prose.
+   *
+   * The cost is explicit: when the floored pass returns nothing this is
+   * **O(2 x scan)**, not O(1) — the full radius search with all six filters runs
+   * a second time, and it does so at exactly the moment latency matters most,
+   * with a driver already waiting. That is the accepted trade. Collapsing it to
+   * one query would mean losing the ability to tell "nobody clears the floor"
+   * from "nobody is here", which is the distinction the warning log exists to
+   * report and the one ops needs to decide between recruiting and relaxing.
    */
   async findCandidates(input: FindCandidatesInput): Promise<OfferCandidate[]> {
     const aboveFloor = await this.query(input, true);
