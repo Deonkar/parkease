@@ -1,4 +1,5 @@
-import { colors, fontSize, fontWeight, spacing } from '@parkease/tokens';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { colors, fontSize, fontWeight, radius, spacing } from '@parkease/tokens';
 import { ErrorState, Skeleton } from '@parkease/ui-native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Linking, StyleSheet, Text, View } from 'react-native';
@@ -28,6 +29,36 @@ const errorEnvelopeSchema = z.object({
 function errorCodeOf(error: unknown): string | null {
   const parsed = errorEnvelopeSchema.safeParse(error);
   return parsed.success ? parsed.data.response.data.error.code : null;
+}
+
+/**
+ * The two empty states are NOT the same state, and were shipping the same copy.
+ *
+ * Telling a valet who is offline to "stay online" names no action they can take;
+ * the thing they need is the switch directly above. Telling a valet who IS
+ * online that there is nothing nearby needs the opposite tone — reassurance that
+ * they do not have to keep staring at the screen.
+ */
+function OffersEmpty({
+  icon,
+  title,
+  body,
+  testID,
+}: {
+  readonly icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  readonly title: string;
+  readonly body: string;
+  readonly testID: string;
+}) {
+  return (
+    <View style={styles.centered} testID={testID}>
+      <View style={styles.emptyIcon}>
+        <MaterialCommunityIcons name={icon} size={30} color={colors.muted} />
+      </View>
+      <Text style={styles.emptyTitle}>{title}</Text>
+      <Text style={styles.emptyBody}>{body}</Text>
+    </View>
+  );
 }
 
 const DENIAL_COPY: Record<string, string> = {
@@ -131,12 +162,15 @@ export default function ValetOffersScreen() {
   const body = (() => {
     if (!isOnline) {
       return (
-        <View style={styles.centered} testID="offers-offline">
-          <Text style={styles.emptyTitle}>No jobs available</Text>
-          <Text style={styles.emptyBody}>
-            Stay online and we&apos;ll notify you when a job pops up nearby
-          </Text>
-        </View>
+        <OffersEmpty
+          icon="map-marker-radius-outline"
+          // The rail directly above already says "You are offline". Repeating it
+          // here spends the largest area on the screen restating a status the
+          // valet has just read, so this says what they are missing instead.
+          title="Nothing to show yet"
+          body="Jobs near you appear here as soon as you go online."
+          testID="offers-offline"
+        />
       );
     }
 
@@ -162,12 +196,14 @@ export default function ValetOffersScreen() {
 
     if (current === undefined) {
       return (
-        <View style={styles.centered} testID="offers-empty">
-          <Text style={styles.emptyTitle}>No jobs available</Text>
-          <Text style={styles.emptyBody}>
-            Stay online and we&apos;ll notify you when a job pops up nearby
-          </Text>
-        </View>
+        <OffersEmpty
+          icon="map-marker-radius-outline"
+          title="No jobs right now"
+          // They are already doing the right thing; say so, and free them from
+          // watching the screen.
+          body="You're online. We'll alert you the moment a job appears nearby."
+          testID="offers-empty"
+        />
       );
     }
 
@@ -223,6 +259,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: spacing['2xl'],
     gap: spacing.sm,
+  },
+  emptyIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: radius.full,
+    backgroundColor: colors.mutedSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.xs,
   },
   emptyTitle: { fontSize: fontSize.xl, fontWeight: fontWeight.bold, color: colors.text },
   emptyBody: { fontSize: fontSize.sm, color: colors.textSecondary, textAlign: 'center' },
