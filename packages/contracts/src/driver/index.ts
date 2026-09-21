@@ -76,3 +76,21 @@ export {
   verifyPaymentSchema,
   type VerifyPayment,
 } from './verify-payment.js';
+
+export {
+  requestValetSchema,
+  type RequestValet,
+  requestValetReturnSchema,
+  type RequestValetReturn,
+  cancelValetSchema,
+  type CancelValet,
+  valetJobIdParamSchema,
+} from './request-valet.js';
+export {
+  driverValetJobSchema,
+  type DriverValetJob,
+  valetCardSchema,
+  type ValetCard,
+  valetContactSchema,
+  type ValetContact,
+} from './valet-job-detail.js';
