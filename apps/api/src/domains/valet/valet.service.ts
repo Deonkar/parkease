@@ -1,16 +1,33 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { type ValetCard, valetCardSchema } from '@parkease/contracts/driver';
 import {
   type BookingStatus,
   type ValetJobEvent,
   type ValetJobStatus,
 } from '@parkease/contracts/enums';
-import { bookings, spaces, valetJobOffers, valetJobs, valetProfiles } from '@parkease/db/schema';
-import { and, eq, inArray, notInArray, sql } from 'drizzle-orm';
+import {
+  parseValetJobStatus,
+  type ValetProfileView,
+  valetProfileViewSchema,
+} from '@parkease/contracts/valet';
+import {
+  bookings,
+  spaces,
+  users,
+  valetJobOffers,
+  valetJobs,
+  valetProfiles,
+} from '@parkease/db/schema';
+import { and, asc, count, eq, inArray, notInArray, sql } from 'drizzle-orm';
 
 import { DB, type Database } from '../../platform/db/db.module.js';
 import type { TxHandle } from '../../platform/db/transaction.js';
 
-import { BookingNotValetEligibleError, ValetAlreadyRequestedError } from './errors.js';
+import {
+  BookingNotValetEligibleError,
+  ValetAlreadyRequestedError,
+  ValetProfileNotFoundError,
+} from './errors.js';
 import { assertTransition } from './lifecycle.js';
 
 /**
@@ -216,7 +233,7 @@ export class ValetService {
     event: ValetJobEvent,
     patch: Partial<Omit<typeof valetJobs.$inferInsert, 'id' | 'status'>> = {},
   ): Promise<ValetJobRow> {
-    const next = assertTransition(job.status as ValetJobStatus, event);
+    const next = assertTransition(parseValetJobStatus(job.status), event);
 
     const [updated] = await tx
       .update(valetJobs)
@@ -229,10 +246,47 @@ export class ValetService {
     // we just computed was derived from a stale row (R-FAIL-01: a typed failure,
     // never a silent zero-row update).
     if (updated === undefined) {
-      throw new ConcurrentValetTransitionError(job.status as ValetJobStatus, event);
+      throw new ConcurrentValetTransitionError(parseValetJobStatus(job.status), event);
     }
 
     return updated;
+  }
+
+  /**
+   * How many valets were asked. Not who — that is nobody's business but ours,
+   * and a driver who could enumerate the partners near them has a map of our
+   * supply.
+   */
+  async countOffers(jobId: string): Promise<number> {
+    const [row] = await this.db
+      .select({ offers: count() })
+      .from(valetJobOffers)
+      .where(eq(valetJobOffers.jobId, jobId));
+    return row?.offers ?? 0;
+  }
+
+  /**
+   * The assigned valet, as a driver is allowed to see them.
+   *
+   * Selects columns explicitly rather than the whole row, because `users` holds
+   * a phone number and a `SELECT *` here is one careless spread away from
+   * putting it in a response (security.md §5.3).
+   */
+  async valetCard(valetUserId: string): Promise<ValetCard | null> {
+    const [row] = await this.db
+      .select({
+        userId: valetProfiles.userId,
+        name: users.name,
+        vehicleMake: valetProfiles.vehicleMake,
+        vehicleNumber: valetProfiles.vehicleNumber,
+        ratingAvgBp: valetProfiles.ratingAvgBp,
+        ratingCount: valetProfiles.ratingCount,
+      })
+      .from(valetProfiles)
+      .innerJoin(users, eq(users.id, valetProfiles.userId))
+      .where(eq(valetProfiles.userId, valetUserId));
+
+    return row === undefined ? null : valetCardSchema.parse(row);
   }
 
   async recordOffers(
@@ -252,6 +306,59 @@ export class ValetService {
         offerRound: round,
       })),
     );
+  }
+
+  /**
+   * Open offers for this valet, nearest first.
+   *
+   * Scoped to jobs still in `offered`: an offer row whose job was taken, widened
+   * past it, or cancelled is history, not a card the app should render. The
+   * outcome column alone is not enough — the losers of a race are marked `lost`
+   * in the same transaction, but a job that simply moved on has offers that are
+   * still `pending`.
+   */
+  async findOpenOffersFor(
+    valetUserId: string,
+  ): Promise<{ job: ValetJobRow; distanceM: number; offeredAt: Date }[]> {
+    const rows = await this.db
+      .select({
+        job: valetJobs,
+        distanceM: valetJobOffers.distanceM,
+        offeredAt: valetJobOffers.offeredAt,
+      })
+      .from(valetJobOffers)
+      .innerJoin(valetJobs, eq(valetJobs.id, valetJobOffers.jobId))
+      .where(
+        and(
+          eq(valetJobOffers.valetUserId, valetUserId),
+          eq(valetJobOffers.outcome, 'pending'),
+          eq(valetJobs.status, 'offered'),
+        ),
+      )
+      .orderBy(asc(valetJobOffers.distanceM));
+
+    return rows;
+  }
+
+  /**
+   * Attaches the parked-car photo without moving the job.
+   *
+   * Separate from the status change because the upload is the slow,
+   * failure-prone half on a phone in a basement: a valet who uploads and then
+   * loses signal should not have to upload again to retry the transition.
+   */
+  async attachProof(
+    jobId: string,
+    valetUserId: string,
+    proofPhotoId: string,
+  ): Promise<ValetJobRow | undefined> {
+    const [updated] = await this.db
+      .update(valetJobs)
+      .set({ proofPhotoId, updatedAt: new Date() })
+      .where(and(eq(valetJobs.id, jobId), eq(valetJobs.assignedUserId, valetUserId)))
+      .returning();
+
+    return updated;
   }
 
   async findOfferFor(
@@ -322,6 +429,51 @@ export class ValetService {
     return Number(distance);
   }
 
+  async profileFor(valetUserId: string): Promise<ValetProfileView | null> {
+    const [row] = await this.db
+      .select()
+      .from(valetProfiles)
+      .where(eq(valetProfiles.userId, valetUserId));
+
+    return row === undefined ? null : toProfileView(row);
+  }
+
+  /**
+   * Submitting documents moves verification back to `pending` and takes the
+   * valet offline.
+   *
+   * Offline is the part worth stating: re-submitting a licence while online
+   * would otherwise leave a partner in the candidate pool on the strength of the
+   * document they are replacing — which is exactly the window an expired licence
+   * would be re-submitted in.
+   */
+  async submitDocuments(
+    valetUserId: string,
+    input: {
+      licenceDocumentId: string;
+      licenceExpiresAt: Date;
+      vehicleMake?: string;
+      vehicleNumber?: string;
+    },
+  ): Promise<ValetProfileView> {
+    const [row] = await this.db
+      .update(valetProfiles)
+      .set({
+        licenceDocumentId: input.licenceDocumentId,
+        licenceExpiresAt: input.licenceExpiresAt,
+        verificationStatus: 'pending',
+        isOnline: false,
+        ...(input.vehicleMake === undefined ? {} : { vehicleMake: input.vehicleMake }),
+        ...(input.vehicleNumber === undefined ? {} : { vehicleNumber: input.vehicleNumber }),
+        updatedAt: new Date(),
+      })
+      .where(eq(valetProfiles.userId, valetUserId))
+      .returning();
+
+    if (row === undefined) throw new ValetProfileNotFoundError();
+    return toProfileView(row);
+  }
+
   async isOnlineVerifiedValet(valetUserId: string): Promise<boolean> {
     const [profile] = await this.db
       .select({ verificationStatus: valetProfiles.verificationStatus })
@@ -330,3 +482,17 @@ export class ValetService {
     return profile?.verificationStatus === 'verified';
   }
 }
+
+const toProfileView = (row: typeof valetProfiles.$inferSelect): ValetProfileView =>
+  valetProfileViewSchema.parse({
+    verificationStatus: row.verificationStatus,
+    backgroundCheckStatus: row.backgroundCheckStatus,
+    licenceDocumentId: row.licenceDocumentId,
+    licenceExpiresAt: row.licenceExpiresAt?.toISOString() ?? null,
+    isOnline: row.isOnline,
+    lastSeenAt: row.lastSeenAt?.toISOString() ?? null,
+    vehicleMake: row.vehicleMake,
+    vehicleNumber: row.vehicleNumber,
+    ratingAvgBp: row.ratingAvgBp,
+    ratingCount: row.ratingCount,
+  });

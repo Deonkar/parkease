@@ -1,3 +1,4 @@
+import { VALET_ACCEPT_TIMEOUT_JOB, VALET_NO_SHOW_JOB } from '@parkease/contracts/valet';
 import { describe, it, expect, vi } from 'vitest';
 
 import { registerHandlers } from '../src/handlers.js';
@@ -48,6 +49,13 @@ describe('worker schedule and handler coverage', () => {
       // Enqueued by ConfirmPaymentCommand when a capture lands against a booking
       // the expiry job already released.
       'payment.orphan-capture',
+      // Task 11. Both are enqueued inside the transaction that justifies them:
+      // the accept-timeout with the offer (and re-enqueued by itself on each
+      // widened round), the no-show with the `arrive` status change. Named from
+      // contracts rather than as literals, so this list cannot drift from the
+      // registration in handlers.ts or from the enqueue in the API.
+      VALET_ACCEPT_TIMEOUT_JOB,
+      VALET_NO_SHOW_JOB,
     ]);
     const scheduledSet = new Set(scheduleNames);
 

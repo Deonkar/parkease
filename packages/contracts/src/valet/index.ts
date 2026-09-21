@@ -17,6 +17,7 @@ export {
   valetHoldsVehicle,
   TRACKED_VALET_STATUSES,
   IllegalValetTransitionError,
+  parseValetJobStatus,
 } from './lifecycle.js';
 
 export { advanceValetJobSchema, type AdvanceValetJob } from './advance-job.js';
@@ -43,3 +44,13 @@ export {
   valetProfileViewSchema,
   type ValetProfileView,
 } from './job-view.js';
+
+export {
+  OFFER_RADII_M,
+  OFFER_FANOUT,
+  ACCEPT_TIMEOUT_MS,
+  NO_SHOW_GRACE_MS,
+  ONLINE_HEARTBEAT_WINDOW_SECONDS,
+  VALET_ACCEPT_TIMEOUT_JOB,
+  VALET_NO_SHOW_JOB,
+} from './dispatch.js';

@@ -1,5 +1,6 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import type { ValetJobEvent } from '@parkease/contracts/enums';
+import { NO_SHOW_GRACE_MS, VALET_NO_SHOW_JOB } from '@parkease/contracts/valet';
 import { valetJobs } from '@parkease/db/schema';
 
 import { DB, type Database } from '../../../platform/db/db.module.js';
@@ -8,9 +9,6 @@ import { OutboxService } from '../../../platform/outbox/outbox.service.js';
 import { ProofPhotoRequiredError } from '../errors.js';
 import { LocationService } from '../location.service.js';
 import { type ValetJobRow, ValetService } from '../valet.service.js';
-
-/** §11.8. Ten minutes after `arrived`, an absent driver owes the call-out. */
-export const NO_SHOW_GRACE_MS = 10 * 60 * 1000;
 
 export interface AdvanceJobInput {
   readonly jobId: string;
@@ -72,7 +70,7 @@ export class AdvanceJobCommand {
        */
       if (input.event === 'arrive') {
         await this.outbox.enqueue(tx, {
-          type: 'valet.no-show',
+          type: VALET_NO_SHOW_JOB,
           availableAt: new Date(now.getTime() + NO_SHOW_GRACE_MS),
           payload: { jobId: job.id },
         });

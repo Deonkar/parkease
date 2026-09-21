@@ -22,6 +22,7 @@ import { DriverModule } from './roles/driver/driver.module.js';
 import { OwnerModule } from './roles/owner/owner.module.js';
 import { PublicModule } from './roles/public/public.module.js';
 import { SharedModule } from './roles/shared/shared.module.js';
+import { ValetRoleModule } from './roles/valet/valet.module.js';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { SharedModule } from './roles/shared/shared.module.js';
     OwnerModule,
     PublicModule,
     SharedModule,
+    ValetRoleModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

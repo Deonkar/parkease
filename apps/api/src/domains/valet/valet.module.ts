@@ -12,12 +12,14 @@ import { RequestValetCommand } from './commands/request-valet.command.js';
 import { SetAvailabilityCommand } from './commands/set-availability.command.js';
 import { LocationService } from './location.service.js';
 import { ValetEarningsQuery } from './queries/valet-earnings.query.js';
+import { ValetTrackingPublisher } from './tracking.publisher.js';
 import { ValetService } from './valet.service.js';
 
 const PROVIDERS = [
   ValetService,
   AssignmentService,
   LocationService,
+  ValetTrackingPublisher,
   ValetEarningsQuery,
   RequestValetCommand,
   AcceptJobCommand,

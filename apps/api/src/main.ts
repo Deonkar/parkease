@@ -7,6 +7,7 @@ import { AppModule } from './app.module.js';
 import { env } from './platform/config/env.schema.js';
 import { correlationIdMiddleware } from './platform/http/correlation-id.middleware.js';
 import { logger } from './platform/observability/logger.js';
+import { RedisIoAdapter } from './platform/realtime/redis-io.adapter.js';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestFastifyApplication>(
@@ -28,6 +29,18 @@ async function bootstrap(): Promise<void> {
 
   const fastify = app.getHttpAdapter().getInstance();
   fastify.addHook('onRequest', correlationIdMiddleware);
+
+  /**
+   * Socket.IO rooms, shared across instances.
+   *
+   * Connected before `listen`, and deliberately not guarded by a try/catch: an
+   * API that starts without the Redis adapter serves valet tracking that works
+   * on one instance and silently drops every message crossing to another. Dying
+   * at boot is the visible failure; starting is the invisible one (ADR-010).
+   */
+  const ioAdapter = new RedisIoAdapter(app);
+  await ioAdapter.connect();
+  app.useWebSocketAdapter(ioAdapter);
 
   await app.listen({ port: env.PORT, host: '0.0.0.0' });
   logger.info({ port: env.PORT }, 'parkease api started');

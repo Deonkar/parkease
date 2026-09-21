@@ -1,12 +1,11 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import type { ValetJobStatus } from '@parkease/contracts/enums';
 import {
   computeValetLegFee,
   computeValetNoShowFee,
   valetChargeAdjustmentEntries,
 } from '@parkease/contracts/money';
 import { toRate } from '@parkease/contracts/primitives';
-import { valetHoldsVehicle } from '@parkease/contracts/valet';
+import { parseValetJobStatus, valetHoldsVehicle } from '@parkease/contracts/valet';
 import { uuidv7 } from '@parkease/db';
 
 import { DB, type Database } from '../../../platform/db/db.module.js';
@@ -52,7 +51,7 @@ export class CancelJobCommand {
 
     // Checked before the machine, so the driver is handed the support path
     // rather than a generic "cannot move there" (R-GEN-06).
-    if (valetHoldsVehicle(job.status as ValetJobStatus)) throw new ValetHoldsVehicleError();
+    if (valetHoldsVehicle(parseValetJobStatus(job.status))) throw new ValetHoldsVehicleError();
 
     const updated = await withTransaction(this.db, async (tx) => {
       const cancelled = await this.valet.applyEvent(tx, job, 'cancel', {

@@ -2,6 +2,7 @@ import {
   type ValetJobEvent,
   type ValetJobStatus,
   ValetJobStatus as Status,
+  valetJobStatusSchema,
 } from '../enums/index.js';
 
 export {
@@ -145,4 +146,22 @@ export class IllegalValetTransitionError extends Error {
     super(`A valet job in '${from}' cannot handle '${event}'`);
     this.name = 'IllegalValetTransitionError';
   }
+}
+
+/**
+ * A status read back from the database, narrowed.
+ *
+ * `valet_jobs.status` is `text` with a CHECK, so a driver read hands back a
+ * plain `string`. Parsing rather than casting is not ceremony: if a migration
+ * ever adds a status the code does not know, a cast makes every `switch` and
+ * every transition lookup silently miss, while this throws with the offending
+ * value (R-VAL-01). The CHECK constraint and this schema are the two halves of
+ * the same guarantee, and `enum-drift.integration.test` asserts they agree.
+ */
+export function parseValetJobStatus(value: string): ValetJobStatus {
+  const parsed = valetJobStatusSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new TypeError(`'${value}' is not a valet job status this build knows about`);
+  }
+  return parsed.data;
 }

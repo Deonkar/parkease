@@ -1,14 +1,16 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { computeValetLegFee, VALET_COMMISSION_RATE } from '@parkease/contracts/money';
+import {
+  ACCEPT_TIMEOUT_MS,
+  OFFER_RADII_M,
+  VALET_ACCEPT_TIMEOUT_JOB,
+} from '@parkease/contracts/valet';
 
 import { DB, type Database } from '../../../platform/db/db.module.js';
 import { withTransaction } from '../../../platform/db/transaction.js';
 import { OutboxService } from '../../../platform/outbox/outbox.service.js';
-import { AssignmentService, OFFER_RADII_M, originFromPoint } from '../assignment.service.js';
+import { AssignmentService, originFromPoint } from '../assignment.service.js';
 import { type OfferCandidate, type ValetJobRow, ValetService } from '../valet.service.js';
-
-/** §11.5. Two minutes to accept, then the search widens. */
-export const ACCEPT_TIMEOUT_MS = 2 * 60 * 1000;
 
 export interface RequestValetInput {
   readonly driverId: string;
@@ -60,7 +62,7 @@ export class RequestValetCommand {
       });
 
       const timeout = {
-        type: 'valet.accept-timeout' as const,
+        type: VALET_ACCEPT_TIMEOUT_JOB,
         availableAt: new Date(Date.now() + ACCEPT_TIMEOUT_MS),
         payload: { jobId: job.id, round: 0 },
       };
