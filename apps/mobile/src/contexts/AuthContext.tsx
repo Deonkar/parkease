@@ -6,6 +6,8 @@ import { clearOnboarded } from '@/features/shared/hooks/useHasOnboarded';
 import { api, registerSessionExpiredHandler } from '@/lib/api';
 import { queryClient } from '@/lib/query';
 import { secureStorage } from '@/lib/secure-storage';
+import { clearSessionScopedStorage } from '@/lib/session-storage';
+import { disconnectAll } from '@/lib/socket';
 import { uuidv7 } from '@/lib/uuid';
 
 interface AuthMethods {
@@ -55,6 +57,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     await secureStorage.clear();
+    // Tokens are only half of it: a signed-in session also leaves unencrypted
+    // AsyncStorage behind — the valet's location queue among it — and a GPS
+    // trail that outlives logout is readable by whoever holds the device next.
+    await clearSessionScopedStorage();
+    disconnectAll();
     await clearOnboarded();
     queryClient.clear();
     setState({ status: 'unauthenticated' });
