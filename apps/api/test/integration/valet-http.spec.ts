@@ -689,3 +689,419 @@ describe('GET /valet/earnings — the ledger, and nothing else', () => {
     expect(summary.grossPaise).toBeGreaterThan(0);
   });
 });
+
+describe('POST /driver/valet/requests/:id/return — the second charge', () => {
+  /** Walks a job to `parked`, the only state a return may start from. */
+  async function parkedJob(): Promise<{ jobId: string; valetId: string }> {
+    const valetId = await seedValet();
+    const bookingId = await seedBooking(h, {
+      spaceId,
+      vehicleType: 'car',
+      slotIndex: 1,
+      slotStatus: 'confirmed',
+    });
+    const jobId = await requestValet(bookingId);
+    await accept(jobId, valetId);
+    await advance(jobId, valetId, 'depart');
+    await advance(jobId, valetId, 'arrive');
+    await advance(jobId, valetId, 'start_parking');
+    await advance(jobId, valetId, 'confirm_parked', 'photo_abc');
+    return { jobId, valetId };
+  }
+
+  const requestReturn = (jobId: string) => {
+    asUser(h.driverId, ['driver']);
+    return http.request({
+      method: 'POST',
+      url: `/api/v1/driver/valet/requests/${jobId}/return`,
+      headers: key(),
+      payload: { dropLocation: { lat: 12.9298, lng: 77.6371, address: 'Sony World Signal' } },
+    });
+  };
+
+  it('moves to return_requested and posts a balanced second leg', async () => {
+    const { jobId, valetId } = await parkedJob();
+
+    const res = await requestReturn(jobId);
+
+    expect(res.status).toBe(200);
+    expect(dataOf<{ status: string }>(res.body).status).toBe('return_requested');
+
+    const [row] = await h.sql<
+      { txn_id: string; return_txn_id: string; return_fee_paise: string }[]
+    >`
+      SELECT txn_id, return_txn_id, return_fee_paise FROM valet_jobs WHERE id = ${jobId}
+    `;
+
+    // Its own txn_id: the return is a separate transaction, not an amendment.
+    expect(row!.return_txn_id).not.toBeNull();
+    expect(row!.return_txn_id).not.toBe(row!.txn_id);
+    expect(Number(row!.return_fee_paise)).toBeGreaterThan(0);
+
+    const entries = await h.sql<
+      {
+        account: string;
+        direction: string;
+        amount_paise: string;
+        counterparty_user_id: string | null;
+      }[]
+    >`
+      SELECT account, direction, amount_paise, counterparty_user_id
+      FROM ledger_entries WHERE txn_id = ${row!.return_txn_id} ORDER BY account
+    `;
+    const debits = entries
+      .filter((e) => e.direction === 'debit')
+      .reduce((s, e) => s + Number(e.amount_paise), 0);
+    const credits = entries
+      .filter((e) => e.direction === 'credit')
+      .reduce((s, e) => s + Number(e.amount_paise), 0);
+    expect(debits).toBe(credits);
+    expect(entries.find((e) => e.account === 'owner_payable')?.counterparty_user_id).toBe(valetId);
+  });
+
+  it('prices the leg from the drop distance, not the outbound distance', async () => {
+    const { jobId } = await parkedJob();
+
+    await requestReturn(jobId);
+
+    const [row] = await h.sql<{ distance_m: number; return_distance_m: number }[]>`
+      SELECT distance_m, return_distance_m FROM valet_jobs WHERE id = ${jobId}
+    `;
+    expect(row!.return_distance_m).not.toBe(row!.distance_m);
+  });
+
+  it('refuses a return from a state that is not parked', async () => {
+    const valetId = await seedValet();
+    const bookingId = await seedBooking(h, {
+      spaceId,
+      vehicleType: 'car',
+      slotIndex: 1,
+      slotStatus: 'confirmed',
+    });
+    const jobId = await requestValet(bookingId);
+    await accept(jobId, valetId);
+
+    const res = await requestReturn(jobId);
+
+    expect(res.status).toBe(409);
+    expect(errorOf(res.body).code).toBe('ILLEGAL_VALET_TRANSITION');
+  });
+
+  it('answers 404 for a job belonging to another driver', async () => {
+    const { jobId } = await parkedJob();
+    const otherDriver = await seedUser(h, 'driver');
+
+    asUser(otherDriver, ['driver']);
+    const res = await http.request({
+      method: 'POST',
+      url: `/api/v1/driver/valet/requests/${jobId}/return`,
+      headers: key(),
+      payload: { dropLocation: { lat: 12.9298, lng: 77.6371, address: 'x' } },
+    });
+
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('cancelling after dispatch — the driver owes the call-out', () => {
+  async function dispatchedJob(upTo: 'accepted' | 'en_route' | 'arrived') {
+    const valetId = await seedValet();
+    const bookingId = await seedBooking(h, {
+      spaceId,
+      vehicleType: 'car',
+      slotIndex: 1,
+      slotStatus: 'confirmed',
+    });
+    const jobId = await requestValet(bookingId);
+    await accept(jobId, valetId);
+    if (upTo !== 'accepted') await advance(jobId, valetId, 'depart');
+    if (upTo === 'arrived') await advance(jobId, valetId, 'arrive');
+    return { jobId, valetId };
+  }
+
+  const cancel = (jobId: string) => {
+    asUser(h.driverId, ['driver']);
+    return http.request({
+      method: 'POST',
+      url: `/api/v1/driver/valet/requests/${jobId}/cancel`,
+      headers: key(),
+      payload: {},
+    });
+  };
+
+  it.each(['accepted', 'en_route', 'arrived'] as const)(
+    'posts the call-out adjustment when cancelled from %s',
+    async (from) => {
+      const { jobId, valetId } = await dispatchedJob(from);
+
+      const res = await cancel(jobId);
+
+      expect(res.status).toBe(200);
+      expect(dataOf<{ status: string }>(res.body).status).toBe('cancelled');
+
+      const adjustment = await h.sql<
+        { account: string; direction: string; amount_paise: string }[]
+      >`
+        SELECT account, direction, amount_paise FROM ledger_entries
+        WHERE description = 'valet cancelled after dispatch' ORDER BY account
+      `;
+      expect(adjustment.length).toBeGreaterThan(0);
+
+      const debits = adjustment
+        .filter((e) => e.direction === 'debit')
+        .reduce((s, e) => s + Number(e.amount_paise), 0);
+      const credits = adjustment
+        .filter((e) => e.direction === 'credit')
+        .reduce((s, e) => s + Number(e.amount_paise), 0);
+      expect(debits).toBe(credits);
+
+      // The valet keeps the call-out share of the leg — not nothing, not all of it.
+      const [balance] = await h.sql<{ net: string }[]>`
+        SELECT coalesce(sum(amount_paise) FILTER (WHERE direction = 'credit'), 0)
+             - coalesce(sum(amount_paise) FILTER (WHERE direction = 'debit'), 0) AS net
+        FROM ledger_entries
+        WHERE account = 'owner_payable' AND counterparty_user_id = ${valetId}
+      `;
+      expect(Number(balance!.net)).toBe(4000);
+
+      const [refunds] = await h.sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM outbox_messages WHERE type = 'payment.issue-refund'
+      `;
+      expect(refunds!.n).toBe(1);
+    },
+  );
+
+  it('leaves every txn_id balanced across both postings', async () => {
+    const { jobId } = await dispatchedJob('en_route');
+
+    await cancel(jobId);
+
+    const [unbalanced] = await h.sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM (
+        SELECT txn_id FROM ledger_entries GROUP BY txn_id
+        HAVING coalesce(sum(amount_paise) FILTER (WHERE direction = 'debit'), 0)
+            <> coalesce(sum(amount_paise) FILTER (WHERE direction = 'credit'), 0)
+      ) t
+    `;
+    expect(unbalanced!.n).toBe(0);
+  });
+});
+
+describe('PATCH /valet/availability', () => {
+  const setAvailability = (valetId: string, body: unknown) => {
+    asUser(valetId, ['valet']);
+    return http.request({
+      method: 'PATCH',
+      url: '/api/v1/valet/availability',
+      headers: key(),
+      payload: body,
+    });
+  };
+
+  it('brings a verified valet online and records the heartbeat fix', async () => {
+    const valetId = await seedValet();
+    await h.sql`UPDATE valet_profiles SET is_online = false WHERE user_id = ${valetId}`;
+
+    const res = await setAvailability(valetId, {
+      isOnline: true,
+      location: { lat: 12.936, lng: 77.625 },
+    });
+
+    expect(res.status).toBe(200);
+    expect(dataOf<{ isOnline: boolean }>(res.body).isOnline).toBe(true);
+
+    const [row] = await h.sql<{ is_online: boolean; has_location: boolean }[]>`
+      SELECT is_online, current_location IS NOT NULL AS has_location
+      FROM valet_profiles WHERE user_id = ${valetId}
+    `;
+    expect(row!.is_online).toBe(true);
+    expect(row!.has_location).toBe(true);
+  });
+
+  it('refuses to bring an unverified valet online', async () => {
+    const valetId = await seedValet({ verified: false });
+
+    const res = await setAvailability(valetId, {
+      isOnline: true,
+      location: { lat: 12.936, lng: 77.625 },
+    });
+
+    expect(res.status).toBe(403);
+    expect(errorOf(res.body).code).toBe('VALET_NOT_VERIFIED');
+  });
+
+  it('rejects going online with no location, since an unplaceable valet is never matched', async () => {
+    const valetId = await seedValet();
+
+    expect((await setAvailability(valetId, { isOnline: true })).status).toBe(400);
+  });
+
+  it('allows going offline without a location, and keeps the last fix', async () => {
+    const valetId = await seedValet();
+
+    const res = await setAvailability(valetId, { isOnline: false });
+
+    expect(res.status).toBe(200);
+    const [row] = await h.sql<{ is_online: boolean; has_location: boolean }[]>`
+      SELECT is_online, current_location IS NOT NULL AS has_location
+      FROM valet_profiles WHERE user_id = ${valetId}
+    `;
+    expect(row!.is_online).toBe(false);
+    expect(row!.has_location).toBe(true);
+  });
+
+  it('answers 404 when no valet profile exists yet', async () => {
+    const userId = await seedUser(h, 'valet');
+    asUser(userId, ['valet']);
+
+    const res = await http.request({
+      method: 'PATCH',
+      url: '/api/v1/valet/availability',
+      headers: key(),
+      payload: { isOnline: false },
+    });
+
+    expect(res.status).toBe(404);
+    expect(errorOf(res.body).code).toBe('VALET_PROFILE_NOT_FOUND');
+  });
+});
+
+describe('the valet-side reads, positively', () => {
+  it('lists an open offer carrying the earnings the valet takes home', async () => {
+    const valetId = await seedValet();
+    const bookingId = await seedBooking(h, {
+      spaceId,
+      vehicleType: 'car',
+      slotIndex: 1,
+      slotStatus: 'confirmed',
+    });
+    await requestValet(bookingId);
+
+    asUser(valetId, ['valet']);
+    const res = await http.request({ method: 'GET', url: '/api/v1/valet/jobs/offers' });
+
+    expect(res.status).toBe(200);
+    const offers = dataOf<{ jobId: string; earningsPaise: number }[]>(res.body);
+    expect(offers).toHaveLength(1);
+    // Earnings, not the fee and not the driver's total.
+    expect(offers[0]!.earningsPaise).toBeGreaterThan(0);
+    expect(offers[0]!.earningsPaise).toBeLessThan(9324);
+  });
+
+  it('returns null from /active when the valet is on nothing', async () => {
+    const valetId = await seedValet();
+    asUser(valetId, ['valet']);
+
+    const res = await http.request({ method: 'GET', url: '/api/v1/valet/jobs/active' });
+
+    expect(res.status).toBe(200);
+    expect(dataOf<unknown>(res.body)).toBeNull();
+  });
+
+  it('returns the live job from /active once accepted, with the next legal events', async () => {
+    const valetId = await seedValet();
+    const bookingId = await seedBooking(h, {
+      spaceId,
+      vehicleType: 'car',
+      slotIndex: 1,
+      slotStatus: 'confirmed',
+    });
+    const jobId = await requestValet(bookingId);
+    await accept(jobId, valetId);
+
+    asUser(valetId, ['valet']);
+    const res = await http.request({ method: 'GET', url: '/api/v1/valet/jobs/active' });
+
+    const job = dataOf<{ id: string; status: string; availableEvents: string[] }>(res.body);
+    expect(job.id).toBe(jobId);
+    expect(job.status).toBe('accepted');
+    // Derived from the machine: `depart` is legal here, `complete` is not.
+    expect(job.availableEvents).toContain('depart');
+    expect(job.availableEvents).not.toContain('complete');
+  });
+
+  it('serves the valet profile', async () => {
+    const valetId = await seedValet();
+    asUser(valetId, ['valet']);
+
+    const res = await http.request({ method: 'GET', url: '/api/v1/valet/profile' });
+
+    expect(res.status).toBe(200);
+    const profile = dataOf<{ verificationStatus: string; ratingCount: number }>(res.body);
+    expect(profile.verificationStatus).toBe('verified');
+    expect(profile.ratingCount).toBe(0);
+  });
+
+  /**
+   * Re-submitting documents takes the valet offline, so a partner cannot stay in
+   * the candidate pool on the strength of the licence they are replacing.
+   */
+  it('resets verification to pending and goes offline on document submission', async () => {
+    const valetId = await seedValet();
+    asUser(valetId, ['valet']);
+
+    const res = await http.request({
+      method: 'POST',
+      url: '/api/v1/valet/profile/documents',
+      headers: key(),
+      payload: {
+        licenceDocumentId: 'doc_123',
+        licenceExpiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+        vehicleMake: 'Maruti Swift',
+      },
+    });
+
+    expect(res.status).toBe(201);
+    const profile = dataOf<{ verificationStatus: string; isOnline: boolean }>(res.body);
+    expect(profile.verificationStatus).toBe('pending');
+    expect(profile.isOnline).toBe(false);
+  });
+
+  it('attaches a proof photo without moving the job', async () => {
+    const valetId = await seedValet();
+    const bookingId = await seedBooking(h, {
+      spaceId,
+      vehicleType: 'car',
+      slotIndex: 1,
+      slotStatus: 'confirmed',
+    });
+    const jobId = await requestValet(bookingId);
+    await accept(jobId, valetId);
+
+    asUser(valetId, ['valet']);
+    const res = await http.request({
+      method: 'POST',
+      url: `/api/v1/valet/jobs/${jobId}/proof`,
+      headers: key(),
+      payload: { proofPhotoId: 'photo_xyz' },
+    });
+
+    expect(res.status).toBe(200);
+    const job = dataOf<{ status: string; proofPhotoId: string }>(res.body);
+    expect(job.proofPhotoId).toBe('photo_xyz');
+    expect(job.status).toBe('accepted');
+  });
+
+  it('answers 404 when attaching proof to a job assigned to somebody else', async () => {
+    const valetId = await seedValet();
+    const stranger = await seedValet();
+    const bookingId = await seedBooking(h, {
+      spaceId,
+      vehicleType: 'car',
+      slotIndex: 1,
+      slotStatus: 'confirmed',
+    });
+    const jobId = await requestValet(bookingId);
+    await accept(jobId, valetId);
+
+    asUser(stranger, ['valet']);
+    const res = await http.request({
+      method: 'POST',
+      url: `/api/v1/valet/jobs/${jobId}/proof`,
+      headers: key(),
+      payload: { proofPhotoId: 'photo_xyz' },
+    });
+
+    expect(res.status).toBe(404);
+  });
+});

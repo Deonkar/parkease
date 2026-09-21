@@ -5,11 +5,13 @@ import {
 } from '@parkease/contracts/money';
 import {
   ACCEPT_TIMEOUT_MS,
+  findWithRatingFloor,
   nextValetStatus,
   OFFER_FANOUT,
   OFFER_RADII_M,
   ONLINE_HEARTBEAT_WINDOW_SECONDS,
   parseValetJobStatus,
+  type RatingFloorFallback,
   VALET_ACCEPT_TIMEOUT_JOB,
 } from '@parkease/contracts/valet';
 import {
@@ -175,50 +177,43 @@ async function giveUp(deps: JobDeps, job: typeof valetJobs.$inferSelect): Promis
 }
 
 /**
- * The same query the API runs, from `packages/db` — not a second copy.
- *
- * Two passes, so the rating floor can fail visibly rather than silently
- * accepting anyone when the filtered set is empty.
+ * The same query the API runs, from `packages/db`, under the same two-pass
+ * policy from `@parkease/contracts` — neither is a second copy.
  */
 async function findCandidates(
   deps: JobDeps,
   input: { jobId: string; radiusM: number; excludeUserId: string },
 ): Promise<{ userId: string; distanceM: number; ratingAvgBp: number | null }[]> {
-  const run = async (minRatingBp: number | null) => {
-    const rows = await deps.db.execute<ValetCandidateRow>(
-      valetCandidateQuery({
-        origin: originFromJobPickup(input.jobId),
-        radiusM: input.radiusM,
-        excludeUserId: input.excludeUserId,
-        jobId: input.jobId,
-        minRatingBp,
-        limit: OFFER_FANOUT,
-        heartbeatWindowSeconds: ONLINE_HEARTBEAT_WINDOW_SECONDS,
-      }),
-    );
+  return findWithRatingFloor(
+    async (minRatingBp: number | null) => {
+      const rows = await deps.db.execute<ValetCandidateRow>(
+        valetCandidateQuery({
+          origin: originFromJobPickup(input.jobId),
+          radiusM: input.radiusM,
+          excludeUserId: input.excludeUserId,
+          jobId: input.jobId,
+          minRatingBp,
+          limit: OFFER_FANOUT,
+          heartbeatWindowSeconds: ONLINE_HEARTBEAT_WINDOW_SECONDS,
+        }),
+      );
 
-    return rows.map((row) => ({
-      userId: row.user_id,
-      distanceM: Number(row.distance_m),
-      ratingAvgBp: row.rating_avg_bp === null ? null : Number(row.rating_avg_bp),
-    }));
-  };
-
-  const above = await run(PARTNER_RATING_FLOOR_BP);
-  if (above.length > 0) return above;
-
-  const anyRating = await run(null);
-  if (anyRating.length === 0) return [];
-
-  logger.warn(
-    {
-      jobId: input.jobId,
-      radiusM: input.radiusM,
-      ratingFloorBp: PARTNER_RATING_FLOOR_BP,
-      fallbackCandidates: anyRating.length,
+      return rows.map((row) => ({
+        userId: row.user_id,
+        distanceM: Number(row.distance_m),
+        ratingAvgBp: row.rating_avg_bp === null ? null : Number(row.rating_avg_bp),
+      }));
     },
-    'valet assignment fell back below the rating floor',
+    (fallback: RatingFloorFallback) => {
+      logger.warn(
+        {
+          jobId: input.jobId,
+          radiusM: input.radiusM,
+          ratingFloorBp: PARTNER_RATING_FLOOR_BP,
+          ...fallback,
+        },
+        'valet assignment fell back below the rating floor',
+      );
+    },
   );
-
-  return anyRating;
 }

@@ -71,7 +71,16 @@ export class CancelJobCommand {
       const { txnId, feePaise, assignedUserId: valetUserId } = job;
       if (txnId === null || feePaise === null || valetUserId === null) return cancelled;
       const rate = toRate(Number(job.commissionRate));
-      const charged = computeValetLegFee(job.distanceM ?? 0, rate);
+      // Not `?? 0`. distance_m is written in the same UPDATE as fee_paise at accept,
+      // so a null here alongside a non-null fee is a broken invariant — and
+      // defaulting it would quietly price the leg at the bare call-out fee and
+      // undercharge, which is the silent-failure shape R-FAIL-01 exists to stop.
+      if (job.distanceM === null) {
+        throw new Error(
+          `Valet job ${job.id} has a fee but no distance; refusing to price a cancelled adjustment`,
+        );
+      }
+      const charged = computeValetLegFee(job.distanceM, rate);
       const retained = computeValetNoShowFee(rate);
 
       const entries = valetChargeAdjustmentEntries(

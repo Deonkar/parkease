@@ -5,11 +5,12 @@ import {
   OFFER_RADII_M,
   VALET_ACCEPT_TIMEOUT_JOB,
 } from '@parkease/contracts/valet';
+import { originFromPoint } from '@parkease/db/queries';
 
 import { DB, type Database } from '../../../platform/db/db.module.js';
 import { withTransaction } from '../../../platform/db/transaction.js';
 import { OutboxService } from '../../../platform/outbox/outbox.service.js';
-import { AssignmentService, originFromPoint } from '../assignment.service.js';
+import { AssignmentService } from '../assignment.service.js';
 import { type OfferCandidate, type ValetJobRow, ValetService } from '../valet.service.js';
 
 export interface RequestValetInput {

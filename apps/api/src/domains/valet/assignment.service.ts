@@ -1,12 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { PARTNER_RATING_FLOOR_BP } from '@parkease/contracts/money';
-import { OFFER_FANOUT, ONLINE_HEARTBEAT_WINDOW_SECONDS } from '@parkease/contracts/valet';
 import {
-  originFromJobPickup,
-  originFromPoint,
-  valetCandidateQuery,
-  type ValetCandidateRow,
-} from '@parkease/db/queries';
+  findWithRatingFloor,
+  OFFER_FANOUT,
+  ONLINE_HEARTBEAT_WINDOW_SECONDS,
+  type RatingFloorFallback,
+} from '@parkease/contracts/valet';
+import { valetCandidateQuery, type ValetCandidateRow } from '@parkease/db/queries';
 import type { SQL } from 'drizzle-orm';
 
 import { DB, type Database } from '../../platform/db/db.module.js';
@@ -22,15 +22,6 @@ export interface FindCandidatesInput {
   /** Excludes valets already offered this job. `null` when no job exists yet. */
   readonly jobId: string | null;
 }
-
-/**
- * Re-exported so callers in this domain have one import, and so the fact that
- * the worker runs the same query is visible from here. The radius ladder, the
- * fan-out and the heartbeat window all come from `@parkease/contracts/valet`
- * for the same reason.
- */
-export { originFromJobPickup, originFromPoint };
-export { OFFER_FANOUT, OFFER_RADII_M } from '@parkease/contracts/valet';
 
 @Injectable()
 export class AssignmentService {
@@ -53,34 +44,26 @@ export class AssignmentService {
    * report and the one ops needs to decide between recruiting and relaxing.
    */
   async findCandidates(input: FindCandidatesInput): Promise<OfferCandidate[]> {
-    const aboveFloor = await this.query(input, true);
-    if (aboveFloor.length > 0) return aboveFloor;
-
-    const anyRating = await this.query(input, false);
-    if (anyRating.length === 0) return [];
-
-    /**
-     * A driver with a paid booking and no car in the bay is a worse outcome than
-     * a low-rated valet. The fallback is logged as an operational event so the
-     * ops dashboard can see how often supply forces our hand — if this is
-     * frequent in a zone, the answer is recruitment, not a lower floor.
-     */
-    logger.warn(
-      {
-        jobId: input.jobId,
-        radiusM: input.radiusM,
-        ratingFloorBp: PARTNER_RATING_FLOOR_BP,
-        fallbackCandidates: anyRating.length,
-        lowestRatingBp: anyRating.reduce<number | null>(
-          (lowest, c) =>
-            c.ratingAvgBp === null ? lowest : Math.min(lowest ?? c.ratingAvgBp, c.ratingAvgBp),
-          null,
-        ),
+    return findWithRatingFloor(
+      (minRatingBp: number | null) => this.query(input, minRatingBp),
+      (fallback: RatingFloorFallback) => {
+        /**
+         * A driver with a paid booking and no car in the bay is a worse outcome
+         * than a low-rated valet. Logged as an operational event so the ops
+         * dashboard can see how often supply forces our hand — if this is
+         * frequent in a zone, the answer is recruitment, not a lower floor.
+         */
+        logger.warn(
+          {
+            jobId: input.jobId,
+            radiusM: input.radiusM,
+            ratingFloorBp: PARTNER_RATING_FLOOR_BP,
+            ...fallback,
+          },
+          'valet assignment fell back below the rating floor',
+        );
       },
-      'valet assignment fell back below the rating floor',
     );
-
-    return anyRating;
   }
 
   /**
@@ -94,7 +77,7 @@ export class AssignmentService {
    */
   private async query(
     input: FindCandidatesInput,
-    applyRatingFloor: boolean,
+    minRatingBp: number | null,
   ): Promise<OfferCandidate[]> {
     const rows = await this.db.execute<ValetCandidateRow>(
       valetCandidateQuery({
@@ -102,7 +85,7 @@ export class AssignmentService {
         radiusM: input.radiusM,
         excludeUserId: input.excludeUserId,
         jobId: input.jobId,
-        minRatingBp: applyRatingFloor ? PARTNER_RATING_FLOOR_BP : null,
+        minRatingBp,
         limit: OFFER_FANOUT,
         heartbeatWindowSeconds: ONLINE_HEARTBEAT_WINDOW_SECONDS,
       }),

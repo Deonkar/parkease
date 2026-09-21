@@ -17,6 +17,7 @@ import { ActiveRoleGuard } from './platform/rbac/active-role.guard.js';
 import { RbacModule } from './platform/rbac/rbac.module.js';
 import { RolesGuard } from './platform/rbac/roles.guard.js';
 import { RedisModule } from './platform/redis/redis.module.js';
+import { TelephonyModule } from './platform/telephony/telephony.module.js';
 import { AdminModule } from './roles/admin/admin.module.js';
 import { DriverModule } from './roles/driver/driver.module.js';
 import { OwnerModule } from './roles/owner/owner.module.js';
@@ -34,6 +35,7 @@ import { ValetRoleModule } from './roles/valet/valet.module.js';
     RateLimitModule,
     IdempotencyModule,
     OutboxModule,
+    TelephonyModule,
     NotificationModule,
     AdminModule,
     DriverModule,

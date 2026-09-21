@@ -29,6 +29,7 @@ import { OutboxModule } from '../../src/platform/outbox/outbox.module.js';
 import { ActiveRoleGuard } from '../../src/platform/rbac/active-role.guard.js';
 import { RolesGuard } from '../../src/platform/rbac/roles.guard.js';
 import { REDIS, RedisModule } from '../../src/platform/redis/redis.module.js';
+import { TelephonyModule } from '../../src/platform/telephony/telephony.module.js';
 import { AdminSurgeController } from '../../src/roles/admin/surge.controller.js';
 import { DriverBookingsController } from '../../src/roles/driver/bookings.controller.js';
 import { DriverPaymentsController } from '../../src/roles/driver/payments.controller.js';
@@ -97,6 +98,9 @@ class StubAuthGuard implements CanActivate {
     ObservabilityModule,
     OutboxModule,
     IdempotencyModule,
+    // Binds the no-op masked-call provider, so contact resolution in the driver
+    // view answers the support path exactly as it does at launch.
+    TelephonyModule,
     SpaceModule,
     SurgeModule,
     PricingModule,

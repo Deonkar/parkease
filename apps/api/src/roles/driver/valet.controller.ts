@@ -25,6 +25,7 @@ import { ValetTrackingPublisher } from '../../domains/valet/tracking.publisher.j
 import { ValetService } from '../../domains/valet/valet.service.js';
 import { type AuthUser, CurrentUser } from '../../platform/auth/current-user.decorator.js';
 import { Roles } from '../../platform/rbac/roles.decorator.js';
+import { ContactChannelService } from '../../platform/telephony/masked-call.provider.js';
 
 import { toDriverValetJobView } from './views/valet-job.view.js';
 
@@ -51,6 +52,7 @@ export class DriverValetController {
     private readonly valet: ValetService,
     private readonly location: LocationService,
     private readonly tracking: ValetTrackingPublisher,
+    private readonly contact: ContactChannelService,
   ) {}
 
   @Post('requests')
@@ -128,12 +130,17 @@ export class DriverValetController {
     const valet =
       job.assignedUserId === null ? null : await this.valet.valetCard(job.assignedUserId);
 
-    return toDriverValetJobView({
-      job,
-      offeredTo,
-      valet,
-      lastKnownLocation,
-      supportThreadUrl: `/support/valet/${job.id}`,
-    });
+    // No assignee, no second party to reach — so no channel, rather than a
+    // support thread about a job nobody is on yet.
+    const contact =
+      job.assignedUserId === null
+        ? null
+        : await this.contact.forValetJob({
+            jobId: job.id,
+            fromUserId: job.driverUserId,
+            toUserId: job.assignedUserId,
+          });
+
+    return toDriverValetJobView({ job, offeredTo, valet, lastKnownLocation, contact });
   }
 }

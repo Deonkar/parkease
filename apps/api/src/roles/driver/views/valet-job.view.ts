@@ -2,6 +2,7 @@ import {
   type DriverValetJob,
   driverValetJobSchema,
   type ValetCard,
+  type ValetContact,
 } from '@parkease/contracts/driver';
 import type { ValetJobStatus } from '@parkease/contracts/enums';
 import {
@@ -17,7 +18,7 @@ export interface DriverValetJobInput {
   readonly offeredTo: number;
   readonly valet: ValetCard | null;
   readonly lastKnownLocation: ValetLocationView | null;
-  readonly supportThreadUrl: string;
+  readonly contact: ValetContact | null;
 }
 
 /**
@@ -59,13 +60,15 @@ export function toDriverValetJobView(input: DriverValetJobInput): DriverValetJob
     /**
      * A mode, never a number.
      *
-     * Masked calling is what stops a number being exchanged at all (§11.9), so
-     * the flag being off does not fall back to showing one — it falls back to a
-     * platform-mediated thread carrying the job id, which support can use to
-     * reach either party. No valet or driver phone number appears in any
-     * response from this task, flag on or off (security.md §5.3).
+     * Resolved upstream by `ContactChannelService`, which is the only thing that
+     * reads the masked-calling flag. Masked calling is what stops a number being
+     * exchanged at all (§11.9), so the flag being off does not fall back to
+     * showing one — it falls back to a platform-mediated thread carrying the job
+     * id, which support can use to reach either party. Neither variant of
+     * `ValetContact` can hold a phone number, so no valet or driver number
+     * appears in any response from this task, flag on or off (security.md §5.3).
      */
-    contact: input.valet === null ? null : { mode: 'support', threadUrl: input.supportThreadUrl },
+    contact: input.contact,
     lastKnownLocation: input.lastKnownLocation,
     cancellable: isCancellable(parseValetJobStatus(job.status)),
     proofPhotoId: job.proofPhotoId,

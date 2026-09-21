@@ -3,6 +3,7 @@ import {
   LedgerAccount as Account,
   type LedgerDirection,
 } from '../enums/index.js';
+import { subPaise } from '../primitives/paise.js';
 
 import { allocateProportionally } from './allocate.js';
 import { type RefundOutcome, RefundTier } from './refund-policy.js';
@@ -368,24 +369,34 @@ export function valetChargeAdjustmentEntries(
     );
   }
 
-  const refundPaise = charged.driverTotalPaise - retained.driverTotalPaise;
+  // subPaise, not a raw minus. Paise is a non-negative brand and subPaise is
+  // where that brand is enforced; subtracting with `-` bypasses the underflow
+  // guard and leans on an unstated monotonicity argument between two separate
+  // computeValetLegFee calls. One edit to the fee model away from that
+  // invariant would post a silently negative ledger entry instead of throwing.
+  const refundPaise = subPaise(charged.driverTotalPaise, retained.driverTotalPaise);
   if (refundPaise === 0) return [];
 
   return [
     ...leg(
       Account.OWNER_PAYABLE,
       'debit',
-      charged.valetEarningsPaise - retained.valetEarningsPaise,
+      subPaise(charged.valetEarningsPaise, retained.valetEarningsPaise),
       description,
       valetUserId,
     ),
     ...leg(
       Account.PLATFORM_REVENUE,
       'debit',
-      charged.commissionPaise - retained.commissionPaise,
+      subPaise(charged.commissionPaise, retained.commissionPaise),
       description,
     ),
-    ...leg(Account.GST_PAYABLE, 'debit', charged.gstPaise - retained.gstPaise, description),
+    ...leg(
+      Account.GST_PAYABLE,
+      'debit',
+      subPaise(charged.gstPaise, retained.gstPaise),
+      description,
+    ),
     ...leg(Account.REFUNDS_PAYABLE, 'credit', refundPaise, description),
   ];
 }

@@ -54,3 +54,9 @@ export {
   VALET_ACCEPT_TIMEOUT_JOB,
   VALET_NO_SHOW_JOB,
 } from './dispatch.js';
+
+export {
+  findWithRatingFloor,
+  type RatedCandidate,
+  type RatingFloorFallback,
+} from './candidate-policy.js';
