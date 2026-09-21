@@ -172,3 +172,26 @@ mislead.
   and building it half-tested is worse than not building it.
 - **Done means:** the drain emits over the socket when connected and falls back to REST, with a
   test for each path and for the changeover.
+
+### S-09 — The socket's token refresh races its own reconnect
+
+- **Status:** `open`
+- **Found in:** task 12, security review
+- **Surface:** mobile
+
+`apps/mobile/src/lib/socket.ts` handles `connect_error` by reading secure storage in an
+unawaited async block and then assigning `socket.auth`. socket.io's own reconnection can fire
+another attempt with the **old** token before that read resolves, because nothing blocks or
+cancels the pending retry.
+
+Not a leak — the token being retried is the same user's previous token, never another user's —
+so this is robustness rather than security. The visible symptom is extra 401 round-trips and, if
+the session is genuinely revoked, an indefinite retry loop that never surfaces a hard
+"session invalid" state.
+
+- **Why deferred:** the fix changes reconnection strategy (`reconnection: false` plus a manual
+  `connect()` once the token is set), which wants its own test for the changeover and for the
+  revoked-session terminal state. No valet screen subscribes to the socket yet, so nothing
+  currently depends on this path.
+- **Done means:** reconnection is deterministic after a refresh, and a repeatedly-rejected
+  handshake ends in a surfaced "signed out" state rather than an unbounded retry.
