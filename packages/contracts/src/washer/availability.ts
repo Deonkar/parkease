@@ -2,10 +2,22 @@ import { z } from 'zod';
 
 import { geoPointSchema } from '../primitives/indian.js';
 
-export const updateWasherAvailabilitySchema = z.object({
-  available: z.boolean(),
-  location: geoPointSchema.optional(),
-  radiusKm: z.number().min(0.5).max(25).optional(),
-});
+/**
+ * Online/offline, plus the heartbeat fix that makes "online" mean reachable.
+ *
+ * The location is optional on the way *offline* and required on the way on: a
+ * partner with no position cannot be matched to anything, so accepting
+ * `{ isOnline: true }` with no fix would put somebody in the pool that every
+ * candidate query then silently skips.
+ */
+export const setWasherAvailabilitySchema = z
+  .object({
+    isOnline: z.boolean(),
+    location: geoPointSchema.optional(),
+  })
+  .refine((v) => !v.isOnline || v.location !== undefined, {
+    message: 'a location is required to go online',
+    path: ['location'],
+  });
 
-export type UpdateWasherAvailability = z.infer<typeof updateWasherAvailabilitySchema>;
+export type SetWasherAvailability = z.infer<typeof setWasherAvailabilitySchema>;

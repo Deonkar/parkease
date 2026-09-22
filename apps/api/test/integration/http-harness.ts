@@ -11,6 +11,7 @@ import { Test } from '@nestjs/testing';
 import type { FastifyRequest } from 'fastify';
 
 import { BookingModule } from '../../src/domains/booking/booking.module.js';
+import { CarwashModule } from '../../src/domains/carwash/carwash.module.js';
 import { PaymentModule } from '../../src/domains/payment/payment.module.js';
 import { RAZORPAY } from '../../src/domains/payment/razorpay.client.js';
 import { PricingModule } from '../../src/domains/pricing/pricing.module.js';
@@ -32,6 +33,7 @@ import { REDIS, RedisModule } from '../../src/platform/redis/redis.module.js';
 import { TelephonyModule } from '../../src/platform/telephony/telephony.module.js';
 import { AdminSurgeController } from '../../src/roles/admin/surge.controller.js';
 import { DriverBookingsController } from '../../src/roles/driver/bookings.controller.js';
+import { DriverCarwashController } from '../../src/roles/driver/carwash.controller.js';
 import { DriverPaymentsController } from '../../src/roles/driver/payments.controller.js';
 import { DriverQuotesController } from '../../src/roles/driver/quotes.controller.js';
 import { DriverSearchController } from '../../src/roles/driver/search.controller.js';
@@ -42,6 +44,11 @@ import { ValetAvailabilityController } from '../../src/roles/valet/availability.
 import { ValetEarningsController } from '../../src/roles/valet/earnings.controller.js';
 import { ValetJobsController } from '../../src/roles/valet/jobs.controller.js';
 import { ValetProfileController } from '../../src/roles/valet/profile.controller.js';
+import { WasherAvailabilityController } from '../../src/roles/washer/availability.controller.js';
+import { WasherEarningsController } from '../../src/roles/washer/earnings.controller.js';
+import { WasherJobsController } from '../../src/roles/washer/jobs.controller.js';
+import { WasherProfileController } from '../../src/roles/washer/profile.controller.js';
+import { WasherServicesController } from '../../src/roles/washer/services.controller.js';
 
 import type { Harness } from './harness.js';
 
@@ -112,6 +119,9 @@ class StubAuthGuard implements CanActivate {
     // ValetTrackingPublisher, which ValetModule provides — so a status push in
     // a test is a no-op with no server attached, exactly as it is at boot.
     ValetModule,
+    // Domain only, for the same reason as ValetModule above. The car wash
+    // controllers need CarwashModule's commands; nothing in it needs AuthModule.
+    CarwashModule,
   ],
   controllers: [
     AdminSurgeController,
@@ -126,6 +136,12 @@ class StubAuthGuard implements CanActivate {
     ValetAvailabilityController,
     ValetEarningsController,
     ValetProfileController,
+    DriverCarwashController,
+    WasherJobsController,
+    WasherServicesController,
+    WasherAvailabilityController,
+    WasherEarningsController,
+    WasherProfileController,
   ],
   providers: [
     // Registered exactly as AppModule does, and in its order. This is the whole

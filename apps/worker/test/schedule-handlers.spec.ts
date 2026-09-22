@@ -1,4 +1,8 @@
 import { VALET_ACCEPT_TIMEOUT_JOB, VALET_NO_SHOW_JOB } from '@parkease/contracts/valet';
+import {
+  CARWASH_ACCEPT_TIMEOUT_JOB,
+  CARWASH_COMPLETE_REMINDER_JOB,
+} from '@parkease/contracts/washer';
 import { describe, it, expect, vi } from 'vitest';
 
 import { registerHandlers } from '../src/handlers.js';
@@ -56,6 +60,12 @@ describe('worker schedule and handler coverage', () => {
       // registration in handlers.ts or from the enqueue in the API.
       VALET_ACCEPT_TIMEOUT_JOB,
       VALET_NO_SHOW_JOB,
+      // Task 13, same shape. The accept-timeout is enqueued with the offer by
+      // RequestCarwashCommand and re-enqueued by itself on each widened round;
+      // the completion reminder is enqueued by AcceptWashCommand, scheduled
+      // from the duration on the winning partner's own menu row.
+      CARWASH_ACCEPT_TIMEOUT_JOB,
+      CARWASH_COMPLETE_REMINDER_JOB,
     ]);
     const scheduledSet = new Set(scheduleNames);
 

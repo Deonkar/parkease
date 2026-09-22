@@ -1,5 +1,5 @@
 import { trace } from '@opentelemetry/api';
-import { pino } from 'pino';
+import { pino, stdSerializers } from 'pino';
 import type { LoggerOptions } from 'pino';
 
 /**
@@ -33,16 +33,48 @@ export const REDACT_PATHS = [
   'cookie',
 ];
 
+/**
+ * Postgres error fields that carry **row values**, stripped before an error is
+ * logged.
+ *
+ * `redact` cannot reach these. pino serialises an `err` by copying every own
+ * enumerable property, and postgres.js puts `detail`, `where` and `hint` on its
+ * errors — so a constraint violation logs `Failing row contains (...)`, which is
+ * the entire row. On `wash_jobs` that is the WKB-encoded location of a parked
+ * car; on `washer_profiles` it is an identity-document reference; on `users` it
+ * would be a phone number that `redact` protects everywhere else.
+ *
+ * Verified rather than assumed: a probe through the real config showed the
+ * coordinates surviving redaction in full.
+ *
+ * Nothing diagnostic is lost. `code`, `constraint`, `table`, `column`, `schema`,
+ * `message` and the stack all survive, and those name *which* invariant failed —
+ * which is what anyone reading the line actually needs. The row values only ever
+ * told us what the caller sent, and we are not allowed to keep that.
+ */
+const PG_ROW_BEARING_FIELDS = ['detail', 'where', 'hint'] as const;
+
+export function serializeError(err: unknown): unknown {
+  const serialized = stdSerializers.err(err as Error) as Record<string, unknown>;
+  for (const field of PG_ROW_BEARING_FIELDS) {
+    if (field in serialized) serialized[field] = '[redacted]';
+  }
+  return serialized;
+}
+
+export const REDACT_OPTIONS = {
+  paths: [
+    ...REDACT_PATHS,
+    ...REDACT_PATHS.map((p) => `*.${p}`),
+    ...REDACT_PATHS.map((p) => `req.headers.${p}`),
+  ],
+  censor: '[redacted]',
+};
+
 const options: LoggerOptions = {
   level: process.env['LOG_LEVEL'] ?? 'info',
-  redact: {
-    paths: [
-      ...REDACT_PATHS,
-      ...REDACT_PATHS.map((p) => `*.${p}`),
-      ...REDACT_PATHS.map((p) => `req.headers.${p}`),
-    ],
-    censor: '[redacted]',
-  },
+  redact: REDACT_OPTIONS,
+  serializers: { err: serializeError },
   mixin() {
     const span = trace.getActiveSpan()?.spanContext();
     return span ? { trace_id: span.traceId, span_id: span.spanId } : {};

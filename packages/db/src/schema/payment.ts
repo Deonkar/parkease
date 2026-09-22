@@ -14,6 +14,7 @@ import {
 import { paise, primaryId, timestamps } from '../columns/common.js';
 
 import { bookings } from './booking.js';
+import { washJobs } from './carwash.js';
 import { users } from './identity.js';
 
 export const payments = pgTable(
@@ -42,6 +43,18 @@ export const payments = pgTable(
     method: text('method'),
     failureReason: text('failure_reason'),
     capturedAt: timestamp('captured_at', { withTimezone: true }),
+    /**
+     * Which thing this order is for.
+     *
+     * §13.4: a car wash is an add-on requested after the booking is already
+     * paid, at a price that depends on the winning partner's menu, so it gets a
+     * Razorpay order of its own — hanging off the *same* booking. Without this
+     * column, `findOpenForBooking` would hand a driver reopening Checkout for
+     * their parking the car wash order instead: the right gateway id for the
+     * wrong thing, at the wrong amount.
+     */
+    purpose: text('purpose').notNull().default('booking'),
+    washJobId: uuid('wash_job_id').references(() => washJobs.id),
     ...timestamps,
   },
   (t) => [
@@ -51,6 +64,20 @@ export const payments = pgTable(
       .where(sql`${t.razorpayPaymentId} IS NOT NULL`),
     index('payments_booking_id_idx').on(t.bookingId),
     index('payments_user_id_idx').on(t.userId),
+    // Built CONCURRENTLY in its own single-statement migration (0029), because
+    // payments takes writes and a plain build would block all of them.
+    index('payments_wash_job_id_idx')
+      .on(t.washJobId)
+      .where(sql`${t.washJobId} IS NOT NULL`),
+    check('payments_purpose_check', sql`${t.purpose} IN ('booking','carwash')`),
+    // The two columns cannot disagree. A 'carwash' payment with no job is an
+    // order nobody can reconcile; a 'booking' payment carrying a job id is a
+    // mislabelled row every purpose-scoped query would then answer wrongly.
+    check(
+      'payments_wash_job_coherence_check',
+      sql`(${t.purpose} = 'carwash' AND ${t.washJobId} IS NOT NULL)
+          OR (${t.purpose} = 'booking' AND ${t.washJobId} IS NULL)`,
+    ),
     check('payments_amount_check', sql`${t.expectedTotalPaise} > 0`),
     // Drizzle reads bigint money with `mode: 'number'`. Past 2^53-1 that read is
     // silently lossy, and a silently rounded amount compared with `===` is a

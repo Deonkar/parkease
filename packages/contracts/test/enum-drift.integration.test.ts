@@ -16,6 +16,7 @@ import {
   VERIFICATION_STATUS_VALUES,
   VALET_JOB_STATUS_VALUES,
   CARWASH_JOB_STATUS_VALUES,
+  CARWASH_SERVICE_NAME_VALUES,
   PAYOUT_STATUS_VALUES,
   LEDGER_ACCOUNT_VALUES,
   NOTIFICATION_TYPE_VALUES,
@@ -170,6 +171,20 @@ const enumMapping: Array<{
     tableName: 'wash_jobs',
     constraintLike: '%status_check%',
     values: CARWASH_JOB_STATUS_VALUES,
+  },
+  {
+    // Stored on two tables, so both are checked: wash_services is where a
+    // partner's menu lives, and wash_jobs freezes the name onto the job.
+    name: 'carwash_service_name (menu)',
+    tableName: 'wash_services',
+    constraintLike: '%service_name_check%',
+    values: CARWASH_SERVICE_NAME_VALUES,
+  },
+  {
+    name: 'carwash_service_name (job)',
+    tableName: 'wash_jobs',
+    constraintLike: '%service_name_check%',
+    values: CARWASH_SERVICE_NAME_VALUES,
   },
   {
     name: 'notification_type',
