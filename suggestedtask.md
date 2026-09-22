@@ -463,3 +463,32 @@ The two should be decided together: the radius ladder is server-side for both pa
 - **Done means:** either both partner types can set it and the next offer set respects it
   server-side, asserted by a test, or `rules.md` records that dispatch radius is not partner
   -configurable in v1 and both task files are corrected.
+
+### S-25 — `pnpm audit` is red, and R-GIT-07 says it must be green
+
+- **Status:** `open`
+- **Found in:** task 13, the pre-PR gate
+- **Surface:** tooling / dependencies
+
+`pnpm audit` reports **62 vulnerabilities** (2 critical, 19 high, 35 moderate, 6 low), of which
+**33 reach production dependencies** (16 high, 14 moderate, 3 low). R-GIT-07 lists a clean
+`pnpm audit` as a condition of opening a PR, and this has not been true for at least task 12 —
+`pnpm-lock.yaml` and every `package.json` are byte-identical to `main`, so task 13 introduced
+none of it and could not have cleared it either.
+
+The bulk is transitive and concentrated in a handful of roots, most of which are a version bump
+rather than a migration: `undici` (several advisories, patched at 6.23 → 6.28 depending on the
+finding), `@opentelemetry/*` (core, sdk-node, propagator-jaeger, exporter-prometheus,
+auto-instrumentations-node), `sharp`, `tar-fs`, `postcss`, `image-size`, `decode-uri-component`
+and `uuid`.
+
+Recording it rather than fixing it inside task 13: a dependency sweep changes the lockfile under
+five apps at once, and the honest way to do that is its own branch with the full suite run
+afterwards — not a drive-by at the end of a feature. Doing it here would also mean a PR whose
+diff is half car wash and half unrelated version bumps.
+
+- **Why deferred:** pre-existing and orthogonal to this task; the fix is a lockfile change with
+  a repo-wide blast radius.
+- **Done means:** `pnpm audit --prod` is clean, `pnpm audit` has no critical or high, the full
+  suite is green afterwards, and either CI enforces it or `rules.md` records the accepted
+  residual with a reason per advisory.
