@@ -19,6 +19,7 @@ import {
   ServiceNotOfferedError,
   WashJobAlreadyTakenError,
   WasherNotOnboardedError,
+  WasherNotVerifiedError,
 } from '../errors.js';
 
 const MINUTE_MS = 60 * 1000;
@@ -61,6 +62,25 @@ export class AcceptWashCommand {
       job.vehicleType as VehicleType,
     );
     if (service === undefined) throw new ServiceNotOfferedError();
+
+    /**
+     * Verification is re-checked here, not only at dispatch.
+     *
+     * The candidate query screens on `verified` when the offer goes out, and
+     * going online screens again — but an offer is live for three minutes, and
+     * a partner can leave that state inside the window: re-submitting documents
+     * flips them back to `pending` by design, and task 18's admin review will
+     * be able to pull verification outright. Without this, somebody whose
+     * verification was withdrawn between the offer and the tap is still
+     * dispatched to a driver's location.
+     *
+     * Exactly the reasoning the linked-account check below already applies to
+     * KYC. Whatever is screened at dispatch has to be screened again at accept,
+     * because the two are minutes apart and the state can move.
+     */
+    if (!(await this.carwash.isVerifiedWasher(input.washerUserId))) {
+      throw new WasherNotVerifiedError();
+    }
 
     /**
      * ADR-013. No activated Linked Account means there is nowhere to route this

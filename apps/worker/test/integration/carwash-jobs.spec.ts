@@ -7,7 +7,7 @@ import {
   stopPgContainer,
 } from '@parkease/testing';
 import { drizzle } from 'drizzle-orm/postgres-js';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { JobDeps } from '../../src/deps.js';
 import { acceptTimeout } from '../../src/jobs/carwash/accept-timeout.job.js';
@@ -84,20 +84,25 @@ interface SeedJobOptions {
 async function seedJob(opts: SeedJobOptions): Promise<string> {
   const bookingId = await seedBooking();
   const assigned = opts.washerUserId ?? null;
-  // `wash_jobs_assignee_presence_check`: a job with a partner has a price.
+  /**
+   * `wash_jobs_assignee_presence_check` moves all three together: a job with a
+   * partner has a price *and* a ledger link. Seeding two of the three would be
+   * seeding a state production cannot reach.
+   */
   const pricePaise = assigned === null ? null : 39900;
 
   const [row] = await pg.sql<{ id: string }[]>`
     INSERT INTO wash_jobs (
       booking_id, driver_user_id, washer_user_id, status,
       service_name, vehicle_type, space_location, price_paise, commission_rate,
-      offer_radius_m, offer_round, before_photo_id, after_photo_id
+      txn_id, offer_radius_m, offer_round, before_photo_id, after_photo_id
     )
     VALUES (
       ${bookingId}, ${driverId}, ${assigned}, ${opts.status},
       'premium_wash', 'car',
       ST_SetSRID(ST_MakePoint(${ORIGIN.lng}, ${ORIGIN.lat}), 4326)::geography,
       ${pricePaise}, ${CARWASH_COMMISSION_RATE.toFixed(3)},
+      ${assigned === null ? null : pg.sql`uuidv7()`},
       ${opts.offerRadiusM ?? WASH_OFFER_RADII_M[0]}, ${opts.offerRound ?? 0},
       ${opts.status === 'washing' || opts.status === 'completed' ? 'wash/before/x' : null},
       ${opts.status === 'completed' ? 'wash/after/x' : null}
@@ -170,6 +175,9 @@ beforeEach(async () => {
              ledger_entries, outbox_messages, bookings, booking_slots
     RESTART IDENTITY CASCADE
   `;
+  // The mid-search race tests spy on `deps.db.execute`; leaving one installed
+  // would silently re-run its accept in whatever test came next.
+  vi.restoreAllMocks();
 });
 
 describe('carwash.accept-timeout', () => {
@@ -284,6 +292,114 @@ describe('carwash.accept-timeout', () => {
       await acceptTimeout(deps, { jobId, round: 0 });
 
       expect((await jobRow(jobId)).offer_round).toBe(2);
+      expect(await outboxTypes()).toEqual([]);
+    });
+  });
+
+  /**
+   * The race the pinned WHERE exists for.
+   *
+   * The handler reads the job, then runs a PostGIS candidate search that takes
+   * real time, and only then writes. A partner accepting inside that window
+   * must win — an UPDATE matching on `id` alone would put an accepted job back
+   * to `offered`, or bury it under `no_washer_available`, on top of a frozen
+   * price and four ledger entries.
+   *
+   * Simulated by moving the row after the handler has read it, which is what a
+   * concurrent accept does.
+   */
+  describe('an accept landing mid-search wins', () => {
+    /**
+     * The accept has to land *after* the handler's guards and *before* its
+     * write, or the guards catch it and the pinned WHERE is never exercised —
+     * a test that moved the row up front would pass with or without the fix.
+     *
+     * `deps.db.execute` is the seam: the handler calls it for the PostGIS
+     * candidate query, which is exactly the slow window the race lives in.
+     */
+    const acceptDuringCandidateSearch = async (jobId: string, washerId: string) => {
+      const realExecute = deps.db.execute.bind(deps.db) as (query: unknown) => Promise<unknown>;
+      let moved = false;
+
+      const spy = vi.spyOn(deps.db, 'execute') as unknown as {
+        mockImplementation: (fn: (query: unknown) => Promise<unknown>) => void;
+      };
+
+      spy.mockImplementation(async (query: unknown) => {
+        if (!moved) {
+          moved = true;
+          await pg.sql`
+            UPDATE wash_jobs
+            SET status = 'accepted', washer_user_id = ${washerId},
+                price_paise = 39900, txn_id = uuidv7()
+            WHERE id = ${jobId}
+          `;
+        }
+        return realExecute(query);
+      });
+    };
+
+    it('does not re-offer a job accepted while it was searching', async () => {
+      const washerId = await seedWasher(4_000);
+      const jobId = await seedJob({ status: 'offered', offerRound: 0 });
+      await acceptDuringCandidateSearch(jobId, washerId);
+
+      await acceptTimeout(deps, { jobId, round: 0 });
+
+      const row = await jobRow(jobId);
+      expect(row.status).toBe('accepted');
+      expect(row.offer_round).toBe(0);
+      expect(row.offer_radius_m).toBe(WASH_OFFER_RADII_M[0]);
+
+      // No second timeout scheduled, and no partner told about a job that is
+      // already taken.
+      expect(await outboxTypes()).toEqual([]);
+    });
+
+    it('does not bury an accepted job under no_washer_available', async () => {
+      const washerId = await seedWasher(1_000);
+      const jobId = await seedJob({
+        status: 'offered',
+        offerRound: WASH_OFFER_RADII_M.length - 1,
+      });
+
+      /**
+       * `giveUp` runs no candidate query, so `db.execute` is not the seam here
+       * — `db.transaction` is. The accept is staged just before the handler
+       * opens its transaction, which is after its guards have already passed.
+       *
+       * Staging it any earlier would be tested by the guards instead of by the
+       * pinned WHERE, and the test would pass with the fix reverted. It does
+       * not: removing `eq(washJobs.status, job.status)` from `giveUp` turns
+       * this red.
+       *
+       * `cancelled` is the one status `wash_jobs_assignee_presence_check` does
+       * not constrain, so nothing but that WHERE stands between an accepted job
+       * and being buried under `no_washer_available`.
+       */
+      const realTransaction = deps.db.transaction.bind(deps.db) as (
+        fn: unknown,
+      ) => Promise<unknown>;
+      const txSpy = vi.spyOn(deps.db, 'transaction') as unknown as {
+        mockImplementation: (fn: (body: unknown) => Promise<unknown>) => void;
+      };
+      txSpy.mockImplementation(async (body: unknown) => {
+        await pg.sql`
+          UPDATE wash_jobs
+          SET status = 'accepted', washer_user_id = ${washerId},
+              price_paise = 39900, txn_id = uuidv7()
+          WHERE id = ${jobId}
+        `;
+        return realTransaction(body);
+      });
+
+      // The handler is still holding the row as it read it, at `offered`.
+      await acceptTimeout(deps, { jobId, round: WASH_OFFER_RADII_M.length - 1 });
+
+      const row = await jobRow(jobId);
+      expect(row.status).toBe('accepted');
+      expect(row.cancellation_reason).toBeNull();
+      // And the driver is not told nobody took it.
       expect(await outboxTypes()).toEqual([]);
     });
   });

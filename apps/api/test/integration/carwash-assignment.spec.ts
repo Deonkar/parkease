@@ -84,12 +84,12 @@ async function seedWasher(opts: SeedWasherOptions): Promise<string> {
     await h.sql`
       INSERT INTO wash_jobs (
         booking_id, driver_user_id, washer_user_id, status, service_name, vehicle_type,
-        space_location, price_paise, commission_rate
+        space_location, price_paise, commission_rate, txn_id
       )
       VALUES (
         ${bookingId}, ${h.driverId}, ${userId}, 'accepted', 'premium_wash', 'car',
         ST_SetSRID(ST_MakePoint(${ORIGIN.lng}, ${ORIGIN.lat}), 4326)::geography,
-        39900, 0.200
+        39900, 0.200, uuidv7()
       )
     `;
   }

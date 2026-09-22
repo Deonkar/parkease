@@ -178,6 +178,12 @@ export const washJobs = pgTable(
     index('wash_jobs_driver_user_id_idx').on(t.driverUserId),
     index('wash_jobs_washer_user_id_idx').on(t.washerUserId),
     index('wash_jobs_status_idx').on(t.status),
+    // The busy-partner exclusion in the candidate query. Partial, so completed
+    // and cancelled jobs never enter it — the cost of asking "are they free"
+    // stays proportional to live jobs rather than to a partner's whole career.
+    index('wash_jobs_washer_live_idx')
+      .on(t.washerUserId)
+      .where(sql`${t.status} NOT IN ('completed', 'cancelled')`),
     check(
       'wash_jobs_status_check',
       sql`${t.status} IN (
@@ -219,9 +225,11 @@ export const washJobs = pgTable(
     check(
       'wash_jobs_assignee_presence_check',
       sql`(${t.status} IN ('requested','offered')
-           AND ${t.washerUserId} IS NULL AND ${t.pricePaise} IS NULL)
+           AND ${t.washerUserId} IS NULL AND ${t.pricePaise} IS NULL
+           AND ${t.txnId} IS NULL)
           OR (${t.status} IN ('accepted','en_route','washing','completed')
-              AND ${t.washerUserId} IS NOT NULL AND ${t.pricePaise} IS NOT NULL)
+              AND ${t.washerUserId} IS NOT NULL AND ${t.pricePaise} IS NOT NULL
+              AND ${t.txnId} IS NOT NULL)
           OR ${t.status} = 'cancelled'`,
     ),
     /**
@@ -271,7 +279,6 @@ export const washJobOffers = pgTable(
      * already saw this job, even if the query is wrong.
      */
     uniqueIndex('wash_job_offers_job_washer_key').on(t.jobId, t.washerUserId),
-    index('wash_job_offers_job_id_idx').on(t.jobId),
     index('wash_job_offers_washer_user_id_idx').on(t.washerUserId),
     check(
       'wash_job_offers_outcome_check',

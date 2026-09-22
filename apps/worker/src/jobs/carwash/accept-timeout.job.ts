@@ -20,7 +20,7 @@ import {
   type WashCandidateRow,
 } from '@parkease/db/queries';
 import { outboxMessages, washJobOffers, washJobs } from '@parkease/db/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
 import type { JobDeps } from '../../deps.js';
 import { logger } from '../../logger.js';
@@ -86,7 +86,7 @@ export async function acceptTimeout(deps: JobDeps, raw: unknown): Promise<void> 
     vehicleType: job.vehicleType,
   });
 
-  await deps.db.transaction(async (tx) => {
+  const widened = await deps.db.transaction(async (tx) => {
     /**
      * `offered --offer--> offered` is a legal self-transition: the status does
      * not change, the radius and the round do. Asserting it anyway keeps the
@@ -98,7 +98,24 @@ export async function acceptTimeout(deps: JobDeps, raw: unknown): Promise<void> 
       throw new Error(`Car wash job ${job.id} cannot be re-offered from '${job.status}'`);
     }
 
-    await tx
+    /**
+     * The WHERE pins the status and the round this widening was computed from,
+     * and that is not belt-and-braces over the guards above — it is the only
+     * thing standing between us and overwriting an accept.
+     *
+     * The guards ran before `findCandidates`, which is a PostGIS query against
+     * a cold index and takes real time. A partner can win
+     * `AcceptWashCommand`'s conditional UPDATE inside that window: the job
+     * becomes `accepted`, a partner is assigned, a price is frozen and four
+     * ledger entries are posted. An UPDATE matching on `id` alone would then
+     * put the row back to `offered` on top of all of that.
+     *
+     * Matching zero rows here is a *normal outcome*, not an error — somebody
+     * got there first, which is the system working. So it returns false and is
+     * logged, rather than throwing and making pg-boss retry a job that is
+     * already resolved.
+     */
+    const updated = await tx
       .update(washJobs)
       .set({
         status: to,
@@ -107,7 +124,16 @@ export async function acceptTimeout(deps: JobDeps, raw: unknown): Promise<void> 
         offeredAt: new Date(),
         updatedAt: new Date(),
       })
-      .where(eq(washJobs.id, job.id));
+      .where(
+        and(
+          eq(washJobs.id, job.id),
+          eq(washJobs.status, job.status),
+          eq(washJobs.offerRound, round),
+        ),
+      )
+      .returning({ id: washJobs.id });
+
+    if (updated.length === 0) return false;
 
     if (candidates.length > 0) {
       await tx.insert(washJobOffers).values(
@@ -144,7 +170,17 @@ export async function acceptTimeout(deps: JobDeps, raw: unknown): Promise<void> 
         },
       })),
     ]);
+
+    return true;
   });
+
+  if (!widened) {
+    logger.info(
+      { jobId: job.id, round },
+      'carwash accept-timeout: job moved on while we were searching, nothing widened',
+    );
+    return;
+  }
 
   logger.info(
     { jobId: job.id, round: nextRound, radiusM: nextRadiusM, offered: candidates.length },
@@ -159,13 +195,27 @@ export async function acceptTimeout(deps: JobDeps, raw: unknown): Promise<void> 
  * nobody was dispatched, so nobody is owed. The absence is the correct posting.
  */
 async function giveUp(deps: JobDeps, job: typeof washJobs.$inferSelect): Promise<void> {
-  await deps.db.transaction(async (tx) => {
+  const cancelled = await deps.db.transaction(async (tx) => {
     const to = nextCarwashStatus(parseCarwashJobStatus(job.status), 'cancel');
     if (to === null) {
       throw new Error(`Car wash job ${job.id} cannot be cancelled from '${job.status}'`);
     }
 
-    await tx
+    /**
+     * Pinned to the status we read, and this branch needs it most.
+     *
+     * `wash_jobs_assignee_presence_check` leaves `cancelled` unconstrained —
+     * it is reachable from a state with a partner and from one without — so
+     * unlike the widening above, the database would *not* catch this one. An
+     * UPDATE matching on `id` alone could bury a job a partner accepted
+     * milliseconds ago under `no_washer_available`, leaving their assignment,
+     * their frozen price and four ledger entries standing against a job the
+     * driver is told nobody took.
+     *
+     * Zero rows means somebody accepted while we were deciding to give up,
+     * which is the best possible outcome here rather than an error.
+     */
+    const updated = await tx
       .update(washJobs)
       .set({
         status: to,
@@ -173,7 +223,10 @@ async function giveUp(deps: JobDeps, job: typeof washJobs.$inferSelect): Promise
         cancellationReason: 'no_washer_available',
         updatedAt: new Date(),
       })
-      .where(eq(washJobs.id, job.id));
+      .where(and(eq(washJobs.id, job.id), eq(washJobs.status, job.status)))
+      .returning({ id: washJobs.id });
+
+    if (updated.length === 0) return false;
 
     await tx.insert(outboxMessages).values({
       type: 'notification.dispatch',
@@ -183,7 +236,17 @@ async function giveUp(deps: JobDeps, job: typeof washJobs.$inferSelect): Promise
         data: { jobId: job.id },
       },
     });
+
+    return true;
   });
+
+  if (!cancelled) {
+    logger.info(
+      { jobId: job.id },
+      'carwash accept-timeout: job was taken while we were giving up, left alone',
+    );
+    return;
+  }
 
   logger.info({ jobId: job.id }, 'carwash accept-timeout: no partner available, job cancelled');
 }

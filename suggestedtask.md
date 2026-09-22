@@ -321,3 +321,145 @@ check. It is run by hand on every task and passes, but no workflow enforces it, 
 depends on someone remembering.
 
 - **Done means:** a GitHub Actions step fails the build on a match.
+
+### S-18 — The valet accept-timeout can overwrite an accept
+
+- **Status:** `open`
+- **Found in:** task 13, silent-failure review (the car wash twin was fixed in this task)
+- **Surface:** worker
+
+`apps/worker/src/jobs/valet/accept-timeout.job.ts` reads the job with a plain unlocked SELECT,
+runs `findCandidates` (a PostGIS query on a cold index — real time), then writes with
+`.where(eq(valetJobs.id, job.id))` in both the widening branch and `giveUp`. The status it read
+is never pinned.
+
+A valet accepting inside that window wins `AcceptJobCommand`'s conditional UPDATE — assignee,
+distance, fee, `txn_id` and four ledger entries all committed — and the timeout's blind UPDATE
+then puts the row back to `offered`, or to `cancelled` with `no_valet_available`, on top of it.
+`valet_jobs_assignee_presence_check` catches the `offered` case loudly (the assignee is still
+set, so the constraint fails and pg-boss retries into the guard). It does **not** catch the
+`cancelled` case: that status is unconstrained, so the job is buried while the ledger says a
+valet earned money for it, and the assigned valet is never told.
+
+The car wash version of this was fixed in task 13 by pinning `status` (and the round) in the
+UPDATE's WHERE and treating zero rows as the normal "somebody got there first" outcome.
+`handlers.ts` also claims these handlers "take a row lock on valet_jobs"; there is no
+`SELECT ... FOR UPDATE` anywhere in the file.
+
+- **Why deferred:** task 11's code, and the fix wants its own regression test at the right seam —
+  the guards catch a naively-staged accept, so a test that moves the row up front passes with or
+  without the fix. The car wash tests show the shape that actually works.
+- **Done means:** both valet branches pin the status, a mutation of either turns a test red, and
+  the `handlers.ts` comment says what the code does.
+
+### S-19 — `markRefunded` is an unchecked write next to a checked one
+
+- **Status:** `open`
+- **Found in:** task 13, silent-failure review
+- **Surface:** api
+
+`PaymentService.markRefunded` (`payment.service.ts`) is an `UPDATE ... WHERE id = ?` with no
+`.returning()` and no row-count check. Both callers — `RefundService.refundForCancellation` and
+task 13's `CancelWashCommand` — check `insertRefund` for `undefined` immediately before it and
+throw loudly if the row was not created, citing R-FAIL-01 in a comment. The very next line
+applies none of that scrutiny.
+
+If it matches zero rows the `refunds` row still exists and the `payment.issue-refund` outbox
+message still commits, so a refund is issued at the gateway against a payment whose local status
+was never moved off `captured` — leaving it eligible to be refunded again by anything that keys
+off `payments.status`.
+
+- **Why deferred:** shared with the booking refund path that shipped in task 9, so the change
+  needs its regression test there rather than in a car wash suite.
+- **Done means:** `markRefunded` returns the updated row or throws, and a test proves a
+  zero-match is loud.
+
+### S-20 — `wash_job_offers` has no database guard against a self-offer
+
+- **Status:** `open`
+- **Found in:** task 13, database review
+- **Surface:** database
+
+`wash_jobs` carries `wash_jobs_washer_is_not_driver_check`, and the candidate query excludes the
+driver from their own offer set. `wash_job_offers` has neither: nothing in the database stops a
+direct write recording an offer whose `washer_user_id` is the job's own `driver_user_id`.
+
+Not cheap to close — the guard needs a value from a different row (`wash_jobs.driver_user_id`),
+which a plain CHECK cannot see, so it is a trigger rather than a constraint. `valet_job_offers`
+has the identical gap.
+
+- **Why deferred:** a trigger is a different class of object from everything else in these
+  migrations, and it would be the first one in the schema that exists purely to re-state an
+  application filter. Worth deciding deliberately rather than adding in passing.
+- **Done means:** either the trigger exists on both offer tables, or an ADR records that the
+  query-level exclusion plus the `wash_jobs` CHECK is the accepted depth.
+
+### S-21 — `valet_job_offers_job_id_idx` duplicates a prefix of its unique key
+
+- **Status:** `open`
+- **Found in:** task 13, database review (the car wash twin was dropped in migration 0030)
+- **Surface:** database
+
+`valet_job_offers_job_valet_key` is `UNIQUE (job_id, valet_user_id)`, so Postgres already serves
+`WHERE job_id = ?` from its leading column. `valet_job_offers_job_id_idx` adds a second B-tree to
+maintain on every offer row written — five per job at valet's fan-out, on every dispatch and
+every widened round — and covers no query the composite does not.
+
+0030 dropped the car wash equivalent. The valet one was left alone because dropping an index on
+a table task 11 ships against is a change that wants its own migration and its own verification.
+
+- **Done means:** the index is dropped in its own migration, with `EXPLAIN` output on the offers
+  lookup before and after showing the composite serving it.
+
+### S-22 — The wash capture path has no end-to-end test
+
+- **Status:** `open`
+- **Found in:** task 13, building the Razorpay order path
+- **Surface:** api
+
+`ConfirmPaymentCommand` now branches on `payments.purpose` so a car wash capture marks the
+payment captured and leaves the booking alone — without that branch a wash capture would have
+been read as an orphan and auto-refunded. The branch is covered by typecheck and by reading, not
+by a test: `carwash-http.spec.ts` stops at minting the order, because driving a capture needs the
+Razorpay double and the webhook route wired into the car wash harness.
+
+- **Why deferred:** the fixture is the work, not the assertion — `payment-webhook-http.spec.ts`
+  already has the double and the signature machinery, and the honest fix is to extend that file
+  with a wash payment rather than rebuild the harness in a car wash suite.
+- **Done means:** a captured wash payment leaves `bookings.status` untouched, marks the payment
+  `captured`, and posts no ledger entries — asserted over HTTP through the webhook route.
+
+### S-23 — Business photos and operating hours have no reader
+
+- **Status:** `open`
+- **Found in:** task 13, at the user's request during design
+- **Surface:** api + mobile + admin
+
+`washer_profiles.business_photo_ids` and `operating_hours` are written at registration and
+returned on the profile view. Nothing reads them: the driver's wash job view does not show a
+partner's photos or hours, and task 18's admin verification screen does not exist yet.
+
+They ship deliberately — the user asked for them during the design conversation rather than
+deferring them — but they are inert until a consumer exists, and inert columns are how 0008
+produced the shape 0027 had to clean up.
+
+- **Done means:** either the task-14 driver view or the task-18 admin panel reads both, or a row
+  here records the decision to drop them.
+
+### S-24 — `max_distance_m` is still unimplemented for both partner types
+
+- **Status:** `open` (extends S-11 to the washer side)
+- **Found in:** task 13, schema design
+- **Surface:** api + mobile
+
+Task 13's column list includes `washer_profiles.max_distance_m`; 0027 does not add it, because
+nothing in task 13 or 14 reads it and a nullable column nobody writes is exactly what 0027 was
+cleaning up. S-11 records the identical gap for valet, where §12.7 shows the setting on a screen
+that has no endpoint behind it.
+
+The two should be decided together: the radius ladder is server-side for both partner types, so
+"max job distance" is the partner's half of a contract the server currently owns entirely.
+
+- **Done means:** either both partner types can set it and the next offer set respects it
+  server-side, asserted by a test, or `rules.md` records that dispatch radius is not partner
+  -configurable in v1 and both task files are corrected.

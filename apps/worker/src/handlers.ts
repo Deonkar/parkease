@@ -72,11 +72,18 @@ export async function registerHandlers(boss: PgBoss, deps: JobDeps): Promise<voi
     for (const job of jobs) await noShow(deps, job.data);
   });
 
-  // One at a time, for the same reason as valet's: the timeout handler takes a
-  // row lock on wash_jobs and widens an offer round, and two deliveries of the
-  // same round racing each other would double-offer. The queue names come from
-  // contracts, so the enqueue in the API and the registration here cannot drift
-  // into a job nobody picks up.
+  // One at a time, for the same reason as valet's: two deliveries of the same
+  // round racing each other would double-offer.
+  //
+  // Note what `batchSize: 1` does NOT do. It serialises redeliveries of the
+  // same pg-boss job; it does not serialise this handler against an accept
+  // arriving through the API in a different transaction. That race is answered
+  // where it has to be — the handler pins the status and the round in its own
+  // UPDATE's WHERE, so an accept landing mid-search wins and the widening
+  // becomes a logged no-op.
+  //
+  // The queue names come from contracts, so the enqueue in the API and the
+  // registration here cannot drift into a job nobody picks up.
   await boss.work<unknown>(CARWASH_ACCEPT_TIMEOUT_JOB, { batchSize: 1 }, async (jobs) => {
     for (const job of jobs) await carwashAcceptTimeout(deps, job.data);
   });
