@@ -15,3 +15,21 @@ export {
   washerEarningEntrySchema,
   type WasherEarningEntry,
 } from './earnings.js';
+
+export {
+  CARWASH_TRANSITIONS,
+  nextCarwashStatus,
+  isTerminalCarwashStatus,
+  LIVE_CARWASH_STATUSES,
+  IllegalCarwashTransitionError,
+  parseCarwashJobStatus,
+} from './lifecycle.js';
+
+export {
+  WASH_OFFER_RADII_M,
+  WASH_OFFER_FANOUT,
+  WASH_ACCEPT_TIMEOUT_MS,
+  WASH_ONLINE_HEARTBEAT_WINDOW_SECONDS,
+  CARWASH_ACCEPT_TIMEOUT_JOB,
+  CARWASH_COMPLETE_REMINDER_JOB,
+} from './dispatch.js';

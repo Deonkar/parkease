@@ -48,3 +48,14 @@ export {
 } from './surge-badge.js';
 
 export { VALET_JOB_EVENT_VALUES, valetJobEventSchema, ValetJobEvent } from './valet-job-event.js';
+
+export {
+  CARWASH_JOB_EVENT_VALUES,
+  carwashJobEventSchema,
+  CarwashJobEvent,
+} from './carwash-job-event.js';
+export {
+  CARWASH_SERVICE_NAME_VALUES,
+  carwashServiceNameSchema,
+  CarwashServiceName,
+} from './carwash-service-name.js';
