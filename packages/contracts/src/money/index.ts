@@ -75,3 +75,6 @@ export {
 export { computeValetLegFee, computeValetNoShowFee, type ValetLegFee } from './valet-fee.js';
 
 export { valetLegEntries, valetChargeAdjustmentEntries } from './ledger-entries.js';
+
+export { computeWashFee, type WashFee } from './carwash-fee.js';
+export { washEntries } from './ledger-entries.js';

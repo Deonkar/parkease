@@ -6,6 +6,7 @@ import {
 import { subPaise } from '../primitives/paise.js';
 
 import { allocateProportionally } from './allocate.js';
+import type { WashFee } from './carwash-fee.js';
 import { type RefundOutcome, RefundTier } from './refund-policy.js';
 import type { ValetLegFee } from './valet-fee.js';
 
@@ -398,5 +399,33 @@ export function valetChargeAdjustmentEntries(
       description,
     ),
     ...leg(Account.REFUNDS_PAYABLE, 'credit', refundPaise, description),
+  ];
+}
+
+/**
+ * One car wash, on the books. §13.7.
+ *
+ * The driver owes the price plus GST; the partner is credited the price less
+ * our commission; we take the commission; the tax authority is owed GST on the
+ * commission alone. `computeWashFee` has already produced three credits that
+ * sum to the debit, so this function recomputes nothing.
+ *
+ * `owner_payable` is the platform's payable-to-supplier account, not an
+ * owner-only account (ADR-008). A washer's balance, a valet's balance and a
+ * space owner's balance are the same query with a different
+ * `counterparty_user_id`, which is why this does not invent a `partner_payable`
+ * that would fork every payout, reconciliation and statement query in tasks 15
+ * and 16.
+ */
+export function washEntries(
+  fee: WashFee,
+  washerUserId: string,
+  description: string,
+): readonly LedgerEntryDraft[] {
+  return [
+    ...leg(Account.DRIVER_RECEIVABLE, 'debit', fee.driverTotalPaise, description),
+    ...leg(Account.OWNER_PAYABLE, 'credit', fee.washerEarningsPaise, description, washerUserId),
+    ...leg(Account.PLATFORM_REVENUE, 'credit', fee.commissionPaise, description),
+    ...leg(Account.GST_PAYABLE, 'credit', fee.gstPaise, description),
   ];
 }
