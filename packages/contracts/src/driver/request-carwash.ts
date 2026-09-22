@@ -31,3 +31,27 @@ export const cancelCarwashSchema = z.object({
 export type CancelCarwash = z.infer<typeof cancelCarwashSchema>;
 
 export const washJobIdParamSchema = z.object({ id: washJobIdSchema });
+
+/**
+ * The Checkout handoff for a car wash.
+ *
+ * A sibling of `paymentOrderSchema` rather than a reuse of it, because the two
+ * differ in what the fields *mean*. A booking order is described by the space
+ * being parked in and keyed to a booking; a wash order is described by the
+ * service being bought and keyed to a wash job. Passing one where the other
+ * belongs would render "Premium Wash" as a space name, or send a driver's
+ * payment to reconcile against the wrong row — mistakes that typecheck
+ * perfectly if the shapes are shared.
+ */
+export const washPaymentOrderSchema = z.object({
+  razorpayOrderId: z.string().min(1),
+  amountPaise: z.number().int().positive(),
+  currency: z.literal('INR'),
+  /** Publishable by design. The secret never leaves the server (R-ENV-05). */
+  keyId: z.string().min(1),
+  /** Shown as the Checkout description, so the driver knows what they are buying. */
+  serviceLabel: z.string().min(1),
+  washJobId: washJobIdSchema,
+});
+
+export type WashPaymentOrder = z.infer<typeof washPaymentOrderSchema>;

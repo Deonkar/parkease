@@ -101,6 +101,8 @@ export {
   cancelCarwashSchema,
   type CancelCarwash,
   washJobIdParamSchema,
+  washPaymentOrderSchema,
+  type WashPaymentOrder,
 } from './request-carwash.js';
 export {
   driverWashJobSchema,

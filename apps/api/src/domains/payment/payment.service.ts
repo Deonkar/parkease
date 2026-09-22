@@ -11,6 +11,9 @@ export interface InsertPaymentInput {
   readonly userId: string;
   readonly razorpayOrderId: string;
   readonly expectedTotalPaise: number;
+  /** Omitted means a parking booking, which is what every task-9 caller is. */
+  readonly purpose?: 'booking' | 'carwash';
+  readonly washJobId?: string;
 }
 
 /**
@@ -40,6 +43,26 @@ export class PaymentService {
     return row?.razorpayAccountId;
   }
 
+  /**
+   * A partner's own Linked Account, by user id rather than through a space.
+   *
+   * A car wash partner has no space to reach them through — they are a supplier
+   * of a service, not the owner of a bay — so the join `activeLinkedAccountForSpace`
+   * uses does not exist for them. The `activated` requirement is identical and
+   * is the point of both: a `pending` account cannot receive a transfer, so
+   * treating it as usable produces a captured payment with no split, which is a
+   * manual payout nobody scheduled, discovered when the partner's money does
+   * not arrive.
+   */
+  async activeLinkedAccountForUser(userId: string): Promise<string | undefined> {
+    const [row] = await this.db
+      .select({ razorpayAccountId: linkedAccounts.razorpayAccountId })
+      .from(linkedAccounts)
+      .where(and(eq(linkedAccounts.userId, userId), eq(linkedAccounts.kycStatus, 'activated')));
+
+    return row?.razorpayAccountId;
+  }
+
   async insert(tx: TxHandle, input: InsertPaymentInput) {
     const [row] = await tx
       .insert(payments)
@@ -49,6 +72,12 @@ export class PaymentService {
         razorpayOrderId: input.razorpayOrderId,
         expectedTotalPaise: input.expectedTotalPaise,
         status: 'created',
+        // Defaulted so every existing caller stays a booking payment without
+        // being edited. `payments_wash_job_coherence_check` refuses the two
+        // fields disagreeing, so a wash payment cannot reach the table without
+        // its job id.
+        purpose: input.purpose ?? 'booking',
+        washJobId: input.washJobId ?? null,
       })
       .returning();
 
@@ -90,11 +119,42 @@ export class PaymentService {
    * than a new one each time, which keeps the webhook's join unambiguous and
    * stops a retry loop littering the gateway with orders nobody will pay.
    */
+  /**
+   * Scoped to `purpose = 'booking'`, and that filter is load-bearing.
+   *
+   * A car wash order hangs off the *same* booking (§13.4), so without it a
+   * driver reopening Checkout for their parking would be handed the wash's open
+   * order instead: the right gateway id for the wrong thing, at the wrong
+   * amount, and a capture webhook that then marks the parking paid.
+   */
   async findOpenForBooking(bookingId: string) {
     const [row] = await this.db
       .select()
       .from(payments)
-      .where(and(eq(payments.bookingId, bookingId), eq(payments.status, 'created')))
+      .where(
+        and(
+          eq(payments.bookingId, bookingId),
+          eq(payments.purpose, 'booking'),
+          eq(payments.status, 'created'),
+        ),
+      )
+      .orderBy(desc(payments.createdAt))
+      .limit(1);
+    return row;
+  }
+
+  /** The open order for a wash, so reopening Checkout does not mint a second. */
+  async findOpenForWashJob(washJobId: string) {
+    const [row] = await this.db
+      .select()
+      .from(payments)
+      .where(
+        and(
+          eq(payments.washJobId, washJobId),
+          eq(payments.purpose, 'carwash'),
+          eq(payments.status, 'created'),
+        ),
+      )
       .orderBy(desc(payments.createdAt))
       .limit(1);
     return row;

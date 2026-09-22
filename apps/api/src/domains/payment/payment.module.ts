@@ -33,6 +33,10 @@ import { WebhookService } from './webhook.service.js';
   ],
   exports: [
     PaymentCoreModule,
+    // Exported for `domains/carwash`, which mints its own Razorpay order: a
+    // wash is bought after the booking is paid, at a price only known once a
+    // partner accepts, so it cannot be a line item on the booking's order.
+    OrderService,
     VerificationService,
     WebhookService,
     CreateOrderCommand,
