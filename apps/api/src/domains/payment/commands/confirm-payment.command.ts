@@ -23,6 +23,8 @@ export type ConfirmPaymentResult =
   | { readonly outcome: 'replayed'; readonly bookingId: string }
   /** Captured against a booking that is no longer live. Needs refunding. */
   | { readonly outcome: 'orphaned'; readonly bookingId: string }
+  /** A car wash add-on captured. Nothing about the booking changes (§13.4). */
+  | { readonly outcome: 'carwash_captured'; readonly washJobId: string }
   /** Captured against an order we have no row for. Task 16 reconciles it. */
   | { readonly outcome: 'unknown_order' };
 
@@ -59,6 +61,47 @@ export class ConfirmPaymentCommand {
       if (locked === undefined) return { outcome: 'unknown_order' };
 
       const { payment, booking } = locked;
+
+      /**
+       * A car wash add-on, not the parking. §13.4.
+       *
+       * Branching here rather than further down is the whole point: everything
+       * below this line is about the booking's own lifecycle, and none of it is
+       * true for a wash. The booking is already `active` when a wash is
+       * requested, so without this branch the `!== 'pending_payment'` test
+       * beneath would read a perfectly good capture as an orphan and enqueue a
+       * refund of money the driver meant to spend.
+       *
+       * Nothing about the booking changes, and no ledger entry is posted: the
+       * wash's receivable and its three credits went on the books when a
+       * partner accepted, and capture moves where the money sits rather than
+       * who owes whom — exactly as it does for a booking.
+       */
+      if (payment.purpose === 'carwash') {
+        // `payments_wash_job_coherence_check` makes this non-null for every
+        // 'carwash' row. If it is null the constraint has been bypassed, and a
+        // capture we cannot attribute to a job is worth failing loudly over
+        // rather than defaulting past (R-FAIL-01).
+        if (payment.washJobId === null) {
+          throw new Error(
+            `Payment ${payment.id} is a car wash payment with no wash_job_id; ` +
+              'payments_wash_job_coherence_check should have made this unreachable',
+          );
+        }
+
+        // The callback and the webhook both land here; whichever is second sees
+        // the row already captured and does nothing.
+        if (payment.status !== 'captured') {
+          await this.payments.markCaptured(tx, payment.id, {
+            razorpayPaymentId: input.razorpayPaymentId,
+            capturedPaise,
+            method: input.method,
+            at: new Date(),
+          });
+        }
+
+        return { outcome: 'carwash_captured', washJobId: payment.washJobId };
+      }
 
       if (booking.status !== 'pending_payment') {
         // Two shapes hide here, and they need opposite answers. `confirmed`

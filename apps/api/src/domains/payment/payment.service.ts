@@ -118,8 +118,7 @@ export class PaymentService {
    * it means a driver who reopens Checkout gets the same Razorpay order rather
    * than a new one each time, which keeps the webhook's join unambiguous and
    * stops a retry loop littering the gateway with orders nobody will pay.
-   */
-  /**
+   *
    * Scoped to `purpose = 'booking'`, and that filter is load-bearing.
    *
    * A car wash order hangs off the *same* booking (§13.4), so without it a
@@ -136,6 +135,30 @@ export class PaymentService {
           eq(payments.bookingId, bookingId),
           eq(payments.purpose, 'booking'),
           eq(payments.status, 'created'),
+        ),
+      )
+      .orderBy(desc(payments.createdAt))
+      .limit(1);
+    return row;
+  }
+
+  /**
+   * The captured payment for a wash, if the driver actually paid.
+   *
+   * Cancelling a wash always reverses the ledger, but only a *captured* payment
+   * has money at the gateway to send back. Most cancellations happen before the
+   * driver has paid at all — a partner is still being found — and in that case
+   * the reversal is the whole story and no gateway call is owed.
+   */
+  async findLatestCapturedForWashJob(washJobId: string) {
+    const [row] = await this.db
+      .select()
+      .from(payments)
+      .where(
+        and(
+          eq(payments.washJobId, washJobId),
+          eq(payments.purpose, 'carwash'),
+          eq(payments.status, 'captured'),
         ),
       )
       .orderBy(desc(payments.createdAt))

@@ -74,6 +74,19 @@ export class DriverPaymentsController {
 
     if (result.outcome === 'unknown_order') throw new PaymentNotFoundError();
 
+    /**
+     * A car wash add-on does not belong on this route. §13.4 gives a wash its
+     * own order and its own Checkout handoff
+     * (`POST /driver/carwash/requests/:id/order`), and this response shape is
+     * entirely about a booking: it reports a `bookingStatus`, and a wash never
+     * moves one.
+     *
+     * The capture itself was committed by the command above, so the money is
+     * safe either way — this refuses to *describe* it in booking terms rather
+     * than refusing to record it.
+     */
+    if (result.outcome === 'carwash_captured') throw new PaymentNotFoundError();
+
     // 'orphaned' means the expiry job released the slot while the driver was
     // paying. The money is on its way back, and saying "confirmed" here would
     // send them to a booking that no longer exists.

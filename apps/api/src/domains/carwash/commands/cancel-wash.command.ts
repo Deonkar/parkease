@@ -8,6 +8,7 @@ import { DB, type Database } from '../../../platform/db/db.module.js';
 import { withTransaction } from '../../../platform/db/transaction.js';
 import { OutboxService } from '../../../platform/outbox/outbox.service.js';
 import { LedgerService } from '../../ledger/ledger.service.js';
+import { PaymentService } from '../../payment/payment.service.js';
 import { CarwashService, type WashJobRow } from '../carwash.service.js';
 import { assertTransition, parseCarwashJobStatus } from '../lifecycle.js';
 
@@ -23,6 +24,7 @@ export class CancelWashCommand {
     @Inject(DB) private readonly db: Database,
     private readonly carwash: CarwashService,
     private readonly ledger: LedgerService,
+    private readonly payments: PaymentService,
     private readonly outbox: OutboxService,
   ) {}
 
@@ -67,15 +69,48 @@ export class CancelWashCommand {
         });
 
         /**
-         * The refund is the worker's, off the outbox, because issuing it is an
-         * external call and this is a transaction (rule 4). The handler is a
-         * no-op when no payment was ever captured, which is the common case:
-         * most cancellations happen before the driver has paid at all.
+         * A gateway refund is owed only if money actually moved.
+         *
+         * Most wash cancellations happen before the driver has paid — a partner
+         * is still being found, or has only just accepted — and then the
+         * reversal above is the whole story: nothing was collected, so there is
+         * nothing to send back.
+         *
+         * When there *is* a capture, the `refunds` row commits here and the
+         * Razorpay call is an outbox message the worker picks up afterwards.
+         * **Ledger first, money second**, the same order `RefundService` uses:
+         * a crash between the two leaves a refund we owe and can retry, never
+         * money gone with no record of it (R-ASYNC-01, R-BE-04).
          */
-        await this.outbox.enqueue(tx, {
-          type: 'payment.issue-refund',
-          payload: { washJobId: job.id, amountPaise: fee.driverTotalPaise },
-        });
+        const captured = await this.payments.findLatestCapturedForWashJob(job.id);
+
+        if (captured?.razorpayPaymentId != null) {
+          const refund = await this.payments.insertRefund(tx, {
+            paymentId: captured.id,
+            amountPaise: fee.driverTotalPaise,
+            reason: 'carwash_cancelled',
+          });
+
+          // `.returning()` gave nothing back, which means the insert did not
+          // happen. Failing loudly beats enqueueing a gateway call against a
+          // row that does not exist (R-FAIL-01).
+          if (refund === undefined) {
+            throw new Error(`Refund row for wash payment ${captured.id} was not created`);
+          }
+
+          await this.payments.markRefunded(tx, captured.id, true);
+
+          await this.outbox.enqueue(tx, {
+            type: 'payment.issue-refund',
+            payload: {
+              refundId: refund.id,
+              paymentId: captured.id,
+              bookingId: job.bookingId,
+              razorpayPaymentId: captured.razorpayPaymentId,
+              amountPaise: fee.driverTotalPaise,
+            },
+          });
+        }
       }
 
       await this.outbox.enqueue(

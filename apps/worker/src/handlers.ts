@@ -1,10 +1,16 @@
 import { VALET_ACCEPT_TIMEOUT_JOB, VALET_NO_SHOW_JOB } from '@parkease/contracts/valet';
+import {
+  CARWASH_ACCEPT_TIMEOUT_JOB,
+  CARWASH_COMPLETE_REMINDER_JOB,
+} from '@parkease/contracts/washer';
 import type PgBoss from 'pg-boss';
 
 import type { JobDeps } from './deps.js';
 import { completeBooking } from './jobs/booking/complete.job.js';
 import { expireUnpaid } from './jobs/booking/expire-unpaid.job.js';
 import { remindBooking } from './jobs/booking/remind.job.js';
+import { acceptTimeout as carwashAcceptTimeout } from './jobs/carwash/accept-timeout.job.js';
+import { washCompleteReminder } from './jobs/carwash/wash-complete-reminder.job.js';
 import { pruneIdempotencyKeys } from './jobs/idempotency/prune.job.js';
 import { assertLedgerBalance } from './jobs/ledger/assert-balance.job.js';
 import {
@@ -64,5 +70,17 @@ export async function registerHandlers(boss: PgBoss, deps: JobDeps): Promise<voi
   });
   await boss.work<unknown>(VALET_NO_SHOW_JOB, { batchSize: 1 }, async (jobs) => {
     for (const job of jobs) await noShow(deps, job.data);
+  });
+
+  // One at a time, for the same reason as valet's: the timeout handler takes a
+  // row lock on wash_jobs and widens an offer round, and two deliveries of the
+  // same round racing each other would double-offer. The queue names come from
+  // contracts, so the enqueue in the API and the registration here cannot drift
+  // into a job nobody picks up.
+  await boss.work<unknown>(CARWASH_ACCEPT_TIMEOUT_JOB, { batchSize: 1 }, async (jobs) => {
+    for (const job of jobs) await carwashAcceptTimeout(deps, job.data);
+  });
+  await boss.work<unknown>(CARWASH_COMPLETE_REMINDER_JOB, { batchSize: 1 }, async (jobs) => {
+    for (const job of jobs) await washCompleteReminder(deps, job.data);
   });
 }
