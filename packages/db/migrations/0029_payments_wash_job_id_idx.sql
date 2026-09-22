@@ -1,0 +1,20 @@
+-- 0029_payments_wash_job_id_idx.sql — hand-written
+-- Task 13. Backs the lookup of the open Razorpay order for a wash job, which
+-- CreateWashOrderCommand runs on every driver pay attempt. Without it that
+-- lookup is a sequential scan of every payment ever taken.
+--
+-- Partial on `wash_job_id IS NOT NULL`: a booking payment can never satisfy the
+-- predicate, so indexing those rows would add entries no query can return. The
+-- predicate is also stable — a payment's purpose never changes — so rows enter
+-- this index once and do not churn in and out of it.
+--
+-- EXACTLY ONE STATEMENT, deliberately: Postgres wraps a multi-statement simple
+-- query in an implicit transaction and CREATE INDEX CONCURRENTLY cannot run
+-- inside one. This is the same rule 0014 and 0015 are written under. Do not add
+-- a second statement to this file.
+--
+-- CONCURRENTLY and not a plain CREATE INDEX, because payments takes writes: a
+-- plain build would block every insert to it for the duration, and "the table
+-- is small today" is not a reason — the lock is judged by the traffic it
+-- blocks, not by the row count.
+CREATE INDEX CONCURRENTLY IF NOT EXISTS payments_wash_job_id_idx ON payments (wash_job_id) WHERE wash_job_id IS NOT NULL;
