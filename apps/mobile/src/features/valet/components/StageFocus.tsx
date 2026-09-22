@@ -62,7 +62,11 @@ export function StageFocus({ status, historyLabel, expanded, onToggleHistory }: 
   const label = STAGE_LABELS[status] ?? status;
 
   return (
-    <View style={styles.root} testID="stage-focus">
+    // The stage can change without the valet touching anything — the driver
+    // requests a return, or a refetch lands a server-side advance. A screen
+    // reader user focused on the proof capture below would otherwise never
+    // learn the headline above them moved on.
+    <View style={styles.root} testID="stage-focus" accessibilityLiveRegion="polite">
       {historyLabel === null ? null : (
         <Pressable
           accessibilityRole="button"

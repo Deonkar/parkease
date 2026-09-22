@@ -93,10 +93,31 @@ export function createLocationQueue({
     return [...fixes].sort((a, b) => a.recordedAt - b.recordedAt);
   }
 
-  return {
+  /**
+   * One drain at a time.
+   *
+   * Every captured fix attempts a send, and the OS can deliver fixes faster
+   * than a request completes. Without this, two drains read the same backlog
+   * and send it twice, then race to write what is left.
+   */
+  let draining = false;
+
+  const queue: LocationQueue = {
     async enqueue(fix) {
       const queued = ordered([...(await read()), fix]).slice(-maxFixes);
       await write(queued);
+
+      // Send immediately. Enqueue-and-wait was the original shape, and it meant
+      // nothing reached the server between going online and going offline —
+      // `last_seen_at` went stale within a minute and the driver's map never
+      // moved. The buffer is for when a send FAILS, not a substitute for trying.
+      if (draining) return;
+      draining = true;
+      try {
+        await queue.drain();
+      } finally {
+        draining = false;
+      }
     },
 
     async drain() {
@@ -133,4 +154,6 @@ export function createLocationQueue({
       return ordered(await read());
     },
   };
+
+  return queue;
 }

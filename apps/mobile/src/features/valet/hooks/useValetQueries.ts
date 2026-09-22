@@ -1,7 +1,7 @@
 import type { ValetJobView } from '@parkease/contracts/valet';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { newIntent, type Intent } from '@/lib/api';
+import type { Intent } from '@/lib/api';
 
 import {
   acceptOffer,
@@ -103,5 +103,3 @@ export function useAdvanceJob() {
     },
   });
 }
-
-export { newIntent };

@@ -118,7 +118,16 @@ export function OnlineStatusBar({
   const view = present(health, ageLabel);
 
   return (
-    <View style={[styles.root, { backgroundColor: view.background }]} testID="online-status-bar">
+    // Losing the fix is the one thing on this screen a valet must hear about
+    // without looking: direction "Focus" puts the offer card in focus, so a
+    // rail that only speaks when focused speaks to nobody. `assertive` on a
+    // dead feed, `polite` otherwise — a stale reading is informative, a lost
+    // one is the driver watching a pin that stopped moving.
+    <View
+      style={[styles.root, { backgroundColor: view.background }]}
+      testID="online-status-bar"
+      accessibilityLiveRegion={health === 'fresh' ? 'none' : 'assertive'}
+    >
       <MaterialCommunityIcons name={view.icon} size={20} color={view.ink} />
 
       <View style={styles.copy}>

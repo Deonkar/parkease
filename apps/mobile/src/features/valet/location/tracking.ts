@@ -19,6 +19,16 @@ import { warn } from '@/lib/log';
 export const LOCATION_DISTANCE_INTERVAL_M = 20;
 export const LOCATION_TIME_INTERVAL_MS = 5_000;
 
+/**
+ * Online but idle: no job in hand, so nobody is watching this feed.
+ *
+ * §12.8's battery rule. A valet who loses a shift's worth of battery to us goes
+ * offline permanently, so the cadence drops until a job makes the position
+ * matter to someone.
+ */
+export const IDLE_DISTANCE_INTERVAL_M = 100;
+export const IDLE_TIME_INTERVAL_MS = 60_000;
+
 export type StartFailure =
   | 'foreground_denied'
   | 'background_denied'
@@ -27,9 +37,15 @@ export type StartFailure =
   | 'availability_failed';
 export type StartResult = { ok: true } | { ok: false; reason: StartFailure };
 
+/** Whether a job is in hand. Decides both accuracy and reporting cadence. */
+export type Cadence = 'active' | 'idle';
+
 export interface StartOptions {
   /** `Location.Accuracy`, passed through so this file needs no expo import. */
   readonly accuracy?: unknown;
+  /** `Location.ActivityType`, same reason. */
+  readonly activityType?: unknown;
+  readonly cadence?: Cadence;
   /**
    * The foreground-service notification colour. Defaults to the Wayfinder
    * primary — task 12 asks for "the brand orange", but there is no such token
@@ -51,11 +67,18 @@ export interface TrackingDeps {
 }
 
 /** Built here rather than at the call site so the tests assert the real thing. */
-export function locationUpdateOptions(accuracy: unknown, notificationColor: string): unknown {
+export function locationUpdateOptions(
+  accuracy: unknown,
+  notificationColor: string,
+  cadence: Cadence = 'active',
+  activityType?: unknown,
+): unknown {
+  const idle = cadence === 'idle';
   return {
     accuracy,
-    distanceInterval: LOCATION_DISTANCE_INTERVAL_M,
-    timeInterval: LOCATION_TIME_INTERVAL_MS,
+    activityType,
+    distanceInterval: idle ? IDLE_DISTANCE_INTERVAL_M : LOCATION_DISTANCE_INTERVAL_M,
+    timeInterval: idle ? IDLE_TIME_INTERVAL_MS : LOCATION_TIME_INTERVAL_MS,
     // Android kills a background location consumer without a foreground
     // service. It is also the honest thing to do: the valet can see at a glance
     // that they are being tracked.
@@ -82,7 +105,12 @@ export function locationUpdateOptions(accuracy: unknown, notificationColor: stri
  */
 export async function startTracking(
   deps: TrackingDeps,
-  { accuracy, notificationColor = colors.primary }: StartOptions = {},
+  {
+    accuracy,
+    activityType,
+    cadence = 'active',
+    notificationColor = colors.primary,
+  }: StartOptions = {},
 ): Promise<StartResult> {
   if (deps.supported === false) return { ok: false, reason: 'unsupported_platform' };
 
@@ -95,7 +123,9 @@ export async function startTracking(
   if (!(await deps.isTaskRegistered())) {
     // Built here, never passed in: an options object assembled at the call site
     // is how the tuned interval gets quietly replaced with someone's guess.
-    await deps.startUpdates(locationUpdateOptions(accuracy, notificationColor));
+    await deps.startUpdates(
+      locationUpdateOptions(accuracy, notificationColor, cadence, activityType),
+    );
   }
 
   try {

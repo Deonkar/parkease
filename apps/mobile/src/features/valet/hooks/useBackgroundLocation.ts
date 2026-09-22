@@ -5,6 +5,8 @@ import { warn } from '@/lib/log';
 
 import {
   ACCURACY_ACTIVE,
+  ACCURACY_IDLE,
+  ACTIVITY_TYPE,
   hasBackgroundGrant,
   isTrackingRegistered,
   trackingDeps,
@@ -36,7 +38,7 @@ const FIX_POLL_MS = 5_000;
  * The ordering rules live in `location/tracking.ts` and are unit-tested there —
  * this hook is the React shell around them, nothing more.
  */
-export function useBackgroundLocation(): BackgroundLocation {
+export function useBackgroundLocation(hasActiveJob = false): BackgroundLocation {
   const [state, setState] = useState<TrackingState>('stopped');
   const [granted, setGranted] = useState(false);
   const [lastFixAt, setLastFixAt] = useState<number | null>(null);
@@ -81,7 +83,14 @@ export function useBackgroundLocation(): BackgroundLocation {
     inFlight.current = true;
     setState('starting');
     try {
-      const result = await startTracking(trackingDeps, { accuracy: ACCURACY_ACTIVE });
+      // §12.8: High accuracy only while a job is live. Online-but-idle drops to
+      // Balanced at 60s/100m, which is the difference between a valet who keeps
+      // using the app and one whose battery dies mid-shift.
+      const result = await startTracking(trackingDeps, {
+        accuracy: hasActiveJob ? ACCURACY_ACTIVE : ACCURACY_IDLE,
+        cadence: hasActiveJob ? 'active' : 'idle',
+        activityType: ACTIVITY_TYPE,
+      });
       if (result.ok) {
         setGranted(true);
         setState('tracking');
@@ -101,7 +110,7 @@ export function useBackgroundLocation(): BackgroundLocation {
     } finally {
       inFlight.current = false;
     }
-  }, []);
+  }, [hasActiveJob]);
 
   const stop = useCallback(async (): Promise<void> => {
     inFlight.current = true;

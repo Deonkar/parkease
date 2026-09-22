@@ -1,6 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, fontSize, fontWeight, radius, spacing } from '@parkease/tokens';
 import { ErrorState, Skeleton } from '@parkease/ui-native';
+import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Linking, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,8 +10,10 @@ import { z } from 'zod';
 import { resolveScreenState } from '@/features/shared/screen-state';
 import { OfferFocusCard } from '@/features/valet/components/OfferFocusCard';
 import { OnlineStatusBar } from '@/features/valet/components/OnlineStatusBar';
+import { VerificationGate } from '@/features/valet/components/VerificationGate';
 import { useBackgroundLocation } from '@/features/valet/hooks/useBackgroundLocation';
 import { useAcceptOffer, useOffers, useValetProfile } from '@/features/valet/hooks/useValetQueries';
+import { describeVerification } from '@/features/valet/profile-status';
 import { newIntent, type Intent } from '@/lib/api';
 
 /**
@@ -83,6 +86,10 @@ export default function ValetOffersScreen() {
   // One key per user intent, not per HTTP attempt (R-FE-05): minted when the
   // valet lands on an offer, reused if the accept has to be retried.
   const [intent, setIntent] = useState<Intent>(() => newIntent());
+  // Losing the accept race is an ordinary outcome shown inline, never a red
+  // banner — one happens several times a day, and the other teaches valets to
+  // ignore banners. §12.3.
+  const [takenNotice, setTakenNotice] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -97,16 +104,26 @@ export default function ValetOffersScreen() {
   const current = items[cursor];
 
   const profileScreen = resolveScreenState(profile);
-  const verified = profile.data?.verificationStatus === 'verified';
+  const verificationStatus = profile.data?.verificationStatus;
+  // §12.7 puts the banner HERE, not only on Profile: showing a pending valet
+  // the jobs and the money within reach is what gives them a reason to finish
+  // their document upload. An empty locked screen gives them nothing.
+  const verificationBanner = useMemo(() => {
+    if (profileScreen === 'loading' || verificationStatus === undefined) return null;
+    return describeVerification(verificationStatus).banner;
+  }, [profileScreen, verificationStatus]);
+
   const lockedReason = useMemo(() => {
     // `isLoading` would go false in the retry backoff gap, and with no data yet
     // a VERIFIED valet would be told to verify and locked out of accepting —
     // a UI state bug wearing the costume of a 403.
-    if (profileScreen === 'loading' || verified) return undefined;
-    // The server independently rejects with 403 VALET_NOT_VERIFIED, so this
-    // lock is a courtesy to the valet and never the control.
+    if (profileScreen === 'loading' || verificationStatus === undefined) return undefined;
+    // One source of truth with the profile screen, which fails closed on an
+    // unrecognised status. The server independently rejects the accept with
+    // 403 VALET_NOT_VERIFIED, so this lock is a courtesy and never the control.
+    if (describeVerification(verificationStatus).canAccept) return undefined;
     return 'Verify your documents to accept jobs';
-  }, [profileScreen, verified]);
+  }, [profileScreen, verificationStatus]);
 
   const handleToggle = useCallback(
     async (next: boolean) => {
@@ -143,6 +160,7 @@ export default function ValetOffersScreen() {
           // Losing a race happens several times a day. A red banner for it
           // trains valets to ignore banners, so it reads as an ordinary outcome.
           if (code === 'VALET_JOB_TAKEN') {
+            setTakenNotice('This job was taken by another valet. More jobs coming!');
             setCursor(0);
             setIntent(newIntent());
             void offers.refetch();
@@ -157,6 +175,7 @@ export default function ValetOffersScreen() {
   const handleSkip = useCallback(() => {
     setCursor((index) => (index + 1) % Math.max(items.length, 1));
     setIntent(newIntent());
+    setTakenNotice(null);
   }, [items.length]);
 
   const body = (() => {
@@ -211,15 +230,34 @@ export default function ValetOffersScreen() {
     const seconds = Math.floor(msLeft / 1000);
 
     return (
-      <OfferFocusCard
-        offer={current}
-        position={cursor + 1}
-        total={items.length}
-        onAccept={handleAccept}
-        onSkip={handleSkip}
-        lockedReason={lockedReason}
-        expiresInLabel={`${String(Math.floor(seconds / 60))}:${String(seconds % 60).padStart(2, '0')}`}
-      />
+      <>
+        {takenNotice === null ? null : (
+          // A live region because the sighted cue is the card swapping to a
+          // different address; without this a screen reader user just hears
+          // silence after pressing Accept.
+          <View
+            accessibilityLiveRegion="polite"
+            style={styles.takenNotice}
+            testID="offer-taken-notice"
+          >
+            <MaterialCommunityIcons
+              name="information-outline"
+              size={18}
+              color={colors.primaryDark}
+            />
+            <Text style={styles.takenNoticeText}>{takenNotice}</Text>
+          </View>
+        )}
+        <OfferFocusCard
+          offer={current}
+          position={cursor + 1}
+          total={items.length}
+          onAccept={handleAccept}
+          onSkip={handleSkip}
+          lockedReason={lockedReason}
+          expiresInLabel={`${String(Math.floor(seconds / 60))}:${String(seconds % 60).padStart(2, '0')}`}
+        />
+      </>
     );
   })();
 
@@ -228,6 +266,17 @@ export default function ValetOffersScreen() {
       <View style={styles.header}>
         <Text style={styles.brand}>ParkEase Valet</Text>
       </View>
+
+      {verificationBanner === null ? null : (
+        <View style={styles.gate}>
+          <VerificationGate
+            banner={verificationBanner}
+            onAction={() => {
+              router.push('/(valet)/profile');
+            }}
+          />
+        </View>
+      )}
 
       <OnlineStatusBar
         isOnline={isOnline}
@@ -260,6 +309,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing['2xl'],
     gap: spacing.sm,
   },
+  gate: { paddingHorizontal: spacing.base, paddingTop: spacing.md },
+  takenNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.primarySoft,
+  },
+  takenNoticeText: { flex: 1, fontSize: fontSize.sm, color: colors.primaryDark },
   emptyIcon: {
     width: 64,
     height: 64,

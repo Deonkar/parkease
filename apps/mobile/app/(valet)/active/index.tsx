@@ -1,18 +1,63 @@
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, fontSize, fontWeight, radius, spacing } from '@parkease/tokens';
 import { ErrorState, Skeleton } from '@parkease/ui-native';
-import { useCallback, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { resolveScreenState } from '@/features/shared/screen-state';
+import { OnlineStatusBar } from '@/features/valet/components/OnlineStatusBar';
 import { ProofCapture } from '@/features/valet/components/ProofCapture';
-import { EVENT_LABELS, STAGE_LABELS, StageFocus } from '@/features/valet/components/StageFocus';
+import { EVENT_LABELS, StageFocus } from '@/features/valet/components/StageFocus';
+import { useBackgroundLocation } from '@/features/valet/hooks/useBackgroundLocation';
+import { useProofCapture } from '@/features/valet/hooks/useProofCapture';
 import { useActiveJob, useAdvanceJob } from '@/features/valet/hooks/useValetQueries';
 import { newIntent, type Intent } from '@/lib/api';
+import { warn } from '@/lib/log';
 import { formatPaise } from '@/lib/money';
 
 /** Events that may not fire until a proof photo is attached. */
 const PROOF_GATED = new Set(['confirm_parked']);
+
+/**
+ * Hand off to whatever maps app the valet actually uses.
+ *
+ * `geo:` is the Android intent every navigation app registers, so this does not
+ * pick a vendor for them — and ADR-024 keeps us off a paid maps SDK, so the
+ * handoff is the whole strategy rather than a fallback.
+ */
+function openDirections(lat: number, lng: number, label: string): void {
+  const point = `${String(lat)},${String(lng)}`;
+  const url = `geo:${point}?q=${point}(${encodeURIComponent(label)})`;
+  void Linking.openURL(url).catch((error: unknown) => {
+    warn('valet.navigate: no app handled the geo intent', error);
+    Alert.alert('No maps app', 'Install a maps app to get directions.');
+  });
+}
+
+function NavigateButton({
+  lat,
+  lng,
+  label,
+}: {
+  readonly lat: number;
+  readonly lng: number;
+  readonly label: string;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Navigate to ${label}`}
+      onPress={() => {
+        openDirections(lat, lng, label);
+      }}
+      style={styles.navigate}
+    >
+      <MaterialCommunityIcons name="navigation-variant-outline" size={18} color={colors.primary} />
+      <Text style={styles.navigateLabel}>Navigate</Text>
+    </Pressable>
+  );
+}
 
 export default function ValetActiveScreen() {
   const insets = useSafeAreaInsets();
@@ -20,13 +65,25 @@ export default function ValetActiveScreen() {
   const advance = useAdvanceJob();
 
   const [expanded, setExpanded] = useState(false);
-  // Held above the query boundary on purpose: the error state must not lose a
-  // photo the valet already captured after locking the car.
-  const [proofUri, setProofUri] = useState<string | null>(null);
-  const [proofError, setProofError] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
   const [intent, setIntent] = useState<Intent>(() => newIntent());
 
   const data = job.data ?? null;
+  // A job in hand means High accuracy and the fast cadence.
+  const tracking = useBackgroundLocation(data !== null);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(Date.now());
+    }, 1_000);
+    return () => {
+      clearInterval(timer);
+    };
+  }, []);
+
+  // Held above the query boundary on purpose: the error state must not lose a
+  // photo the valet already captured after locking the car.
+  const proof = useProofCapture(data?.id ?? null);
   const screen = resolveScreenState(job);
 
   const handleAdvance = useCallback(
@@ -37,8 +94,7 @@ export default function ValetActiveScreen() {
         {
           onSuccess: () => {
             setIntent(newIntent());
-            setProofUri(null);
-            setProofError(null);
+            proof.reset();
           },
           onError: () => {
             Alert.alert('That step is no longer available', 'The job has been refreshed.');
@@ -47,17 +103,8 @@ export default function ValetActiveScreen() {
         },
       );
     },
-    [advance, data, intent],
+    [advance, data, intent, proof],
   );
-
-  const handleCapture = useCallback(() => {
-    // The camera is a native module; the browser preview cannot open one.
-    Alert.alert(
-      'Camera unavailable here',
-      'Proof capture needs the Android build. This preview cannot open a camera.',
-    );
-    setProofError(null);
-  }, []);
 
   if (screen === 'loading') {
     return (
@@ -100,7 +147,9 @@ export default function ValetActiveScreen() {
   // table this app maintains a second copy of.
   const [nextEvent] = data.availableEvents;
   const needsProof = nextEvent !== undefined && PROOF_GATED.has(nextEvent);
-  const proofReady = data.proofPhotoId !== null || proofUri !== null;
+  // The SERVER holding a photo is what clears the gate — a local capture that
+  // has not uploaded yet is not proof of anything.
+  const proofReady = data.proofPhotoId !== null || proof.attached;
   const blocked = needsProof && !proofReady;
 
   const doneCount = [data.acceptedAt, data.arrivedAt, data.parkedAt].filter(
@@ -112,6 +161,23 @@ export default function ValetActiveScreen() {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Active job</Text>
       </View>
+
+      {/*
+        The task put this on Offers only, which is the screen where it matters
+        least. While a valet is actually carrying someone's car, a dead feed is
+        the driver watching a pin that stopped moving.
+      */}
+      <OnlineStatusBar
+        isOnline={tracking.state === 'tracking'}
+        busy={tracking.state === 'starting'}
+        lastFixAt={tracking.lastFixAt}
+        granted={tracking.granted}
+        now={now}
+        onToggle={() => {
+          Alert.alert('Finish this job first', 'You can go offline once the car is delivered.');
+        }}
+        onFix={() => void Linking.openSettings()}
+      />
 
       <ScrollView contentContainerStyle={styles.scroll}>
         <StageFocus
@@ -147,10 +213,41 @@ export default function ValetActiveScreen() {
           </View>
         ) : null}
 
+        {data.status === 'return_requested' || data.status === 'returning' ? (
+          <View style={styles.returnBanner} accessibilityRole="alert">
+            <MaterialCommunityIcons name="keyboard-return" size={20} color={colors.primaryDark} />
+            <View style={styles.returnCopy}>
+              <Text style={styles.returnTitle}>Return requested</Text>
+              {data.returnEarningsPaise === null ? null : (
+                <Text style={styles.returnEarnings}>
+                  {`You earn ${formatPaise(data.returnEarningsPaise, { alwaysDecimals: true })}`}
+                </Text>
+              )}
+            </View>
+          </View>
+        ) : null}
+
         <View style={styles.panel}>
           <Text style={styles.panelLabel}>PICKUP</Text>
           <Text style={styles.panelValue}>{data.pickupAddress}</Text>
+          <NavigateButton
+            lat={data.pickupLocation.lat}
+            lng={data.pickupLocation.lng}
+            label={data.pickupAddress}
+          />
         </View>
+
+        {data.returnDropLocation === null ? null : (
+          <View style={styles.panel}>
+            <Text style={styles.panelLabel}>DROP AT</Text>
+            <Text style={styles.panelValue}>Where the driver asked for the car</Text>
+            <NavigateButton
+              lat={data.returnDropLocation.lat}
+              lng={data.returnDropLocation.lng}
+              label="drop point"
+            />
+          </View>
+        )}
 
         {data.earningsPaise === null ? null : (
           <View style={styles.earnings}>
@@ -163,11 +260,11 @@ export default function ValetActiveScreen() {
 
         {needsProof ? (
           <ProofCapture
-            capturedUri={proofUri}
-            uploading={false}
-            error={proofError}
-            onCapture={handleCapture}
-            onRetry={handleCapture}
+            capturedUri={proof.uri}
+            uploading={proof.uploading}
+            error={proof.error}
+            onCaptured={(uri) => void proof.attach(uri)}
+            onRetry={() => void proof.retry()}
           />
         ) : null}
       </ScrollView>
@@ -189,7 +286,7 @@ export default function ValetActiveScreen() {
             style={[styles.primary, blocked && styles.primaryLocked]}
           >
             <Text style={[styles.primaryLabel, blocked && styles.primaryLabelLocked]}>
-              {EVENT_LABELS[nextEvent] ?? STAGE_LABELS[nextEvent] ?? nextEvent}
+              {EVENT_LABELS[nextEvent] ?? nextEvent}
             </Text>
           </Pressable>
           {blocked ? (
@@ -241,6 +338,28 @@ const styles = StyleSheet.create({
   },
   panelValue: { fontSize: fontSize.base, fontWeight: fontWeight.semibold, color: colors.text },
   earnings: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
+  navigate: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    minHeight: 48,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  navigateLabel: { fontSize: fontSize.sm, fontWeight: fontWeight.bold, color: colors.primary },
+  returnBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.primarySoft,
+  },
+  returnCopy: { flex: 1, gap: 2 },
+  returnTitle: { fontSize: fontSize.sm, fontWeight: fontWeight.bold, color: colors.primaryDark },
+  returnEarnings: { fontSize: fontSize.base, fontWeight: fontWeight.bold, color: colors.text },
   earningsLabel: { fontSize: fontSize.sm, color: colors.textSecondary },
   earningsValue: { fontSize: fontSize.xl, fontWeight: fontWeight.bold, color: colors.text },
   dock: {

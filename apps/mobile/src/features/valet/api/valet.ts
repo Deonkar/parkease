@@ -86,15 +86,15 @@ export async function advanceJob(
 
 const proofResponseSchema = z.object({ proofPhotoId: z.string() });
 
-export async function uploadProof(
-  jobId: string,
-  file: { uri: string; name: string; type: string },
-  intent: Intent,
-): Promise<string> {
+export async function uploadProof(uri: string, jobId: string, intent: Intent): Promise<string> {
   const body = new FormData();
   // React Native's FormData takes this shape for a file part; the cast is the
   // documented RN idiom, not an assertion on data from outside the process.
-  body.append('file', file as unknown as Blob);
+  body.append('file', {
+    uri,
+    name: 'proof.jpg',
+    type: 'image/jpeg',
+  } as unknown as Blob);
 
   const response = await api.post<unknown>(`/valet/jobs/${jobId}/proof`, body, {
     headers: {

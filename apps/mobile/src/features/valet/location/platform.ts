@@ -86,3 +86,6 @@ export async function isTrackingRegistered(): Promise<boolean> {
 /** High while a job is live; Balanced while online and idle, to save battery. */
 export const ACCURACY_ACTIVE = Location.Accuracy.High;
 export const ACCURACY_IDLE = Location.Accuracy.Balanced;
+
+/** Tells Android this is vehicle movement, which improves the fused fix. */
+export const ACTIVITY_TYPE = Location.ActivityType.AutomotiveNavigation;

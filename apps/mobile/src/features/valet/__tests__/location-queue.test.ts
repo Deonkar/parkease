@@ -34,6 +34,51 @@ describe('location queue', () => {
     store = memoryStore();
   });
 
+  /**
+   * The bug this whole feature existed to avoid, found by the spec lens.
+   *
+   * `enqueue` wrote to storage and stopped. `drain()` was reachable only from
+   * `stopTracking`, so NO fix reached the server between going online and going
+   * offline: a shift's worth of positions piled up, the 200-fix bound silently
+   * evicted the oldest, `last_seen_at` went stale within a minute, and task 11's
+   * assignment query treated a working valet as unreachable. The driver's map
+   * never moved.
+   */
+  it('tries to send as soon as a fix is captured', async () => {
+    const sent: number[] = [];
+    const send = vi.fn((f: LocationFix) => {
+      sent.push(f.recordedAt);
+      return Promise.resolve({ ok: true as const });
+    });
+    const queue = createLocationQueue({ store, send });
+
+    await queue.enqueue(fix(1_000));
+
+    expect(sent).toEqual([1_000]);
+    expect(await queue.pending()).toHaveLength(0);
+  });
+
+  it('keeps the fix when that attempt fails, and retries on the next capture', async () => {
+    let online = false;
+    const sent: number[] = [];
+    const send = vi.fn((f: LocationFix) => {
+      if (!online) return Promise.resolve({ ok: false as const, reason: 'offline' as const });
+      sent.push(f.recordedAt);
+      return Promise.resolve({ ok: true as const });
+    });
+    const queue = createLocationQueue({ store, send });
+
+    await queue.enqueue(fix(1_000));
+    expect(await queue.pending()).toHaveLength(1);
+
+    online = true;
+    await queue.enqueue(fix(2_000));
+
+    // The backlog goes out in order with the new fix, not after it.
+    expect(sent).toEqual([1_000, 2_000]);
+    expect(await queue.pending()).toHaveLength(0);
+  });
+
   it('holds a fix that could not be sent', async () => {
     const send = vi.fn(() => Promise.resolve({ ok: false as const, reason: 'offline' as const }));
     const queue = createLocationQueue({ store, send });
@@ -43,18 +88,22 @@ describe('location queue', () => {
     expect(await queue.pending()).toHaveLength(1);
   });
 
-  it('drains in timestamp order, oldest first', async () => {
+  it('drains a backlog in timestamp order, oldest first', async () => {
     const sent: number[] = [];
+    let online = false;
     const send = vi.fn((f: LocationFix) => {
+      if (!online) return Promise.resolve({ ok: false as const, reason: 'offline' as const });
       sent.push(f.recordedAt);
       return Promise.resolve({ ok: true as const });
     });
     const queue = createLocationQueue({ store, send });
 
-    // Enqueued out of order, as a late-arriving fix would be.
+    // Captured while offline, and out of order as a late-arriving fix would be.
     await queue.enqueue(fix(3_000));
     await queue.enqueue(fix(1_000));
     await queue.enqueue(fix(2_000));
+
+    online = true;
     await queue.drain();
 
     expect(sent).toEqual([1_000, 2_000, 3_000]);
@@ -125,8 +174,11 @@ describe('location queue', () => {
 
     await expect(queue.pending()).resolves.toEqual([]);
 
+    // The corrupt blob is discarded rather than crashing, and the next fix is
+    // captured and sent normally.
     await queue.enqueue(fix(1_000));
-    expect(await queue.pending()).toHaveLength(1);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(await queue.pending()).toHaveLength(0);
   });
 
   it('drops a single malformed fix without discarding the good ones beside it', async () => {

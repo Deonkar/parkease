@@ -195,3 +195,129 @@ the session is genuinely revoked, an indefinite retry loop that never surfaces a
   currently depends on this path.
 - **Done means:** reconnection is deterministic after a refresh, and a repeatedly-rejected
   handshake ends in a surfaced "signed out" state rather than an unbounded retry.
+
+### S-10 — `verificationStatus` is `z.string()` when the enum already exists
+
+- **Status:** `open`
+- **Found in:** task 12, quality review
+- **Surface:** `packages/contracts`
+
+`valetProfileViewSchema.verificationStatus` is `z.string()` (`job-view.ts`), even though
+`packages/contracts/src/enums/verification-status.ts` already defines `verificationStatusSchema`
+and `admin/verify-partner.ts` uses it. The mobile app's `describeVerification(status: string)`
+and `documentStateFor(...)` inherit that wideness, so a typo in a case label would fall into the
+default branch instead of failing typecheck.
+
+No bug today: the default branch **fails closed**, which is the correct runtime behaviour for an
+old app build meeting a new server value, and narrowing the type would add a compile-time check
+on top of that guard rather than replacing it.
+
+- **Why deferred:** `job-view.ts` shipped in task 11; changing it means re-verifying every
+  consumer across five apps, which is not a mobile task.
+- **Done means:** the contract reuses `verificationStatusSchema`, the mobile helpers take the
+  narrowed type, and the fail-closed default is kept.
+
+### S-11 — §12.7's availability settings have no API
+
+- **Status:** `open`
+- **Found in:** task 12, building the profile screen
+- **Surface:** api + mobile
+
+`docs/tasks/task-12-valet-app.md` §12.7 shows **Max job distance** and **Auto-offline after N
+min idle** as editable settings. `valetProfileViewSchema` carries neither, and there is no
+endpoint to write them. The profile screen ships without that section.
+
+This matters beyond cosmetics: §12.3 says the offers list must not filter client-side because
+the server's radius decided the offer set. Max job distance is the valet's half of that
+contract, and right now they cannot set it at all.
+
+- **Why deferred:** needs a contract, a column and an endpoint — task 11 territory.
+- **Done means:** the profile screen writes both settings, and the _next_ offer set respects the
+  distance server-side, asserted by a test.
+
+### S-12 — A valet cannot upload documents from the app
+
+- **Status:** `open`
+- **Found in:** task 12, spec-conformance review
+- **Surface:** mobile
+
+`POST /valet/profile/documents` is live (`apps/api/src/roles/valet/profile.controller.ts`) and has
+no mobile caller. An unverified valet therefore has no path to becoming verified from inside the
+app: the verification banner's action now says so explicitly rather than rendering a button that
+does nothing, but the capability is missing.
+
+Uploading needs a document camera flow, Cloudinary **private delivery with signed URLs**
+(`security.md` §5.1), and the rule that the Aadhaar _number_ is never collected — only the image,
+viewed by an admin (§5.3). That is a task-sized piece of work, not a button.
+
+- **Done means:** a valet can submit licence and identity documents, the images go to private
+  Cloudinary delivery, and `verification_status` moves to `pending` without an admin touching the
+  database.
+
+### S-13 — Earnings has no period; the screen shows a lifetime total
+
+- **Status:** `open`
+- **Found in:** task 12, spec-conformance review
+- **Surface:** api + mobile
+
+§12.6 asks for Today / This week / This month with a payout date. Neither side supports a period:
+`GET /valet/earnings` takes no query (`earnings.controller.ts`) and returns one lifetime summary.
+Distinct from S-02, which is about per-job rows.
+
+- **Done means:** the endpoint accepts a period, the screen offers the three ranges, and the
+  weekly figure reconciles against a direct `owner_payable` balance query for the same window.
+
+### S-14 — The active-job screen cannot identify the driver or reach support
+
+- **Status:** `open`
+- **Found in:** task 12, spec-conformance review
+- **Surface:** api + mobile
+
+§12.4 shows the driver's name, rating, vehicle and plate, plus **Contact Support**.
+`valetJobViewSchema` carries none of it, so the valet meeting a stranger to take their car has no
+way to confirm they have the right car or person, and no in-app escalation path.
+
+- **Done means:** the job view carries enough to identify the vehicle, and support is reachable
+  from the screen where something goes wrong.
+
+### S-15 — The recorded fix failure is written and never read
+
+- **Status:** `open`
+- **Found in:** task 12, spec-conformance review
+- **Surface:** mobile
+
+`recordFixFailure` (`location/store.ts`) is written by the OS task; `readFixFailure` has no
+caller. The store's own comment says the UI reads it to say _why_ the feed died — a revoked
+permission and a lost satellite fix need different instructions, and today the banner
+distinguishes only the permission case.
+
+- **Done means:** the `lost` banner names the recorded reason, and the record is cleared when a
+  fix arrives.
+
+### S-16 — Offers renders one card, so R-FE-07's FlashList does not apply
+
+- **Status:** `open` (decision to confirm, not a defect)
+- **Found in:** task 12, spec-conformance review
+- **Surface:** mobile
+
+§12.3 specifies `FlashList`. Direction B — "Focus", which the user chose — renders exactly one
+offer at a time with a position counter and a skip control, so there is no list to virtualise.
+The offer set is paged in state, not rendered as rows.
+
+This is a deliberate consequence of the chosen direction rather than an oversight, but it departs
+from a written rule and should be confirmed rather than assumed.
+
+- **Done means:** either the deviation is recorded (an ADR or a note in `rules.md` scoping R-FE-07
+  to actual lists), or Offers grows a real list and Direction B is revisited.
+
+### S-17 — The R-FE-06 money grep is not wired into CI
+
+- **Status:** `open`
+- **Found in:** task 12, spec-conformance review
+- **Surface:** tooling
+
+§12.6 marks `grep -rE "0\.2|VALET_COMMISSION|GST_RATE" apps/mobile/src/features/valet` as a **CI**
+check. It is run by hand on every task and passes, but no workflow enforces it, so the guard
+depends on someone remembering.
+
+- **Done means:** a GitHub Actions step fails the build on a match.

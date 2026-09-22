@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 
 import { clearOnboarded } from '@/features/shared/hooks/useHasOnboarded';
+import { releaseBackgroundTracking } from '@/features/valet/location/release';
 import { api, registerSessionExpiredHandler } from '@/lib/api';
 import { queryClient } from '@/lib/query';
 import { secureStorage } from '@/lib/secure-storage';
@@ -56,6 +57,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
+    // BEFORE the tokens go: releasing the sensor needs an authenticated PATCH
+    // to tell the server this valet is offline. Clearing first would leave the
+    // foreground service running, the task still firing, and the server still
+    // dispatching jobs to a signed-out phone.
+    await releaseBackgroundTracking();
+
     await secureStorage.clear();
     // Tokens are only half of it: a signed-in session also leaves unencrypted
     // AsyncStorage behind — the valet's location queue among it — and a GPS

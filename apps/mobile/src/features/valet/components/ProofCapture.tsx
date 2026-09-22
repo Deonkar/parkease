@@ -1,13 +1,16 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, fontSize, fontWeight, radius, spacing } from '@parkease/tokens';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import { useRef, useState } from 'react';
+import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 export interface ProofCaptureProps {
   /** The captured image, held locally so a retry never means re-shooting. */
   readonly capturedUri: string | null;
   readonly uploading: boolean;
   readonly error: string | null;
-  readonly onCapture: () => void;
+  /** Called with the file uri of a freshly taken photograph. */
+  readonly onCaptured: (uri: string) => void;
   readonly onRetry: () => void;
 }
 
@@ -28,12 +31,68 @@ export function ProofCapture({
   capturedUri,
   uploading,
   error,
-  onCapture,
+  onCaptured,
   onRetry,
 }: ProofCaptureProps) {
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [permission, requestPermission] = useCameraPermissions();
+  const camera = useRef<CameraView>(null);
+
+  const onCapture = async () => {
+    if (permission?.granted !== true) {
+      const next = await requestPermission();
+      if (!next.granted) return;
+    }
+    setCameraOpen(true);
+  };
+
+  const shoot = async () => {
+    const shot = await camera.current?.takePictureAsync({ quality: 0.85 });
+    setCameraOpen(false);
+    if (shot === undefined) return;
+    // Compression happens in the caller's hook, which also owns the upload and
+    // the retry — this component's job ends at "here is a photograph".
+    onCaptured(shot.uri);
+  };
+
+  const cameraModal = (
+    <Modal
+      visible={cameraOpen}
+      animationType="slide"
+      onRequestClose={() => {
+        setCameraOpen(false);
+      }}
+    >
+      <View style={styles.cameraRoot}>
+        <CameraView ref={camera} style={styles.camera} facing="back" />
+        <View style={styles.cameraBar}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Cancel taking the photo"
+            onPress={() => {
+              setCameraOpen(false);
+            }}
+            style={styles.cameraCancel}
+          >
+            <Text style={styles.cameraCancelLabel}>Cancel</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Take the photo"
+            onPress={() => void shoot()}
+            style={styles.shutter}
+          >
+            <View style={styles.shutterInner} />
+          </Pressable>
+          <View style={styles.cameraCancel} />
+        </View>
+      </View>
+    </Modal>
+  );
   if (capturedUri !== null && error === null) {
     return (
       <View style={[styles.root, styles.attached]} testID="proof-capture">
+        {cameraModal}
         <Image
           source={{ uri: capturedUri }}
           style={styles.thumb}
@@ -46,7 +105,7 @@ export function ProofCapture({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Retake the proof photo"
-          onPress={onCapture}
+          onPress={() => void onCapture()}
           hitSlop={8}
           style={styles.secondary}
         >
@@ -59,6 +118,7 @@ export function ProofCapture({
   if (error !== null) {
     return (
       <View style={[styles.root, styles.failed]} testID="proof-capture">
+        {cameraModal}
         <MaterialCommunityIcons name="cloud-off-outline" size={24} color={colors.errorInk} />
         <View style={styles.copy}>
           <Text style={styles.failedTitle}>{error}</Text>
@@ -79,13 +139,14 @@ export function ProofCapture({
 
   return (
     <View style={styles.empty} testID="proof-capture">
+      {cameraModal}
       <MaterialCommunityIcons name="camera-outline" size={30} color={colors.textTertiary} />
       <Text style={styles.emptyTitle}>Photo of the parked car</Text>
       <Text style={styles.emptyDetail}>Required before you can confirm</Text>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Take a photo of the parked car"
-        onPress={onCapture}
+        onPress={() => void onCapture()}
         style={styles.capture}
       >
         <Text style={styles.captureLabel}>Take Photo</Text>
@@ -145,4 +206,31 @@ const styles = StyleSheet.create({
     backgroundColor: colors.text,
   },
   captureLabel: { fontSize: fontSize.base, fontWeight: fontWeight.bold, color: colors.textInverse },
+  cameraRoot: { flex: 1, backgroundColor: colors.text },
+  camera: { flex: 1 },
+  cameraBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xl,
+    backgroundColor: colors.text,
+  },
+  cameraCancel: { minWidth: 72, minHeight: 48, justifyContent: 'center' },
+  cameraCancelLabel: { fontSize: fontSize.base, color: colors.textInverse },
+  shutter: {
+    width: 72,
+    height: 72,
+    borderRadius: radius.full,
+    borderWidth: 4,
+    borderColor: colors.textInverse,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shutterInner: {
+    width: 56,
+    height: 56,
+    borderRadius: radius.full,
+    backgroundColor: colors.textInverse,
+  },
 });
