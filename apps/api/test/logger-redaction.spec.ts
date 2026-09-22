@@ -3,7 +3,7 @@ import { Writable } from 'node:stream';
 import { pino } from 'pino';
 import { describe, it, expect } from 'vitest';
 
-import { REDACT_PATHS } from '../src/platform/observability/logger.js';
+import { REDACT_OPTIONS, serializeError } from '../src/platform/observability/logger.js';
 
 function createTestLogger(): { logger: pino.Logger; output: () => string } {
   const chunks: string[] = [];
@@ -14,17 +14,17 @@ function createTestLogger(): { logger: pino.Logger; output: () => string } {
     },
   });
 
+  /**
+   * Built from the *real* config objects, not a copy of them. The duplicate
+   * this file used to keep meant the test passed whatever the real list said —
+   * the same shape of defect as a security control that is defined, tested and
+   * never wired up.
+   */
   const log = pino(
     {
       level: 'info',
-      redact: {
-        paths: [
-          ...REDACT_PATHS,
-          ...REDACT_PATHS.map((p) => `*.${p}`),
-          ...REDACT_PATHS.map((p) => `req.headers.${p}`),
-        ],
-        censor: '[redacted]',
-      },
+      redact: REDACT_OPTIONS,
+      serializers: { err: serializeError },
     },
     stream,
   );
@@ -108,5 +108,65 @@ describe('the redact list covers the payment identifiers', () => {
     logger.info({ payment: { razorpayPaymentId: 'pay_nested_secret' } }, 'nested');
 
     expect(output()).not.toContain('pay_nested_secret');
+  });
+});
+
+/**
+ * `redact` cannot reach inside a serialised error.
+ *
+ * pino copies every own enumerable property off an `err`, and postgres.js puts
+ * `detail` on its errors — which for a constraint violation is the whole
+ * failing row. On `wash_jobs` that row carries `space_location`: the coordinates
+ * of somebody's parked car (security.md §5.3). A probe through the real config
+ * confirmed it survived redaction in full before `serializeError` existed.
+ */
+describe('postgres error details', () => {
+  const pgCheckViolation = () =>
+    Object.assign(new Error('new row for relation "wash_jobs" violates check constraint'), {
+      severity: 'ERROR',
+      code: '23514',
+      table: 'wash_jobs',
+      constraint: 'wash_jobs_photo_gate_check',
+      detail:
+        'Failing row contains (0192f3a1, washing, 0101000020E6100000C1CAA145B65F53400E4C1B2B8FD82940, 39900).',
+      where: 'PL/pgSQL function inline_code_block line 3',
+      hint: 'some hint',
+    });
+
+  it('keeps the failing row out of the log', () => {
+    const { logger, output } = createTestLogger();
+    logger.error({ err: pgCheckViolation() }, 'request failed');
+
+    expect(output()).not.toContain('Failing row contains');
+    expect(output()).not.toContain('0101000020E6100000');
+  });
+
+  it('redacts where and hint too, which also quote row values', () => {
+    const { logger, output } = createTestLogger();
+    logger.error({ err: pgCheckViolation() }, 'request failed');
+
+    expect(output()).not.toContain('inline_code_block');
+    expect(output()).not.toContain('some hint');
+  });
+
+  /**
+   * The point is to lose the row values and keep everything that says *which*
+   * invariant failed — otherwise this trades a privacy leak for an outage
+   * nobody can diagnose.
+   */
+  it('keeps the fields that name the failure', () => {
+    const { logger, output } = createTestLogger();
+    logger.error({ err: pgCheckViolation() }, 'request failed');
+
+    expect(output()).toContain('23514');
+    expect(output()).toContain('wash_jobs_photo_gate_check');
+    expect(output()).toContain('wash_jobs');
+  });
+
+  it('leaves an ordinary error alone', () => {
+    const { logger, output } = createTestLogger();
+    logger.error({ err: new Error('something broke') }, 'request failed');
+
+    expect(output()).toContain('something broke');
   });
 });

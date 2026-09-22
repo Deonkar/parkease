@@ -492,3 +492,33 @@ diff is half car wash and half unrelated version bumps.
 - **Done means:** `pnpm audit --prod` is clean, `pnpm audit` has no critical or high, the full
   suite is green afterwards, and either CI enforces it or `rules.md` records the accepted
   residual with a reason per advisory.
+
+### S-26 — No erasure path for partner and job personal data
+
+- **Status:** `open`
+- **Found in:** task 13, security gate (privacy pass)
+- **Surface:** database + api
+
+Task 13 adds personal data with no retention limit and no working deletion path:
+`washer_profiles.id_document_id` (an identity document reference),
+`business_photo_ids`, `current_location` (a partner's precise position), and
+`wash_jobs.space_location` plus `before_photo_id` / `after_photo_id` — photographs of a
+specific car, at a specific place, with a plate plausibly visible.
+
+`washer_profiles` and `wash_services` cascade from `users`, so a user delete would clear
+those. `wash_jobs.driver_user_id` and `washer_user_id` reference `users` **without** cascade,
+and `ledger_entries` is append-only by trigger — so a delete fails on the foreign key and
+there is no path that honours an erasure request at all. That is the correct answer for
+financial records and the wrong one for the photo trail and the location history, which have
+no reason to outlive the job.
+
+Not task 13's invention: `valet_jobs.pickup_location`, `space_photos` and `valet_profiles`
+have the same shape. But task 13 roughly doubles the surface and adds the first identity
+document.
+
+- **Why deferred:** an erasure design is a repo-wide decision — what is anonymised, what is
+  retained for accounting, how long photos live in Cloudinary, and which of those is a legal
+  obligation rather than a preference. That is an ADR, not an edit inside a feature branch.
+- **Done means:** an ADR records the retention period for each class (proof photos, partner
+  location, identity documents, ledger), a job enforces it, and a user deletion anonymises
+  what it cannot remove instead of failing on a foreign key.
