@@ -94,3 +94,17 @@ export {
   valetContactSchema,
   type ValetContact,
 } from './valet-job-detail.js';
+
+export {
+  requestCarwashSchema,
+  type RequestCarwash,
+  cancelCarwashSchema,
+  type CancelCarwash,
+  washJobIdParamSchema,
+} from './request-carwash.js';
+export {
+  driverWashJobSchema,
+  type DriverWashJob,
+  washerCardSchema,
+  type WasherCard,
+} from './carwash-job-detail.js';
