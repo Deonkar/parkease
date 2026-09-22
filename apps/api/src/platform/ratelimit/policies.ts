@@ -54,6 +54,46 @@ export const RATE_LIMIT_POLICIES: Readonly<Record<string, RateLimitPolicy>> = {
   'GET /api/v1/driver/valet/requests/:id': { limit: 60, windowSeconds: 60, keyBy: 'user' },
   'POST /api/v1/driver/valet/requests/:id/return': { limit: 10, windowSeconds: 60, keyBy: 'user' },
   'POST /api/v1/driver/valet/requests/:id/cancel': { limit: 10, windowSeconds: 60, keyBy: 'user' },
+
+  // Car wash (task 13 §13.11).
+  //
+  // The same shape as valet's, priced for a narrower fan-out: three partners
+  // are offered a job rather than five, so accept keeps the loose budget — two
+  // of every three still lose the race, and somebody whose taps lose should not
+  // then be rate-limited out of the next job they might win.
+  //
+  // Registration and documents are the tight pair. Both take file ids from
+  // anyone holding a washer token, and five a minute is more than any honest
+  // partner needs.
+  'GET /api/v1/washer/jobs/offers': { limit: 60, windowSeconds: 60, keyBy: 'user' },
+  'GET /api/v1/washer/jobs/active': { limit: 60, windowSeconds: 60, keyBy: 'user' },
+  'POST /api/v1/washer/jobs/:id/accept': { limit: 30, windowSeconds: 60, keyBy: 'user' },
+  'POST /api/v1/washer/jobs/:id/status': { limit: 30, windowSeconds: 60, keyBy: 'user' },
+  'POST /api/v1/washer/jobs/:id/before-photo': { limit: 10, windowSeconds: 60, keyBy: 'user' },
+  'POST /api/v1/washer/jobs/:id/after-photo': { limit: 10, windowSeconds: 60, keyBy: 'user' },
+  // A heartbeat, so this is the one route a healthy client hits on a timer.
+  'PATCH /api/v1/washer/availability': { limit: 60, windowSeconds: 60, keyBy: 'user' },
+  'GET /api/v1/washer/services': { limit: 30, windowSeconds: 60, keyBy: 'user' },
+  'PUT /api/v1/washer/services/:serviceName': { limit: 10, windowSeconds: 60, keyBy: 'user' },
+  'GET /api/v1/washer/earnings': { limit: 30, windowSeconds: 60, keyBy: 'user' },
+  'GET /api/v1/washer/profile': { limit: 30, windowSeconds: 60, keyBy: 'user' },
+  'POST /api/v1/washer/profile': { limit: 5, windowSeconds: 60, keyBy: 'user' },
+  'POST /api/v1/washer/profile/documents': { limit: 5, windowSeconds: 60, keyBy: 'user' },
+
+  'POST /api/v1/driver/carwash/requests': { limit: 10, windowSeconds: 60, keyBy: 'user' },
+  'GET /api/v1/driver/carwash/requests/:id': { limit: 60, windowSeconds: 60, keyBy: 'user' },
+  // Minting a Checkout order. Tighter than the read, because every call that is
+  // not answered from the open-order lookup is a call to Razorpay.
+  'POST /api/v1/driver/carwash/requests/:id/order': {
+    limit: 10,
+    windowSeconds: 60,
+    keyBy: 'user',
+  },
+  'POST /api/v1/driver/carwash/requests/:id/cancel': {
+    limit: 10,
+    windowSeconds: 60,
+    keyBy: 'user',
+  },
   'POST /api/v1/owner/spaces': { limit: 10, windowSeconds: 60, keyBy: 'user' },
   'PUT /api/v1/owner/spaces/:id': { limit: 20, windowSeconds: 60, keyBy: 'user' },
   'DELETE /api/v1/owner/spaces/:id': { limit: 10, windowSeconds: 60, keyBy: 'user' },

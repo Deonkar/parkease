@@ -24,6 +24,7 @@ import { OwnerModule } from './roles/owner/owner.module.js';
 import { PublicModule } from './roles/public/public.module.js';
 import { SharedModule } from './roles/shared/shared.module.js';
 import { ValetRoleModule } from './roles/valet/valet.module.js';
+import { WasherRoleModule } from './roles/washer/washer.module.js';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { ValetRoleModule } from './roles/valet/valet.module.js';
     PublicModule,
     SharedModule,
     ValetRoleModule,
+    WasherRoleModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

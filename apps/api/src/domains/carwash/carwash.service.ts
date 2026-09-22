@@ -20,6 +20,7 @@ import {
   washerProfiles,
   washJobOffers,
   washJobs,
+  washServices,
 } from '@parkease/db/schema';
 import { and, asc, count, eq, inArray, notInArray, sql } from 'drizzle-orm';
 
@@ -298,15 +299,35 @@ export class CarwashService {
    */
   async findOpenOffersFor(
     washerUserId: string,
-  ): Promise<{ job: WashJobRow; distanceM: number; offeredAt: Date }[]> {
+  ): Promise<{ job: WashJobRow; distanceM: number; offeredAt: Date; pricePaise: number }[]> {
+    /**
+     * Joined to the partner's *own* menu row, because the card shows their
+     * earnings and the job carries no price until somebody accepts. Three
+     * partners looking at this job may each be quoting a different number, so
+     * there is no job-level figure that would be right for more than one of
+     * them.
+     *
+     * An inner join, so an offer whose menu row was deactivated after it went
+     * out simply stops being listed — which is the same answer accept gives.
+     */
     return this.db
       .select({
         job: washJobs,
         distanceM: washJobOffers.distanceM,
         offeredAt: washJobOffers.offeredAt,
+        pricePaise: washServices.pricePaise,
       })
       .from(washJobOffers)
       .innerJoin(washJobs, eq(washJobs.id, washJobOffers.jobId))
+      .innerJoin(
+        washServices,
+        and(
+          eq(washServices.washerUserId, washJobOffers.washerUserId),
+          eq(washServices.serviceName, washJobs.serviceName),
+          eq(washServices.vehicleType, washJobs.vehicleType),
+          eq(washServices.isActive, true),
+        ),
+      )
       .where(
         and(
           eq(washJobOffers.washerUserId, washerUserId),

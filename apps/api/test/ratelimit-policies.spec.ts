@@ -68,9 +68,9 @@ describe('resolvePolicy', () => {
   it('does not let a collection policy swallow its own sub-resources', () => {
     // `POST /owner/spaces` is 10/min; `POST /owner/spaces/:id/photos` is 20.
     // Prefix matching gave the photo upload the listing's budget.
-    expect(resolvePolicy('POST', '/api/v1/owner/spaces/0192f1b3-0000-7000-8000-000000000001/photos')).toBe(
-      RATE_LIMIT_POLICIES['POST /api/v1/owner/spaces/:id/photos'],
-    );
+    expect(
+      resolvePolicy('POST', '/api/v1/owner/spaces/0192f1b3-0000-7000-8000-000000000001/photos'),
+    ).toBe(RATE_LIMIT_POLICIES['POST /api/v1/owner/spaces/:id/photos']);
   });
 
   it('falls back to the admin policy for an admin route with none of its own', () => {
@@ -115,4 +115,63 @@ describe('resolvePolicy', () => {
     expect(resolvePolicy('PUT', '/api/v1/admin/surge/config').keyBy).toBe('user');
     expect(resolvePolicy('GET', '/api/v1/admin/surge/config').keyBy).toBe('user');
   });
+});
+
+/**
+ * Task 13. Every washer and driver car wash route has an explicit policy.
+ *
+ * Stated as a sweep over the route list rather than one assertion per route:
+ * `resolvePolicy` falls back to `DEFAULT_POLICY` for anything unlisted, so a
+ * route added later without a policy would silently inherit the strictest
+ * default and be hard to tell from one that was priced deliberately. Naming
+ * them here means adding a route without thinking about its budget fails.
+ */
+describe('car wash rate limit policies', () => {
+  const WASHER_ROUTES = [
+    'GET /api/v1/washer/jobs/offers',
+    'GET /api/v1/washer/jobs/active',
+    'POST /api/v1/washer/jobs/:id/accept',
+    'POST /api/v1/washer/jobs/:id/status',
+    'POST /api/v1/washer/jobs/:id/before-photo',
+    'POST /api/v1/washer/jobs/:id/after-photo',
+    'PATCH /api/v1/washer/availability',
+    'GET /api/v1/washer/services',
+    'PUT /api/v1/washer/services/:serviceName',
+    'GET /api/v1/washer/earnings',
+    'GET /api/v1/washer/profile',
+    'POST /api/v1/washer/profile',
+    'POST /api/v1/washer/profile/documents',
+  ] as const;
+
+  const DRIVER_ROUTES = [
+    'POST /api/v1/driver/carwash/requests',
+    'GET /api/v1/driver/carwash/requests/:id',
+    'POST /api/v1/driver/carwash/requests/:id/order',
+    'POST /api/v1/driver/carwash/requests/:id/cancel',
+  ] as const;
+
+  it.each([...WASHER_ROUTES, ...DRIVER_ROUTES])('%s has an explicit policy', (route) => {
+    expect(RATE_LIMIT_POLICIES[route], route).toBeDefined();
+  });
+
+  it.each([...WASHER_ROUTES, ...DRIVER_ROUTES])('%s is keyed by user', (route) => {
+    expect(RATE_LIMIT_POLICIES[route]?.keyBy, route).toBe('user');
+  });
+
+  /**
+   * §13.11. The accept budget is the loose one for the same reason valet's is:
+   * two of every three partners offered a job lose the race, and somebody whose
+   * first taps lose should not be locked out of the next job they might win.
+   */
+  it('gives accept room to lose races', () => {
+    expect(RATE_LIMIT_POLICIES['POST /api/v1/washer/jobs/:id/accept']?.limit).toBe(30);
+  });
+
+  /** Registration and documents are the tight ones: 5 a minute, per §13.11. */
+  it.each(['POST /api/v1/washer/profile', 'POST /api/v1/washer/profile/documents'] as const)(
+    '%s is limited to 5 a minute',
+    (route) => {
+      expect(RATE_LIMIT_POLICIES[route]?.limit).toBe(5);
+    },
+  );
 });
