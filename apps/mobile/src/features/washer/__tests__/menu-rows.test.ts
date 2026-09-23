@@ -42,6 +42,25 @@ describe('toMenuRows', () => {
     const rows = toMenuRows([service('interior_only', 'car', 29900, false)]);
     expect(rows.find((r) => r.serviceName === 'interior_only')?.isActive).toBe(false);
   });
+
+  it('handles a bike-only service: carPricePaise is null, bikePricePaise is set', () => {
+    const rows = toMenuRows([service('premium_wash', 'two_wheeler', 19900)]);
+
+    const premium = rows.find((r) => r.serviceName === 'premium_wash');
+    expect(premium?.carPricePaise).toBeNull();
+    expect(premium?.bikePricePaise).toBe(19900);
+    expect(premium?.durationMinutes).toBe(40);
+  });
+
+  it('handles an absent service: all fields are defaults', () => {
+    const rows = toMenuRows([]);
+
+    const basic = rows.find((r) => r.serviceName === 'basic_exterior');
+    expect(basic?.carPricePaise).toBeNull();
+    expect(basic?.bikePricePaise).toBeNull();
+    expect(basic?.durationMinutes).toBe(30);
+    expect(basic?.isActive).toBe(false);
+  });
 });
 
 describe('rupeesToPaise', () => {
@@ -52,8 +71,9 @@ describe('rupeesToPaise', () => {
   it('converts paise precisely, without a float', () => {
     // 10.03 * 100 in floating point is 1002.9999999999999. An off-by-one
     // paise on every price is a ledger that never balances.
-    expect(rupeesToPaise('319.20')).toBe(31920);
     expect(rupeesToPaise('10.03')).toBe(1003);
+    expect(rupeesToPaise('10.5')).toBe(1050);
+    expect(rupeesToPaise('319.20')).toBe(31920);
   });
 
   it('refuses anything outside the contract bounds', () => {
@@ -72,7 +92,7 @@ describe('rupeesToPaise', () => {
 
 describe('paiseToRupees', () => {
   it('round-trips through rupeesToPaise', () => {
-    for (const paise of [1000, 31920, 44900, 999900]) {
+    for (const paise of [1000, 1003, 1050, 31920, 44900, 999900]) {
       expect(rupeesToPaise(paiseToRupees(paise))).toBe(paise);
     }
   });

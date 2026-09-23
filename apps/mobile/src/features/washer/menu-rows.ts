@@ -1,5 +1,9 @@
 import { CARWASH_SERVICE_NAME_VALUES, type CarwashServiceName } from '@parkease/contracts/enums';
-import type { WashService } from '@parkease/contracts/washer';
+import {
+  MAX_SERVICE_PRICE_PAISE,
+  MIN_SERVICE_PRICE_PAISE,
+  type WashService,
+} from '@parkease/contracts/washer';
 
 /**
  * The partner sees one row per service; the database holds two.
@@ -13,9 +17,13 @@ import type { WashService } from '@parkease/contracts/washer';
  * Pure and free of `react-native`, so the node test environment can reach it.
  */
 
-/** Mirrors `servicePriceSchema` in the contract. Kept here so the input can be refused early. */
-export const MIN_PRICE_PAISE = 1_000;
-export const MAX_PRICE_PAISE = 999_900;
+/**
+ * Re-exported from the contract so they are enforced as a single source of truth.
+ * `rupeesToPaise` checks against these bounds; the API's `upsertWashServiceSchema`
+ * checks the same.
+ */
+export const MIN_PRICE_PAISE = MIN_SERVICE_PRICE_PAISE;
+export const MAX_PRICE_PAISE = MAX_SERVICE_PRICE_PAISE;
 
 export interface MenuRow {
   readonly serviceName: CarwashServiceName;

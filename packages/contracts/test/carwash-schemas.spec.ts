@@ -8,6 +8,7 @@ import {
   upsertWashServiceSchema,
   washerProfileViewSchema,
   washJobOfferSchema,
+  washServiceSchema,
 } from '../src/washer/index.js';
 
 const UUID = '0192f3a1-0000-7000-8000-000000000001';
@@ -95,6 +96,50 @@ describe('upsertWashServiceSchema', () => {
     expect(
       upsertWashServiceSchema.safeParse({
         carPricePaise: 0,
+        bikePricePaise: 17900,
+        durationMinutes: 40,
+        isActive: true,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('accepts the minimum price: ₹10 (1,000 paise)', () => {
+    expect(
+      upsertWashServiceSchema.safeParse({
+        carPricePaise: 1000,
+        bikePricePaise: 1000,
+        durationMinutes: 40,
+        isActive: true,
+      }).success,
+    ).toBe(true);
+  });
+
+  it('accepts the maximum price: ₹9,999 (999,900 paise)', () => {
+    expect(
+      upsertWashServiceSchema.safeParse({
+        carPricePaise: 999900,
+        bikePricePaise: 999900,
+        durationMinutes: 40,
+        isActive: true,
+      }).success,
+    ).toBe(true);
+  });
+
+  it('refuses a price below the minimum: 999 paise', () => {
+    expect(
+      upsertWashServiceSchema.safeParse({
+        carPricePaise: 999,
+        bikePricePaise: 17900,
+        durationMinutes: 40,
+        isActive: true,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('refuses a price above the maximum: 999,901 paise', () => {
+    expect(
+      upsertWashServiceSchema.safeParse({
+        carPricePaise: 999901,
         bikePricePaise: 17900,
         durationMinutes: 40,
         isActive: true,
@@ -229,6 +274,25 @@ describe('washJobOfferSchema', () => {
         expiresAt: '2026-09-22T10:03:00.000Z',
       }).success,
     ).toBe(false);
+  });
+});
+
+describe('washServiceSchema (read-side)', () => {
+  /**
+   * The read schema is looser than the write schema: it accepts any price > 0,
+   * including those outside the ₹10–₹9,999 bounds. This prevents the menu
+   * endpoint from throwing if an out-of-range row somehow exists.
+   */
+  it('accepts a stored price of 500 paise (below the write minimum)', () => {
+    expect(
+      washServiceSchema.safeParse({
+        serviceName: 'premium_wash',
+        vehicleType: 'car',
+        pricePaise: 500,
+        durationMinutes: 40,
+        isActive: true,
+      }).success,
+    ).toBe(true);
   });
 });
 

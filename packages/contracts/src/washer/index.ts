@@ -3,6 +3,8 @@ export { acceptWashJobSchema, type AcceptWashJob } from './accept-job.js';
 export { advanceWashJobSchema, type AdvanceWashJob } from './advance-job.js';
 export { attachWashPhotoSchema, type AttachWashPhoto } from './attach-photo.js';
 export {
+  MIN_SERVICE_PRICE_PAISE,
+  MAX_SERVICE_PRICE_PAISE,
   washServiceSchema,
   type WashService,
   washServiceMenuSchema,
