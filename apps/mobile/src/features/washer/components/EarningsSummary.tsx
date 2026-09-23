@@ -7,6 +7,12 @@ import { formatPaise } from '@/lib/money';
 
 import { PERIOD_LABELS } from '../labels';
 
+/**
+ * The headline counts by posting time and the rows by completion time; this says
+ * so in a partner's words, on every summary, with no condition (ruling T9-I1).
+ */
+const CAPTION = 'Counted when you accept a wash. Completed washes are listed below.';
+
 export interface EarningsSummaryProps {
   readonly period: WasherEarningsPeriod;
   readonly summary: WasherEarningsSummary;
@@ -20,25 +26,30 @@ export interface EarningsSummaryProps {
  * figure keeps the ordinary ink colour: a clawback is not an error, and red
  * would read as one.
  *
- * The reversal line is the one thing here the brief did not ask for. The
- * headline counts by posting time and the rows by completion time, so they
- * need not agree (see `washerEarningsViewSchema`); a partner whose headline is
- * below the sum of their rows would otherwise assume a bug. Its only condition
- * is that the server reported a reversal — no amount is compared or derived to
- * decide it (R-FE-06).
+ * The headline counts by posting time and the rows by completion time, so
+ * they need not agree (see `washerEarningsViewSchema`), and a partner would
+ * otherwise read either mismatch as a bug. Two lines say why, and neither
+ * compares or derives an amount (R-FE-06):
+ *
+ * - the fixed caption, always shown, covers a headline ABOVE the rows (an
+ *   accepted wash not yet completed);
+ * - the taken-back line, shown only when the server reports `reversedPaise`
+ *   above zero, covers a headline BELOW them, with the server's amount.
  */
 export function EarningsSummary({ period, summary }: EarningsSummaryProps) {
   const heading = PERIOD_LABELS[period].heading;
   const net = formatPaise(summary.netPaise, { alwaysDecimals: true });
-  const washes = `${String(summary.jobsCompleted)} ${summary.jobsCompleted === 1 ? 'wash' : 'washes'}`;
+  // "completed", not "washes": beside the figure, "5 washes" says those five
+  // produced it, and the figure counts at accept, not at completion.
+  const completed = `${String(summary.jobsCompleted)} completed`;
   const reversed =
     summary.reversedPaise > 0
-      ? `After ${formatPaise(summary.reversedPaise, { alwaysDecimals: true })} reversed for cancellations`
+      ? `After ${formatPaise(summary.reversedPaise, { alwaysDecimals: true })} taken back for cancelled washes`
       : null;
 
   return (
     <View style={styles.root} testID="earnings-summary">
-      <View accessible accessibilityLabel={`${heading}: ${net} earned, ${washes} completed`}>
+      <View accessible accessibilityLabel={`${heading}: ${net}. ${completed}.`}>
         <Text style={styles.heading}>{heading}</Text>
         <View style={styles.figureRow}>
           <Text style={styles.figure} testID="earnings-net">
@@ -46,11 +57,17 @@ export function EarningsSummary({ period, summary }: EarningsSummaryProps) {
           </Text>
           <View style={styles.chip}>
             <Text style={styles.chipLabel} testID="earnings-jobs">
-              {washes}
+              {completed}
             </Text>
           </View>
         </View>
       </View>
+
+      {/* Ruling T9-I1: unconditional. Without it, a first accepted wash reads as
+          money in the hero above "No completed washes", which looks like a bug. */}
+      <Text style={styles.caption} testID="earnings-caption">
+        {CAPTION}
+      </Text>
 
       {reversed === null ? null : (
         <View style={styles.reversed}>
@@ -102,6 +119,7 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.semibold,
     color: colors.textSecondary,
   },
+  caption: { fontSize: fontSize.sm, color: colors.textSecondary },
   reversed: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   reversedLabel: { flex: 1, fontSize: fontSize.sm, color: colors.textSecondary },
 });

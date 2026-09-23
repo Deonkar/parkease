@@ -47,6 +47,14 @@ describe('the earnings screen', () => {
     expect(code).toContain('PERIOD_LABELS[period].empty');
   });
 
+  it('renders the summary, and so its caption, whether or not there are lines (T9-I1)', () => {
+    // FlashList renders the header above an empty list too; the summary must
+    // not sit behind a condition on the lines on its way there.
+    const header = /ListHeaderComponent=\{([\s\S]*?)<EarningsSummary/.exec(code)?.[1] ?? null;
+    expect(header).not.toBeNull();
+    expect(header).not.toMatch(/lines|\?|&&/);
+  });
+
   it('hands the summary the server response, never a figure of its own', () => {
     expect(code).toMatch(/summary=\{view\.summary\}/);
     expect(code).not.toMatch(/Paise\s*[-+*/]|[-+*/]\s*[\w.]*Paise\b/);

@@ -1,18 +1,21 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { toPaise } from '@parkease/contracts/primitives';
 import {
+  WASHER_EARNINGS_PERIOD_VALUES,
   washerEarningsLineSchema,
   washerEarningsSummarySchema,
   type WasherEarningsLine,
   type WasherEarningsSummary,
 } from '@parkease/contracts/washer';
-import { colors } from '@parkease/tokens';
+import { colors, fontSize } from '@parkease/tokens';
 import { describe, expect, it, vi } from 'vitest';
 
 import { formatDateIST } from '@/lib/format';
+import { formatPaise } from '@/lib/money';
 
-import { byTestId, render, style, text } from '../../shared/__tests__/render-native';
+import { byTestId, nodes, render, style, text } from '../../shared/__tests__/render-native';
 import { EarningsLine } from '../components/EarningsLine';
 import { EarningsSummary } from '../components/EarningsSummary';
 
@@ -117,9 +120,13 @@ describe('an earnings line renders the ledger, unchanged', () => {
   });
 });
 
+/** Ruling T9-I1: the one fixed caption, under the figure, on every summary. */
+const CAPTION = 'Counted when you accept a wash. Completed washes are listed below.';
+
 describe('the period summary renders the ledger, unchanged', () => {
-  it('renders netPaise as the headline even when it is not gross minus reversed', () => {
-    // 1,20,000 − 31,920 would be ₹880.80; the server says ₹5.55.
+  it('renders netPaise and reversedPaise unchanged, even when neither follows from the others', () => {
+    // 1,20,000 − 31,920 would be ₹880.80; the server says ₹5.55. And gross −
+    // net would be ₹1,194.45 reversed; the server says ₹319.20.
     const tree = render(
       <EarningsSummary
         period="week"
@@ -128,32 +135,90 @@ describe('the period summary renders the ledger, unchanged', () => {
     );
 
     expect(valueOf(tree, 'earnings-net')).toBe('₹5.55');
+    expect(valueOf(tree, 'earnings-reversed')).toContain(
+      formatPaise(toPaise(31920), { alwaysDecimals: true }),
+    );
     expect(text(tree)).not.toContain('880.80');
+    expect(text(tree)).not.toContain('1,194.45');
     expect(text(tree)).not.toContain('₹1,200');
   });
 
-  it('names the period in words and counts the washes beside the figure', () => {
+  it('names the period in words and counts completed washes beside the figure', () => {
     const tree = render(<EarningsSummary period="week" summary={summary()} />);
 
     expect(text(tree)).toContain('This week');
-    expect(valueOf(tree, 'earnings-jobs')).toBe('5 washes');
+    expect(valueOf(tree, 'earnings-jobs')).toBe('5 completed');
   });
 
-  it('says one wash, not one washes', () => {
+  it('says "1 completed" for one wash', () => {
     const tree = render(<EarningsSummary period="today" summary={summary({ jobsCompleted: 1 })} />);
 
-    expect(valueOf(tree, 'earnings-jobs')).toBe('1 wash');
+    expect(valueOf(tree, 'earnings-jobs')).toBe('1 completed');
     expect(text(tree)).toContain('Today');
   });
 
-  it('says nothing about reversals when there were none', () => {
+  it('reads to TalkBack as the figure and the count, never "earned"', () => {
+    const tree = render(
+      <EarningsSummary
+        period="week"
+        summary={summary({
+          grossPaise: 0,
+          reversedPaise: 31920,
+          netPaise: -31920,
+          jobsCompleted: 0,
+        })}
+      />,
+    );
+
+    const labels = nodes(tree).map((node): unknown => node.props['accessibilityLabel']);
+    expect(labels).toContain('This week: −₹319.20. 0 completed.');
+    expect(labels.join(' ')).not.toMatch(/earned/);
+  });
+
+  it.each(WASHER_EARNINGS_PERIOD_VALUES)(
+    'says when money is counted, unconditionally, for %s (T9-I1)',
+    (period) => {
+      // The case the caption exists for: the first accepted wash of the
+      // period, money in the hero and nothing completed under it.
+      const tree = render(
+        <EarningsSummary
+          period={period}
+          summary={summary({
+            grossPaise: 31920,
+            reversedPaise: 0,
+            netPaise: 31920,
+            jobsCompleted: 0,
+          })}
+        />,
+      );
+
+      const caption = byTestId(tree, 'earnings-caption');
+      if (caption === undefined) throw new Error('no caption');
+      expect(text(caption)).toBe(CAPTION);
+      expect(style(caption)['color']).toBe(colors.textSecondary);
+      expect(style(caption)['fontSize']).toBe(fontSize.sm);
+    },
+  );
+
+  it('keeps the caption above the reversal line', () => {
+    const tree = render(
+      <EarningsSummary period="week" summary={summary({ reversedPaise: 31920, netPaise: 1 })} />,
+    );
+
+    const all = text(tree);
+    expect(all.indexOf(CAPTION)).toBeGreaterThan(all.indexOf('₹0.01'));
+    expect(all.indexOf(CAPTION)).toBeLessThan(all.indexOf('taken back'));
+  });
+
+  it('says nothing about cancellations when nothing was taken back', () => {
     const tree = render(<EarningsSummary period="week" summary={summary({ reversedPaise: 0 })} />);
 
     expect(byTestId(tree, 'earnings-reversed')).toBeUndefined();
-    expect(text(tree)).not.toMatch(/revers/i);
+    // The fixed caption is always there; only the conditional line is absent.
+    expect(text(tree).replace(CAPTION, '')).not.toMatch(/taken back|cancel/i);
   });
 
-  it('explains a reversal with the server amount, so a hero that differs from the rows has a reason', () => {
+  it("explains a clawback with the server amount, in a partner's words", () => {
     const tree = render(
       <EarningsSummary
         period="week"
@@ -161,12 +226,14 @@ describe('the period summary renders the ledger, unchanged', () => {
       />,
     );
 
-    expect(valueOf(tree, 'earnings-reversed')).toContain('₹319.20');
-    expect(valueOf(tree, 'earnings-reversed')).toMatch(/reversed/);
+    expect(valueOf(tree, 'earnings-reversed')).toBe(
+      'After ₹319.20 taken back for cancelled washes',
+    );
+    expect(valueOf(tree, 'earnings-reversed')).not.toMatch(/revers/i);
   });
 
   it('shows a negative period net with its sign, in ink, never in an error colour', () => {
-    // A clawback is not an error: the reversal line explains it.
+    // A clawback is not an error: the line under it explains it.
     const tree = render(
       <EarningsSummary
         period="week"
