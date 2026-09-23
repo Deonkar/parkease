@@ -1,8 +1,8 @@
 import { useCallback, useRef, useState } from 'react';
 
-import { newIntent, type Intent } from '@/lib/api';
+import { newIntent } from '@/lib/api';
 
-import { uploadProof } from '../api/valet';
+import { uploadProof, type HeldProof } from '../api/valet';
 import { submitProof, type ProofDeps } from '../proof';
 
 export interface ProofCaptureState {
@@ -31,19 +31,21 @@ export function useProofCapture(jobId: string | null): ProofCaptureState {
   const [error, setError] = useState<string | null>(null);
   const [proofPhotoId, setProofPhotoId] = useState<string | null>(null);
 
-  // Minted once per CAPTURED PHOTO, not per HTTP attempt (R-FE-05): `attach`
-  // mints a fresh pair for a new photograph, and `retry` reuses this same
-  // pair so it replays the same sign and the same attach rather than racing
-  // a second upload against the first.
-  const intentsRef = useRef<{ sign: Intent; attach: Intent } | null>(null);
+  // The attach intent, minted once per CAPTURED PHOTO, not per HTTP attempt
+  // (R-FE-05): `attach` mints a fresh one for a new photograph, and `retry`
+  // reuses it so the same attach is replayed rather than a second one raced
+  // against the first. The upload itself re-signs every attempt inside
+  // `lib/uploads.ts` (ruling T7-I1) — a signature has no side effect to
+  // deduplicate, and a replayed one goes stale.
+  const heldRef = useRef<HeldProof | null>(null);
 
   const deps: ProofDeps = {
     compress: (source) => Promise.resolve({ uri: source, width: 0, height: 0 }),
     upload: async (source) => {
       if (jobId === null) throw new Error('no active job to attach a photo to');
-      const intents = intentsRef.current;
-      if (intents === null) throw new Error('no intent minted for this capture');
-      return uploadProof(source, jobId, intents);
+      const held = heldRef.current;
+      if (held === null) throw new Error('no intent minted for this capture');
+      return uploadProof(source, jobId, held);
     },
   };
 
@@ -72,9 +74,9 @@ export function useProofCapture(jobId: string | null): ProofCaptureState {
 
   const attach = useCallback(
     async (source: string) => {
-      // A NEW photograph is a new user intent (R-FE-05) — mint a fresh pair,
+      // A NEW photograph is a new user intent (R-FE-05) — mint a fresh one,
       // never reuse whatever a previous capture left behind.
-      intentsRef.current = { sign: newIntent(), attach: newIntent() };
+      heldRef.current = { attach: newIntent(), uploadId: null };
       await run(source);
     },
     [run],
@@ -82,8 +84,8 @@ export function useProofCapture(jobId: string | null): ProofCaptureState {
 
   const retry = useCallback(async () => {
     if (uri === null) return;
-    // Same photo, same intent: replay the same sign and the same attach
-    // rather than minting a second pair for the second HTTP attempt.
+    // Same photo, same attach intent: replay the attach rather than minting
+    // a second one for the second HTTP attempt.
     await run(uri);
   }, [run, uri]);
 
@@ -92,7 +94,7 @@ export function useProofCapture(jobId: string | null): ProofCaptureState {
     setUploading(false);
     setError(null);
     setProofPhotoId(null);
-    intentsRef.current = null;
+    heldRef.current = null;
   }, []);
 
   return {

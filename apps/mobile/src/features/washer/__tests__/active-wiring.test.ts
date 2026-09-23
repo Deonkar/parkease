@@ -63,4 +63,18 @@ describe('the active-job screen', () => {
   it('points an empty state at the Offers tab', () => {
     expect(screen).toContain("router.navigate('/(washer)/offers')");
   });
+
+  it('says a failed refresh without hiding the job (ruling T7-I2)', () => {
+    expect(screen).toMatch(/active\.isError[\s\S]{0,400}testID="active-refresh-notice"/);
+    expect(screen).toMatch(/testID="active-refresh-notice"[\s\S]{0,600}active\.refetch\(\)/);
+  });
+
+  it('passes the slot s writability into its state, so a closed slot shows the server photo', () => {
+    expect(screen).toMatch(/slotStateFor\(attached\[slot\], capture, \{ writable/);
+  });
+
+  it('never drops a camera-permission failure on the floor (R-FAIL-01)', () => {
+    expect(screen).toMatch(/openCamera[\s\S]{0,1500}catch \(error\)[\s\S]{0,200}warn\(/);
+    expect(screen).not.toContain('void openCamera(');
+  });
 });

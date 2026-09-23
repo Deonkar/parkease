@@ -1,4 +1,4 @@
-import { colors, duration, easing } from '@parkease/tokens';
+import { colors, duration, easing, opacity } from '@parkease/tokens';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -118,7 +118,7 @@ describe('a failed upload', () => {
   it('dims the held image so it cannot be mistaken for a sent one', () => {
     const image = nodes(failed()).find((node) => node.type === 'Image');
 
-    expect(image && Number(style(image)['opacity'])).toBeLessThan(1);
+    expect(image && style(image)['opacity']).toBe(opacity.dimmed);
   });
 
   it('offers Retry, which retries THIS slot', () => {
@@ -128,6 +128,28 @@ describe('a failed upload', () => {
     press(byTestId(tree, 'evidence-before-retry'));
 
     expect(onRetry).toHaveBeenCalledWith('before');
+  });
+});
+
+describe('a failed slot is never a dead end', () => {
+  it('offers Retake beside Retry while the slot is writable', () => {
+    const onCapture = vi.fn();
+    const tree = pair({
+      before: slot({ state: 'failed', uri: 'file:///a.jpg', writable: true }),
+      onCapture,
+    });
+
+    expect(text(tree)).toContain('Retry');
+    expect(text(tree)).toContain('Retake');
+    press(byTestId(tree, 'evidence-before-capture'));
+    expect(onCapture).toHaveBeenCalledWith('before');
+  });
+
+  it('offers Retry alone once the slot has closed', () => {
+    const tree = pair({ before: slot({ state: 'failed', uri: 'file:///a.jpg', writable: false }) });
+
+    expect(text(tree)).toContain('Retry');
+    expect(text(tree)).not.toContain('Retake');
   });
 });
 
@@ -201,6 +223,13 @@ describe('an empty slot', () => {
 });
 
 describe('the pair as a layout', () => {
+  it('names itself in partner words, not the design term', () => {
+    const all = text(pair());
+
+    expect(all).toContain('Before & after photos');
+    expect(all).not.toMatch(/evidence/i);
+  });
+
   it('gives both halves an equal share of the width', () => {
     const tree = pair();
     const before = byTestId(tree, 'evidence-before');

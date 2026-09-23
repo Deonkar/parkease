@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type { Intent } from '@/lib/api';
 
-import { apiErrorCodeOf } from '../api/errors';
+import { apiErrorCodeOf, isDefiniteRefusal } from '../api/errors';
 import {
   acceptOffer,
   advanceJob,
@@ -74,6 +74,11 @@ export function useAcceptWash() {
  * The event comes from the server's `availableEvents`, never from a table this
  * app keeps — that is what stops the two drifting. A rejected transition
  * invalidates rather than retries, so a stale screen corrects itself.
+ *
+ * Only a DEFINITE refusal invalidates (ruling T7-I2). A transport failure or a
+ * 5xx says nothing about the job, and a refetch over the same dead connection
+ * fails too — which used to swap the live job for an error screen at the moment
+ * the partner pressed Start Washing with no signal.
  */
 export function useAdvanceWash() {
   const client = useQueryClient();
@@ -91,8 +96,10 @@ export function useAdvanceWash() {
       client.setQueryData(washerKeys.active, job);
       void client.invalidateQueries({ queryKey: ['washer', 'earnings'] });
     },
-    onError: () => {
-      void client.invalidateQueries({ queryKey: washerKeys.active });
+    onError: (error) => {
+      if (isDefiniteRefusal(error)) {
+        void client.invalidateQueries({ queryKey: washerKeys.active });
+      }
     },
   });
 }

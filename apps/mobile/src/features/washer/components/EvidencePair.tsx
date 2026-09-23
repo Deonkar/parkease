@@ -1,5 +1,14 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { colors, duration, easing, fontSize, fontWeight, radius, spacing } from '@parkease/tokens';
+import {
+  colors,
+  duration,
+  easing,
+  fontSize,
+  fontWeight,
+  opacity,
+  radius,
+  spacing,
+} from '@parkease/tokens';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, FadeIn, useReducedMotion } from 'react-native-reanimated';
 
@@ -39,12 +48,6 @@ const STATUS: Readonly<Record<EvidenceSlotState, string>> = {
 };
 
 /**
- * A photo held but not sent. Dimmed so it cannot be mistaken for evidence the
- * server has; the words beside it say the same thing.
- */
-const HELD_OPACITY = 0.45;
-
-/**
  * The before/after pair — direction "Bay"'s organising idea (spec §2).
  *
  * One object with two equal slots, on screen from the moment of accept, so the
@@ -80,7 +83,7 @@ export function EvidencePair({ before, after, onCapture, onRetry }: EvidencePair
   return (
     <View style={styles.root}>
       <Text style={styles.eyebrow} accessibilityRole="header">
-        THE EVIDENCE PAIR
+        Before & after photos
       </Text>
       <View style={styles.row}>
         {half('before', before)}
@@ -193,35 +196,34 @@ function EvidenceSlot({ slot, view, fill, onCapture, onRetry }: EvidenceSlotProp
       frame
     );
 
-  const action = (() => {
-    if (state === 'failed') {
-      return (
-        <Pressable
-          testID={`evidence-${slot}-retry`}
-          accessibilityRole="button"
-          accessibilityLabel={`Retry sending the ${lower} photo`}
-          onPress={onRetry}
-          style={styles.link}
-        >
-          <Text style={styles.linkLabel}>Retry</Text>
-        </Pressable>
-      );
-    }
-    if (state === 'attached' && writable) {
-      return (
-        <Pressable
-          testID={`evidence-${slot}-capture`}
-          accessibilityRole="button"
-          accessibilityLabel={`Retake the ${lower} photo`}
-          onPress={onCapture}
-          style={styles.link}
-        >
-          <Text style={styles.linkLabel}>Retake</Text>
-        </Pressable>
-      );
-    }
-    return null;
-  })();
+  // Retake wherever the server would still take a photo — on a failed slot
+  // too, so no state is a dead end: a Retry that keeps failing can always be
+  // abandoned for a fresh photograph while the slot is open.
+  const retake =
+    (state === 'attached' || state === 'failed') && writable ? (
+      <Pressable
+        testID={`evidence-${slot}-capture`}
+        accessibilityRole="button"
+        accessibilityLabel={`Retake the ${lower} photo`}
+        onPress={onCapture}
+        style={styles.link}
+      >
+        <Text style={styles.linkLabel}>Retake</Text>
+      </Pressable>
+    ) : null;
+
+  const retry =
+    state === 'failed' ? (
+      <Pressable
+        testID={`evidence-${slot}-retry`}
+        accessibilityRole="button"
+        accessibilityLabel={`Retry sending the ${lower} photo`}
+        onPress={onRetry}
+        style={styles.link}
+      >
+        <Text style={styles.linkLabel}>Retry</Text>
+      </Pressable>
+    ) : null;
 
   return (
     <View testID={`evidence-${slot}`} style={styles.half}>
@@ -236,12 +238,19 @@ function EvidenceSlot({ slot, view, fill, onCapture, onRetry }: EvidenceSlotProp
         >
           {`${name} · ${STATUS[state]}`}
         </Text>
-        {action}
+        {state === 'failed' ? null : retake}
       </View>
       {state === 'failed' ? (
-        <Text style={styles.failure} accessibilityLiveRegion="polite">
-          {UPLOAD_FAILED}
-        </Text>
+        <>
+          <Text style={styles.failure} accessibilityLiveRegion="polite">
+            {UPLOAD_FAILED}
+          </Text>
+          {/* Their own row: two actions do not fit beside the status in a half. */}
+          <View style={styles.actions}>
+            {retry}
+            {retake}
+          </View>
+        </>
       ) : null}
     </View>
   );
@@ -250,6 +259,7 @@ function EvidenceSlot({ slot, view, fill, onCapture, onRetry }: EvidenceSlotProp
 const styles = StyleSheet.create({
   root: { gap: spacing.sm },
   eyebrow: {
+    textTransform: 'uppercase',
     fontSize: fontSize.xs,
     fontWeight: fontWeight.bold,
     color: colors.textTertiary,
@@ -286,7 +296,8 @@ const styles = StyleSheet.create({
   cue: { fontSize: fontSize.xs, color: colors.primary, textAlign: 'center' },
   fillLayer: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 },
   image: { width: '100%', height: '100%' },
-  imageHeld: { opacity: HELD_OPACITY },
+  // Held but not sent: dimmed so it cannot pass for evidence the server has.
+  imageHeld: { opacity: opacity.dimmed },
   band: {
     position: 'absolute',
     left: 0,
@@ -335,4 +346,5 @@ const styles = StyleSheet.create({
   link: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.sm },
   linkLabel: { fontSize: fontSize.sm, fontWeight: fontWeight.semibold, color: colors.primary },
   failure: { fontSize: fontSize.xs, color: colors.errorInk },
+  actions: { flexDirection: 'row', flexWrap: 'wrap' },
 });

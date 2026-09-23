@@ -65,24 +65,35 @@ describe('canWriteSlot', () => {
 
 describe('slotStateFor', () => {
   const idle = { uploading: false, error: null };
+  const OPEN = { writable: true };
 
   it('is attached when the SERVER holds a photo, with nothing local', () => {
     // After a restart there is no local capture at all; the server view alone
     // must still say the obligation is met.
-    expect(slotStateFor(true, idle)).toBe('attached');
+    expect(slotStateFor(true, idle, OPEN)).toBe('attached');
   });
 
   it('is empty when the server holds nothing and nothing is in flight', () => {
-    expect(slotStateFor(false, idle)).toBe('empty');
+    expect(slotStateFor(false, idle, OPEN)).toBe('empty');
   });
 
   it('shows an upload in flight, even over an attached photo being retaken', () => {
-    expect(slotStateFor(false, { uploading: true, error: null })).toBe('uploading');
-    expect(slotStateFor(true, { uploading: true, error: null })).toBe('uploading');
+    expect(slotStateFor(false, { uploading: true, error: null }, OPEN)).toBe('uploading');
+    expect(slotStateFor(true, { uploading: true, error: null }, OPEN)).toBe('uploading');
   });
 
   it('shows a failure until it is retried', () => {
-    expect(slotStateFor(false, { uploading: false, error: 'offline' })).toBe('failed');
+    expect(slotStateFor(false, { uploading: false, error: 'offline' }, OPEN)).toBe('failed');
+  });
+
+  it('lets a stale local failure give way once the slot has closed on an attached photo', () => {
+    // Before photo attached, washing started: a failed retake can never land,
+    // and the server holds a photo — the slot reads done, not failed.
+    const failed = { uploading: false, error: 'offline' };
+
+    expect(slotStateFor(true, failed, { writable: false })).toBe('attached');
+    expect(slotStateFor(true, failed, { writable: true })).toBe('failed');
+    expect(slotStateFor(false, failed, { writable: false })).toBe('failed');
   });
 });
 

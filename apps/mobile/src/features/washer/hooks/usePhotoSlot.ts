@@ -23,9 +23,9 @@ export interface PhotoSlotCapture {
    * id, never from here (T7-T1).
    */
   readonly attached: boolean;
-  /** A fresh photograph: a new user intent, so a new pair of keys. */
+  /** A fresh photograph: a new user intent, so a new attach key. */
   capture(uri: string): Promise<void>;
-  /** The held photograph again, under the same keys. */
+  /** The held photograph again, under the same attach key. */
   retry(): Promise<void>;
   reset(): void;
 }
@@ -42,7 +42,8 @@ interface LocalState {
 interface CaptureInFlight {
   readonly jobId: string;
   readonly uri: string;
-  readonly intents: { readonly sign: Intent; readonly attach: Intent };
+  /** The attach intent: minted once per capture, replayed on every retry. */
+  readonly attach: Intent;
   /** Set once Cloudinary has the file, so a retry never uploads it twice. */
   uploadId: string | null;
 }
@@ -60,15 +61,15 @@ const EMPTY: LocalState = {
  * retained on failure (spec §3.2, §6.2).
  *
  * Valet's `useProofCapture` is the pattern, copied rather than imported
- * (R-ARCH-01). Two intents are minted per CAPTURE and held in a ref, not in
- * state: `sign` for `/me/upload-signature` and `attach` for the job's photo
- * route. They are separate mints because the server keys idempotency on the
- * header alone — one key across two endpoints comes back a 422 conflict — and
- * both are reused across every retry of that photograph (R-FE-05).
+ * (R-ARCH-01). ONE intent is minted per capture and held in a ref, not in
+ * state: the attach intent, reused across every retry of that photograph
+ * (R-FE-05). The upload's sign key is not ours — `uploadImage` mints a fresh
+ * one per attempt, because a replayed signature goes stale (ruling T7-I1).
  *
- * The upload id is remembered too. A retry after a failed ATTACH replays the
- * attach alone: uploading again would mint a different id, and the same attach
- * key carrying a different body is a conflict, not a replay.
+ * The upload id is remembered too, so a retry after a failed ATTACH re-sends
+ * the attach alone. That saves sending the bytes twice on a weak connection,
+ * and it keeps the attach body identical under the same attach key — a second
+ * upload would carry a different photo id.
  *
  * Call it unconditionally at the top of the screen, so the capture outlives
  * whichever of skeleton, error or content the screen is rendering.
@@ -93,12 +94,7 @@ export function usePhotoSlot(jobId: string | null, slot: PhotoSlot): PhotoSlotCa
       });
 
       if (capture.uploadId === null) {
-        const uploaded = await uploadImage(
-          capture.uri,
-          'proofs',
-          capture.intents.sign,
-          defaultUploadDeps(),
-        );
+        const uploaded = await uploadImage(capture.uri, 'proofs', defaultUploadDeps());
         if (!current()) return;
         if (!uploaded.ok) {
           // `uploadImage` has already logged the cause at warn (R-FAIL-01).
@@ -113,7 +109,7 @@ export function usePhotoSlot(jobId: string | null, slot: PhotoSlot): PhotoSlotCa
           jobId: capture.jobId,
           slot,
           photoId: capture.uploadId,
-          intent: capture.intents.attach,
+          intent: capture.attach,
         });
         if (!current()) return;
         setLocal((prev) => ({ ...prev, uploading: false, attached: true }));
@@ -144,7 +140,7 @@ export function usePhotoSlot(jobId: string | null, slot: PhotoSlot): PhotoSlotCa
       const fresh: CaptureInFlight = {
         jobId,
         uri,
-        intents: { sign: newIntent(), attach: newIntent() },
+        attach: newIntent(),
         uploadId: null,
       };
       inFlight.current = fresh;

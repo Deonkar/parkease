@@ -102,7 +102,7 @@ export default function WasherActiveScreen() {
     };
   }, [washing]);
 
-  const openCamera = useCallback(
+  const askForCamera = useCallback(
     async (slot: PhotoSlot) => {
       if (permission?.granted !== true) {
         const next = await requestPermission();
@@ -123,6 +123,20 @@ export default function WasherActiveScreen() {
       setCameraSlot(slot);
     },
     [permission, requestPermission],
+  );
+
+  // The permission request can itself reject (the native module failing, an
+  // activity gone mid-prompt). Handled and said, never dropped (R-FAIL-01).
+  const openCamera = useCallback(
+    async (slot: PhotoSlot) => {
+      try {
+        await askForCamera(slot);
+      } catch (error) {
+        warn(`washer.active: could not open the camera for the ${slot} photo`, error);
+        Alert.alert("Couldn't open the camera", 'Please try again.');
+      }
+    },
+    [askForCamera],
   );
 
   const navigateTo = useCallback((job: WashJobView) => {
@@ -186,10 +200,11 @@ export default function WasherActiveScreen() {
     };
     const slotView = (slot: PhotoSlot): EvidenceSlotView => {
       const capture = slots[slot];
+      const writable = canWriteSlot(slot, job.status);
       return {
-        state: slotStateFor(attached[slot], capture),
+        state: slotStateFor(attached[slot], capture, { writable }),
         uri: capture.uri,
-        writable: canWriteSlot(slot, job.status) && !capture.uploading,
+        writable: writable && !capture.uploading,
       };
     };
 
@@ -236,11 +251,36 @@ export default function WasherActiveScreen() {
           )}
         </View>
 
+        {active.isError ? (
+          // The job stays on screen (ruling T7-I2); this only says the latest
+          // refresh failed, and offers another.
+          <View
+            style={styles.refresh}
+            accessibilityLiveRegion="polite"
+            testID="active-refresh-notice"
+          >
+            <MaterialCommunityIcons name="cloud-off-outline" size={18} color={colors.warning} />
+            <Text style={styles.refreshText}>Couldn't refresh. Showing the last update.</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Refresh the job"
+              onPress={() => void active.refetch()}
+              style={styles.refreshAction}
+            >
+              <Text style={styles.refreshActionLabel}>Retry</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
         <ScrollView contentContainerStyle={styles.body}>
           <EvidencePair
             before={slotView('before')}
             after={slotView('after')}
-            onCapture={(slot) => void openCamera(slot)}
+            onCapture={(slot) => {
+              openCamera(slot).catch((error: unknown) => {
+                warn('washer.active: the camera flow failed unexpectedly', error);
+              });
+            }}
             onRetry={(slot) => void slots[slot].retry()}
           />
 
@@ -362,6 +402,19 @@ const styles = StyleSheet.create({
     borderColor: colors.borderStrong,
   },
   body: { padding: spacing.base, gap: spacing.lg },
+  refresh: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingLeft: spacing.base,
+    paddingRight: spacing.xs,
+    backgroundColor: colors.warningLight,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  refreshText: { flex: 1, fontSize: fontSize.sm, color: colors.warning },
+  refreshAction: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.md },
+  refreshActionLabel: { fontSize: fontSize.sm, fontWeight: fontWeight.bold, color: colors.primary },
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,

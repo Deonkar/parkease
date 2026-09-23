@@ -7,8 +7,12 @@ import { usePhotoSlot, type PhotoSlotCapture } from '../hooks/usePhotoSlot';
 /**
  * The evidence pair's one hard promise (spec §6.2, §3.2): a photo that failed to
  * upload is still on the partner's screen, and a retry replays THAT photo under
- * the SAME two intents. By the time an upload fails the car is washed — a second
- * capture would be a photograph of a different thing.
+ * the SAME attach intent. By the time an upload fails the car is washed — a
+ * second capture would be a photograph of a different thing.
+ *
+ * The sign key is not the hook's (ruling T7-I1): `uploadImage` mints one per
+ * attempt, so every retry of the upload is re-signed. It is mocked here, and
+ * `lib/__tests__/uploads.test.ts` proves the fresh key.
  */
 
 const mocks = vi.hoisted(() => ({
@@ -52,7 +56,6 @@ function Harness({ initialJobId }: { readonly initialJobId: string | null }) {
 
 const mount = (jobId: string | null = JOB) => render(<Harness initialJobId={jobId} />);
 
-const signIntentOf = (call: number) => mocks.uploadImage.mock.calls[call]?.[2] as unknown;
 const attachArgsOf = (call: number) =>
   mocks.mutateAsync.mock.calls[call]?.[0] as { photoId: string; intent: unknown } | undefined;
 
@@ -64,7 +67,7 @@ beforeEach(() => {
 });
 
 describe('a capture that uploads', () => {
-  it('uploads to proofs under the sign intent and attaches under a SEPARATE attach intent', async () => {
+  it('uploads to proofs, then attaches under the one intent this capture minted', async () => {
     mocks.uploadImage.mockResolvedValue({ ok: true, uploadId: 'wash/before/1' });
     mocks.mutateAsync.mockResolvedValue({});
     mount();
@@ -74,16 +77,15 @@ describe('a capture that uploads', () => {
     const call = mocks.uploadImage.mock.calls[0] as unknown[] | undefined;
     expect(call?.[0]).toBe('file:///a.jpg');
     expect(call?.[1]).toBe('proofs');
-    const signIntent = signIntentOf(0);
+    // No sign key from the hook: `uploadImage` signs each attempt itself.
+    expect(call).toHaveLength(3);
     expect(mocks.mutateAsync).toHaveBeenCalledWith({
       jobId: JOB,
       slot: 'before',
       photoId: 'wash/before/1',
-      intent: expect.anything() as unknown,
+      intent: { idempotencyKey: 'intent-1' },
     });
-    // Two keys from two mints — never one derived from the other.
-    expect(attachArgsOf(0)?.intent).not.toEqual(signIntent);
-    expect(mocks.minted).toBe(2);
+    expect(mocks.minted).toBe(1);
   });
 
   it('keeps the local image after it attaches — the only thumbnail there is', async () => {
@@ -114,7 +116,7 @@ describe('a failed upload', () => {
     expect(mocks.mutateAsync).not.toHaveBeenCalled();
   });
 
-  it('retries the HELD photo under the same two intents, not a new capture', async () => {
+  it('retries the HELD photo, re-uploading it, under the same attach intent', async () => {
     mocks.uploadImage
       .mockResolvedValueOnce({ ...FAILED, retainedUri: 'file:///a.jpg' })
       .mockResolvedValueOnce({ ok: true, uploadId: 'wash/before/1' });
@@ -124,10 +126,11 @@ describe('a failed upload', () => {
     await act(() => slot.capture('file:///a.jpg'));
     await act(() => slot.retry());
 
+    expect(mocks.uploadImage).toHaveBeenCalledTimes(2);
     expect(mocks.uploadImage.mock.calls[1]?.[0]).toBe('file:///a.jpg');
-    expect(signIntentOf(1)).toEqual(signIntentOf(0));
-    // Nothing new minted for the second HTTP attempt (R-FE-05).
-    expect(mocks.minted).toBe(2);
+    expect(attachArgsOf(0)?.intent).toEqual({ idempotencyKey: 'intent-1' });
+    // Nothing new minted for the second attempt (R-FE-05).
+    expect(mocks.minted).toBe(1);
     expect(slot.attached).toBe(true);
     expect(slot.error).toBeNull();
   });
@@ -135,8 +138,9 @@ describe('a failed upload', () => {
 
 describe('a failed attach', () => {
   it('replays the attach alone — same photo id, same intent — without uploading twice', async () => {
-    // A second upload would mint a different photo id, and the same attach key
-    // with a different body is an idempotency conflict (422), not a retry.
+    // The file is already on Cloudinary: sending the bytes again is wasted
+    // data on a weak connection, and a second upload would carry a different
+    // photo id, so the replayed attach would no longer be the same request.
     mocks.uploadImage.mockResolvedValue({ ok: true, uploadId: 'wash/before/1' });
     mocks.mutateAsync.mockRejectedValueOnce(new Error('Network Error')).mockResolvedValueOnce({});
     mount();
@@ -173,8 +177,29 @@ describe('a failed attach', () => {
   });
 });
 
+describe('an upload and an attach that both fail once', () => {
+  it('re-uploads, then replays only the attach, all under the first attach intent', async () => {
+    mocks.uploadImage
+      .mockResolvedValueOnce({ ...FAILED, retainedUri: 'file:///a.jpg' })
+      .mockResolvedValueOnce({ ok: true, uploadId: 'wash/before/1' });
+    mocks.mutateAsync.mockRejectedValueOnce(new Error('Network Error')).mockResolvedValueOnce({});
+    mount();
+
+    await act(() => slot.capture('file:///a.jpg'));
+    await act(() => slot.retry());
+    await act(() => slot.retry());
+
+    expect(mocks.uploadImage).toHaveBeenCalledTimes(2);
+    expect(mocks.mutateAsync).toHaveBeenCalledTimes(2);
+    expect(attachArgsOf(0)).toEqual(attachArgsOf(1));
+    expect(attachArgsOf(1)?.intent).toEqual({ idempotencyKey: 'intent-1' });
+    expect(mocks.minted).toBe(1);
+    expect(slot.attached).toBe(true);
+  });
+});
+
 describe('intents are per capture', () => {
-  it('mints a fresh pair for a retake', async () => {
+  it('mints a fresh attach intent for a retake', async () => {
     mocks.uploadImage.mockResolvedValue({ ok: true, uploadId: 'wash/before/1' });
     mocks.mutateAsync.mockResolvedValue({});
     mount();
@@ -182,8 +207,7 @@ describe('intents are per capture', () => {
     await act(() => slot.capture('file:///a.jpg'));
     await act(() => slot.capture('file:///b.jpg'));
 
-    expect(mocks.minted).toBe(4);
-    expect(signIntentOf(1)).not.toEqual(signIntentOf(0));
+    expect(mocks.minted).toBe(2);
     expect(attachArgsOf(1)?.intent).not.toEqual(attachArgsOf(0)?.intent);
   });
 });

@@ -93,29 +93,34 @@ export async function advanceJob(
  * goes to Cloudinary through the shared client and only the resulting id is
  * sent here, which is what the endpoint has always asked for.
  *
- * TWO intents, not one: the sign POST (`/me/upload-signature`) and the attach
- * POST (`/valet/jobs/:id/proof`) are different endpoints, and the server's
- * idempotency store keys on the header alone while detecting drift via
- * endpoint + request hash — replaying one key against two endpoints comes
- * back `conflict` / 422 "Something changed in that request." The caller mints
- * both once per captured photo and reuses both across every retry of that
- * photo (R-FE-05).
+ * Only the ATTACH key belongs to the caller (ruling T7-I1). It stands for the
+ * valet's intent — "this photo is the proof" — and is reused across every retry
+ * of that photo (R-FE-05). The sign key is minted fresh inside `uploadImage` on
+ * every attempt, because a replayed signature goes stale.
+ *
+ * `uploadId` is filled once the file is on Cloudinary, so a retry after a
+ * failed attach re-sends the attach alone: the bytes are not uploaded twice,
+ * and the attach body stays identical under the same attach key.
  */
-export async function uploadProof(
-  uri: string,
-  jobId: string,
-  intents: { sign: Intent; attach: Intent },
-): Promise<string> {
-  const uploaded = await uploadImage(uri, 'proofs', intents.sign, defaultUploadDeps());
-  if (!uploaded.ok) throw new Error(uploaded.message);
+export interface HeldProof {
+  readonly attach: Intent;
+  uploadId: string | null;
+}
+
+export async function uploadProof(uri: string, jobId: string, held: HeldProof): Promise<string> {
+  if (held.uploadId === null) {
+    const uploaded = await uploadImage(uri, 'proofs', defaultUploadDeps());
+    if (!uploaded.ok) throw new Error(uploaded.message);
+    held.uploadId = uploaded.uploadId;
+  }
 
   await api.post<unknown>(
     `/valet/jobs/${jobId}/proof`,
-    { proofPhotoId: uploaded.uploadId },
-    { headers: { 'Idempotency-Key': intents.attach.idempotencyKey } },
+    { proofPhotoId: held.uploadId },
+    { headers: { 'Idempotency-Key': held.attach.idempotencyKey } },
   );
 
-  return uploaded.uploadId;
+  return held.uploadId;
 }
 
 export async function setAvailability(

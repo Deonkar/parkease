@@ -4,7 +4,7 @@ import {
 } from '@parkease/contracts/shared';
 import { z } from 'zod';
 
-import type { Intent } from '@/lib/api';
+import { api, newIntent, type Intent } from '@/lib/api';
 import { warn } from '@/lib/log';
 
 /**
@@ -43,11 +43,8 @@ export interface CompressedImage {
 export interface UploadDeps {
   compress(uri: string, width: number, quality: number): Promise<CompressedImage>;
   /**
-   * `intent` carries the Idempotency-Key for THIS sign request. It is a
-   * separate key from whatever attaches the resulting upload id to a
-   * domain record — the server keys its idempotency store on the header
-   * alone and detects drift via endpoint + request hash, so one key reused
-   * across two different endpoints comes back `conflict` (422).
+   * `intent` carries the Idempotency-Key for THIS sign attempt, minted by
+   * `uploadImage` — see there for why it is never reused.
    */
   sign(
     input: { fileName: string; contentType: string; folder: UploadFolder },
@@ -67,10 +64,22 @@ export type UploadResult =
  */
 const cloudinaryResponseSchema = z.object({ public_id: z.string().min(1) });
 
+/**
+ * The sign key is minted HERE, fresh on every call, and callers own only the
+ * key for whatever attaches the resulting id (ruling T7-I1).
+ *
+ * The two keys have different jobs. An attach key stands for a user intent —
+ * "this photo is the evidence" — and is reused across every retry of that
+ * photo so a replay cannot record it twice (R-FE-05). Signing has no side
+ * effect to deduplicate: it computes an HMAC over a fresh `public_id`. And the
+ * idempotency layer replays a stored response for 24h, so a reused sign key
+ * would hand every retry the SAME Cloudinary `timestamp` — which Cloudinary
+ * refuses once it is an hour old. The commonest outdoor failure (sign fine,
+ * PUT fails) would then fail every retry for a day.
+ */
 export async function uploadImage(
   uri: string,
   folder: UploadFolder,
-  intent: Intent,
   deps: UploadDeps,
 ): Promise<UploadResult> {
   try {
@@ -82,7 +91,7 @@ export async function uploadImage(
         contentType: 'image/jpeg',
         folder,
       },
-      intent,
+      newIntent(),
     );
 
     const raw = await deps.put(signature.uploadUrl, signature.fields, compressed.uri);
@@ -120,10 +129,7 @@ export function defaultUploadDeps(): UploadDeps {
     },
 
     // Through `lib/api.ts` (R-FE-03), so it inherits auth and single-flight
-    // refresh. Imported dynamically for the same reason as `compress` above:
-    // `lib/api.ts` pulls in `secure-storage.ts`, which reads `Platform` from
-    // `react-native` at module scope, and a node-environment test that only
-    // exercises `uploadImage` must not pay for that load either.
+    // refresh.
     //
     // `/me/upload-signature` is a POST, and `lib/api.ts`'s request
     // interceptor throws synchronously for any non-GET/HEAD request with no
@@ -131,7 +137,6 @@ export function defaultUploadDeps(): UploadDeps {
     // (only GET/HEAD and `/api/v1/webhooks/` are exempt). Without this header
     // every real upload threw here before it ever reached the network.
     sign: async (input, intent) => {
-      const { api } = await import('@/lib/api');
       const response = await api.post<unknown>('/me/upload-signature', input, {
         headers: { 'Idempotency-Key': intent.idempotencyKey },
       });

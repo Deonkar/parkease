@@ -702,3 +702,41 @@ the direction specified.
 - **Done means:** the current-step marker animates its fill with `spring.gentle` from
   `@parkease/tokens`, skipped under `useReducedMotion()`, checked on an Android device in the
   task-11 walkthrough.
+
+### S-37 — Older literal opacities should use the new `opacity` token
+
+- **Status:** `open`
+- **Found in:** task 14 task-7 fix round 1 (minor 8 added `opacity` to `packages/tokens`)
+- **Surface:** ui-native, mobile
+
+`packages/tokens/src/opacity.ts` now defines `opacity.dimmed` (0.5) and `opacity.muted` (0.7),
+and `EvidencePair` uses `opacity.dimmed`. Four literals predate it: `packages/ui-native/src/Button.tsx:69`
+(`0.5`, disabled) and `:76` (`0.7`, disabled label), `apps/mobile/app/(auth)/choose-role.tsx:140`
+(`0.5`) and `apps/mobile/src/features/driver/components/PhotoCarousel.tsx:92` (`0.5`, inactive dot).
+
+- **Why deferred:** three surfaces outside the washer screen, one of them the shared Button
+  every app renders — a visual change that deserves its own look on a device, not a rider on a
+  fix round.
+- **Done means:** the four literals read `opacity.dimmed` / `opacity.muted`, and
+  `grep -rnE "opacity: 0\.[0-9]" apps/mobile packages/ui-native/src` returns nothing.
+
+### S-38 — Two copies of the camera modal and the capture hook
+
+- **Status:** `open`
+- **Found in:** task 14 task-7 (washer active-job screen), fix round 1
+- **Surface:** mobile
+
+`features/washer/components/WashCamera.tsx` copies valet's `ProofCapture` camera modal, and
+`features/washer/hooks/usePhotoSlot.ts` copies the shape of `features/valet/hooks/useProofCapture.ts`
+(held uri, one attach intent per capture, held upload id, retry). R-ARCH-01 forbade the washer
+importing from valet, so they were copied. Fix round 1 then had to change BOTH capture hooks
+together for ruling T7-I1 — which is R-ARCH-07's test for extraction: call sites that must
+change together.
+
+- **Why deferred:** extracting touches the valet active screen, which task 7 does not own, and
+  the two hooks attach through different endpoints and error vocabularies, so the shared seam
+  (`attach(photoId, intent)` injected) needs its own design pass.
+- **Done means:** `features/shared/components/CameraSheet.tsx` and
+  `features/shared/hooks/usePhotoCapture.ts` (attach injected) back both roles; the valet and
+  washer copies are deleted; `proof-upload.test.tsx` and `photo-slot.test.tsx` run against the
+  shared hook.

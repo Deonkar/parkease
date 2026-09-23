@@ -63,11 +63,17 @@ export type EvidenceSlotState = 'empty' | 'uploading' | 'failed' | 'attached';
  * hook state (T7-T1). The local half only describes a capture that is still in
  * flight or has failed, which is why it wins while it exists: a retake being
  * uploaded over an attached photo is, for now, an upload.
+ *
+ * Except once the slot has CLOSED on an attached photo: a failed retake can
+ * never land there any more, so a stale local failure gives way to the photo
+ * the server holds rather than showing a Retry the server will refuse.
  */
 export function slotStateFor(
   serverAttached: boolean,
   local: { readonly uploading: boolean; readonly error: string | null },
+  slot: { readonly writable: boolean },
 ): EvidenceSlotState {
+  if (serverAttached && !slot.writable) return 'attached';
   if (local.uploading) return 'uploading';
   if (local.error !== null) return 'failed';
   return serverAttached ? 'attached' : 'empty';
