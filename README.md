@@ -5,7 +5,7 @@ monetise unused slots. Valet and car-wash services layer on top.
 
 ## Status
 
-Pre-implementation. Scaffolding is task 1 of 22.
+In development. Monorepo, API scaffolding, database and shared contracts are in place; booking and availability flows are in progress.
 
 ## Stack
 
