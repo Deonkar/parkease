@@ -47,6 +47,19 @@ function periodBound(column: SQLWrapper, period: WasherEarningsPeriod): SQL | un
  * not a hack around a missing account: `owner_payable` is the platform's
  * payable-to-supplier account (ADR-008), so a washer's balance, a valet's and a
  * space owner's are the same query with a different id.
+ *
+ * **Two instants, and the two halves of the answer need not sum.** The summary
+ * is ledger movement by POSTING time (`ledger_entries.occurred_at`): the credit
+ * posts at accept, a cancellation's reversal posts at cancel under a new
+ * `txn_id`. The lines and `jobsCompleted` are jobs COMPLETED in the period, by
+ * `wash_jobs.completed_at`. A job accepted this week and still washing moves
+ * this week's net with no line; a job accepted last week and completed this
+ * week has a line this week while its money is in last week's summary. Both
+ * definitions are kept on purpose — see `washerEarningsViewSchema`.
+ *
+ * Because the summary is movement rather than a balance, a bounded period's
+ * `netPaise` can be negative: a reversal posted this week against a credit
+ * posted last week. Only `all` is the balance we owe the partner.
  */
 @Injectable()
 export class WasherEarningsQuery {
@@ -126,6 +139,14 @@ export class WasherEarningsQuery {
       )
       .orderBy(desc(washJobs.completedAt));
 
+    /**
+     * Raw values in, no fallbacks: a completed job with no `completed_at`, or
+     * no price, is a broken row, and the parse below refusing it loudly is the
+     * right failure. Defaulting to 1970 or to a zero price would put a
+     * plausible-looking lie on a money screen (R-FAIL-01). Migration 0030's
+     * `wash_jobs_assignee_presence_check` already guarantees the price on a
+     * completed row; `completed_at` has no such CHECK yet (suggestedtask.md).
+     */
     return washerEarningsViewSchema.parse({
       period,
       summary: {
@@ -138,8 +159,8 @@ export class WasherEarningsQuery {
         jobId: row.jobId,
         serviceName: row.serviceName,
         vehicleType: row.vehicleType,
-        completedAt: row.completedAt?.toISOString() ?? new Date(0).toISOString(),
-        grossPaise: Number(row.grossPaise ?? 0),
+        completedAt: row.completedAt === null ? null : row.completedAt.toISOString(),
+        grossPaise: row.grossPaise,
         feePaise: Number(row.feePaise),
         netPaise: Number(row.netPaise),
       })),

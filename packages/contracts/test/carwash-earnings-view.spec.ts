@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   washerEarningsLineSchema,
   washerEarningsQuerySchema,
+  washerEarningsSummarySchema,
   washerEarningsViewSchema,
 } from '../src/washer/index.js';
 
@@ -64,5 +65,34 @@ describe('washerEarningsViewSchema', () => {
     });
 
     expect(view.lines).toEqual([]);
+  });
+});
+
+describe('washerEarningsSummarySchema', () => {
+  const summary = { grossPaise: 0, reversedPaise: 31920, netPaise: -31920, jobsCompleted: 0 };
+
+  it('accepts a negative net, because a period can hold a reversal whose credit it does not', () => {
+    // Accepted Sunday 23:55 IST, cancelled Monday 00:05: this week's movement
+    // on owner_payable is one debit and no credit. That is what the books say
+    // happened this week, and refusing it turned the default period into a 400.
+    expect(washerEarningsSummarySchema.parse(summary).netPaise).toBe(-31920);
+  });
+
+  it('still refuses a negative gross — a sum of credits cannot be below zero', () => {
+    expect(washerEarningsSummarySchema.safeParse({ ...summary, grossPaise: -1 }).success).toBe(
+      false,
+    );
+  });
+
+  it('still refuses a negative reversed total — a sum of debits cannot be below zero', () => {
+    expect(washerEarningsSummarySchema.safeParse({ ...summary, reversedPaise: -1 }).success).toBe(
+      false,
+    );
+  });
+
+  it('refuses a fractional net — signed is still integer paise', () => {
+    expect(washerEarningsSummarySchema.safeParse({ ...summary, netPaise: -319.2 }).success).toBe(
+      false,
+    );
   });
 });

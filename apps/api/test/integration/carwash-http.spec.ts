@@ -458,6 +458,8 @@ describe('the ledger', () => {
   /**
    * R-MONEY-05. The endpoint and a direct balance query must not be able to
    * disagree, which is why this compares them rather than asserting a literal.
+   * `?period=all` because the balance below is lifetime: the endpoint defaults
+   * to `week`, and the two would agree only while every fixture row is current.
    */
   it('reports earnings that match a direct owner_payable balance', async () => {
     const washerId = await seedWasher();
@@ -465,7 +467,7 @@ describe('the ledger', () => {
     await accept(jobId, washerId);
 
     asUser(washerId, ['washer']);
-    const res = await http.request({ method: 'GET', url: '/api/v1/washer/earnings' });
+    const res = await http.request({ method: 'GET', url: '/api/v1/washer/earnings?period=all' });
 
     const [balance] = await h.sql<{ net: string }[]>`
       SELECT coalesce(sum(amount_paise) FILTER (WHERE direction = 'credit'), 0)

@@ -99,8 +99,8 @@ const requestWash = (bookingId: string, serviceName = 'premium_wash', vehicleTyp
 };
 
 /** Requests a wash against an `active` booking and returns the job id. */
-async function openJob(): Promise<string> {
-  const bookingId = await seedBookingWithStatus('active');
+async function openJob(slotIndex = 1): Promise<string> {
+  const bookingId = await seedBookingWithStatus('active', slotIndex);
   const res = await requestWash(bookingId);
   expect(res.status).toBe(201);
   return dataOf<{ id: string }>(res.body).id;
@@ -137,8 +137,8 @@ const attachPhoto = (jobId: string, washerId: string, slot: 'before' | 'after') 
 };
 
 /** Walks a job through the full happy path so it lands `completed`, priced 39900. */
-async function completeAJob(washerId: string): Promise<string> {
-  const jobId = await openJob();
+async function completeAJob(washerId: string, slotIndex = 1): Promise<string> {
+  const jobId = await openJob(slotIndex);
   expect((await accept(jobId, washerId)).status).toBe(200);
   expect((await advance(jobId, washerId, 'en_route')).status).toBe(200);
   expect((await attachPhoto(jobId, washerId, 'before')).status).toBe(200);
@@ -153,9 +153,9 @@ async function completeAJob(washerId: string): Promise<string> {
 /**
  * Moves a completed job into the past for the *lines* query, which bounds on
  * `wash_jobs.completed_at`. `ledger_entries` is append-only (ADR-008) — no
- * UPDATE reaches it, so this deliberately leaves `occurred_at` where it is;
- * the summary side of the period bound is exercised by the two tests above,
- * not by this one.
+ * UPDATE reaches it, so this deliberately leaves `occurred_at` where it is.
+ * The summary side of the period bound is exercised with `postWashAt`, which
+ * writes ledger rows already dated in the past.
  */
 async function backdateCompletion(jobId: string, daysAgo: number): Promise<void> {
   await h.sql`
@@ -163,6 +163,52 @@ async function backdateCompletion(jobId: string, daysAgo: number): Promise<void>
     WHERE id = ${jobId}
   `;
 }
+
+/**
+ * Posts one wash's accept credit, or its cancellation reversal, straight into
+ * the ledger at an explicit instant `daysAgo` days before now.
+ *
+ * `ledger_entries` is append-only (ADR-008) — a trigger refuses UPDATE — so a
+ * posting that has to sit before the period began must be *born* there; it
+ * cannot be backdated afterwards. Each call is one balanced transaction of its
+ * own `txn_id`, the same shape `accept-wash` and `cancel-wash` post: 39900 from
+ * the driver, 31920 to this partner, 7980 to the platform — and a reversal is
+ * that, flipped, under a NEW `txn_id`, exactly as `cancel-wash` does it.
+ */
+async function postWashAt(
+  washerId: string,
+  kind: 'accept' | 'reversal',
+  daysAgo: number,
+): Promise<void> {
+  const txnId = uuidv7();
+  const flip = (direction: 'debit' | 'credit') =>
+    kind === 'accept' ? direction : direction === 'debit' ? 'credit' : 'debit';
+  const description = kind === 'accept' ? 'car wash service' : 'car wash cancellation reversal';
+
+  await h.sql`
+    INSERT INTO ledger_entries
+      (txn_id, account, direction, amount_paise, counterparty_user_id, description, occurred_at)
+    SELECT ${txnId}::uuid, v.account, v.direction, v.amount_paise, v.counterparty_user_id,
+           ${description}, now() - make_interval(days => ${daysAgo})
+    FROM (VALUES
+      ('driver_receivable', ${flip('debit')}, 39900, NULL::uuid),
+      ('owner_payable', ${flip('credit')}, 31920, ${washerId}::uuid),
+      ('platform_revenue', ${flip('credit')}, 7980, NULL::uuid)
+    ) AS v(account, direction, amount_paise, counterparty_user_id)
+  `;
+}
+
+interface Summary {
+  grossPaise: number;
+  reversedPaise: number;
+  netPaise: number;
+  jobsCompleted: number;
+}
+
+const earnings = (washerId: string, query = '') => {
+  asUser(washerId, ['washer']);
+  return http.request({ method: 'GET', url: `/api/v1/washer/earnings${query}` });
+};
 
 beforeAll(async () => {
   h = await startHarness();
@@ -192,25 +238,55 @@ beforeEach(async () => {
 });
 
 describe('GET /washer/earnings — period filter and per-job lines', () => {
-  it('returns the same net as a direct owner_payable balance for this counterparty', async () => {
+  it('bounds the summary by posting time: a credit posted before the week is in `all`, not `week`', async () => {
+    // Ten days ago is before the start of any IST week, whatever day this runs.
     const washerId = await seedWasher();
+    await postWashAt(washerId, 'accept', 10);
     await completeAJob(washerId);
 
-    asUser(washerId, ['washer']);
-    const res = await http.request({ method: 'GET', url: '/api/v1/washer/earnings?period=week' });
-    expect(res.status).toBe(200);
+    const week = await earnings(washerId, '?period=week');
+    expect(week.status).toBe(200);
+    expect(dataOf<{ summary: Summary }>(week.body).summary).toEqual({
+      grossPaise: 31920,
+      reversedPaise: 0,
+      netPaise: 31920,
+      jobsCompleted: 1,
+    });
 
-    const [row] = await h.sql<{ net: string }[]>`
-      SELECT coalesce(sum(amount_paise) FILTER (WHERE direction = 'credit'), 0)
-           - coalesce(sum(amount_paise) FILTER (WHERE direction = 'debit'), 0) AS net
-      FROM ledger_entries
-      WHERE account = 'owner_payable' AND counterparty_user_id = ${washerId}
-        AND occurred_at >= date_trunc('week', now() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata'
-    `;
+    // The control: the old credit is really there, and `all` does see it.
+    const all = await earnings(washerId, '?period=all');
+    expect(all.status).toBe(200);
+    expect(dataOf<{ summary: Summary }>(all.body).summary).toMatchObject({
+      grossPaise: 63840,
+      netPaise: 63840,
+    });
+  });
 
-    expect(dataOf<{ summary: { netPaise: number } }>(res.body).summary.netPaise).toBe(
-      Number(row?.net),
-    );
+  /**
+   * Accepted Sunday 23:55 IST, cancelled Monday 00:05. The credit posted last
+   * week; the reversal posts this week under a new `txn_id`. This week's
+   * movement on `owner_payable` is therefore one debit and no credit, and a
+   * period's net is movement — so it is negative, and the endpoint must say so
+   * rather than fail its own response parse on the default period.
+   */
+  it('reports a negative net for a period holding a reversal whose credit posted earlier', async () => {
+    const washerId = await seedWasher();
+    await postWashAt(washerId, 'accept', 10);
+    await postWashAt(washerId, 'reversal', 0);
+
+    for (const query of ['?period=week', '']) {
+      const res = await earnings(washerId, query);
+      expect(res.status).toBe(200);
+      expect(dataOf<{ period: string; summary: Summary; lines: unknown[] }>(res.body)).toEqual({
+        period: 'week',
+        summary: { grossPaise: 0, reversedPaise: 31920, netPaise: -31920, jobsCompleted: 0 },
+        lines: [],
+      });
+    }
+
+    // Over the partner's whole history the two cancel out, as they must.
+    const all = await earnings(washerId, '?period=all');
+    expect(dataOf<{ summary: Summary }>(all.body).summary.netPaise).toBe(0);
   });
 
   it('reads the fee from platform_revenue rather than subtracting it', async () => {
@@ -234,20 +310,20 @@ describe('GET /washer/earnings — period filter and per-job lines', () => {
     });
   });
 
-  it('excludes a job completed before the period began', async () => {
+  it('lists a job completed today and excludes one completed before the period began', async () => {
     const washerId = await seedWasher();
     const lastWeeksJobId = await completeAJob(washerId);
     await backdateCompletion(lastWeeksJobId, 8);
+    // The positive control: without it, a `today` that always returned an
+    // empty list would pass the exclusion below.
+    const todaysJobId = await completeAJob(washerId, 2);
 
-    asUser(washerId, ['washer']);
-    const res = await http.request({
-      method: 'GET',
-      url: '/api/v1/washer/earnings?period=today',
-    });
+    const res = await earnings(washerId, '?period=today');
     expect(res.status).toBe(200);
 
-    const lines = dataOf<{ lines: { jobId: string }[] }>(res.body).lines;
-    expect(lines.map((l) => l.jobId)).not.toContain(lastWeeksJobId);
+    const view = dataOf<{ summary: Summary; lines: { jobId: string }[] }>(res.body);
+    expect(view.lines.map((l) => l.jobId)).toEqual([todaysJobId]);
+    expect(view.summary.jobsCompleted).toBe(1);
   });
 
   it('refuses a period it does not know, as a 400 with the error envelope', async () => {

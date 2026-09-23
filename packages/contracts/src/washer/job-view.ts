@@ -5,7 +5,7 @@ import { carwashServiceNameSchema } from '../enums/carwash-service-name.js';
 import { vehicleTypeSchema } from '../enums/vehicle-type.js';
 import { bookingIdSchema, washJobIdSchema } from '../primitives/ids.js';
 import { geoPointSchema } from '../primitives/indian.js';
-import { paiseSchema } from '../primitives/paise.js';
+import { paiseDeltaSchema, paiseSchema } from '../primitives/paise.js';
 
 /** The one live job a partner is on. */
 export const washJobViewSchema = z.object({
@@ -40,14 +40,33 @@ export type WashJobView = z.infer<typeof washJobViewSchema>;
  * `platform_revenue`, not to this account, so reporting it here would mean
  * either a second query or quietly relabelling the clawback total as
  * commission — and a wrong label on a money screen is worse than an absent one.
+ *
+ * All three amounts are `owner_payable` movement for this partner, bounded by
+ * posting time (`ledger_entries.occurred_at`) — the credit posts at accept, a
+ * cancellation's reversal posts at cancel. For `all` that is the partner's
+ * whole history; for a bounded period it is only what posted inside it.
  */
 export const washerEarningsSummarySchema = z.object({
-  /** Credits to this partner across every job, before any reversal. */
+  /**
+   * Credits to this partner posted in the period, before any reversal. For
+   * `all`, every credit this partner has ever had.
+   */
   grossPaise: paiseSchema,
-  /** Debits: what a cancellation clawed back. */
+  /**
+   * Debits posted in the period: what cancellations clawed back. A reversal
+   * counts in the period it posted, which need not be the period of the credit
+   * it reverses.
+   */
   reversedPaise: paiseSchema,
-  /** What the ledger says we owe this partner right now. */
-  netPaise: paiseSchema,
+  /**
+   * Credits minus debits posted in the period — movement, not a balance, so it
+   * is SIGNED. A job accepted Sunday 23:55 IST and cancelled Monday 00:05
+   * leaves this week with a reversal and no credit, and the week's net is
+   * honestly negative. Only for `all` is this what the ledger says we owe this
+   * partner right now, and there it cannot go below zero.
+   */
+  netPaise: paiseDeltaSchema,
+  /** Jobs completed in the period, by `wash_jobs.completed_at` — see `washerEarningsViewSchema`. */
   jobsCompleted: z.number().int().nonnegative(),
 });
 
@@ -72,7 +91,7 @@ export const washerEarningsQuerySchema = z.object({
  * the obvious subtraction, and when they do, the books are right.
  *
  * This is where the account-level refusal to report commission
- * (`washerEarningsSummarySchema`, below) does NOT apply: an aggregate over one
+ * (`washerEarningsSummarySchema`, above) does NOT apply: an aggregate over one
  * account genuinely cannot name a commission total without relabelling
  * something, but a single job has exactly one commission entry to point at.
  */
@@ -91,6 +110,25 @@ export const washerEarningsLineSchema = z.object({
 
 export type WasherEarningsLine = z.infer<typeof washerEarningsLineSchema>;
 
+/**
+ * `GET /washer/earnings` for one period.
+ *
+ * The summary and the lines count by DIFFERENT instants, deliberately, and the
+ * two need not sum:
+ *
+ * - `summary` amounts are ledger movement by posting time
+ *   (`ledger_entries.occurred_at`): a job's credit lands in the period it was
+ *   ACCEPTED, its reversal in the period it was CANCELLED. This is how the
+ *   task file's own §14.6 demo SQL defines the weekly figure: `owner_payable`
+ *   movement bounded by `occurred_at`.
+ * - `lines` and `summary.jobsCompleted` are jobs COMPLETED in the period, by
+ *   `wash_jobs.completed_at`.
+ *
+ * So a job accepted this week but still `washing` is in this week's
+ * `summary.netPaise` with no line, and a job accepted last week and completed
+ * this week has a line this week while its money sits in last week's summary.
+ * A client must not reconcile one against the other.
+ */
 export const washerEarningsViewSchema = z.object({
   period: washerEarningsPeriodSchema,
   summary: washerEarningsSummarySchema,

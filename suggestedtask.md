@@ -567,11 +567,72 @@ happens to pass because none of its tests need more than one live car slot at
 once. Writing `washer-earnings-http.spec.ts` for task-3 needed the same fixture
 and used the correct field name (`carSlots: 4`) rather than copy the mistake.
 
-- **Why deferred:** out of scope for task-3, which only reads
-  `carwash-http.spec.ts` for its fixture pattern — it does not touch that file.
-  The fix is a one-line rename with no behavioural risk, but it belongs to
-  whoever next touches that spec, or a drive-by hygiene pass.
+- **Why deferred:** out of scope for task-3. Task-3 does edit
+  `carwash-http.spec.ts`, but only its earnings assertion — first for the new
+  response shape, then to request `?period=all` so it keeps its lifetime meaning
+  — and not its `beforeAll` fixture. The fix is a one-line rename with no
+  behavioural risk, but it belongs to whoever next touches that spec's fixtures,
+  or a drive-by hygiene pass.
 - **Done means:** `slots: { car: 4 }` becomes `carSlots: 4` in
   `carwash-http.spec.ts`, and ideally `tsconfig` for `apps/api/test` is checked
   by `tsc --noEmit` somewhere in CI so an excess-property typo like this one
   fails loud next time instead of silently seeding one slot.
+
+### S-31 — `GET /washer/earnings?period=all` is unbounded
+
+- **Status:** `open`
+- **Found in:** task 14 task-3 review (earnings period filter and per-job lines)
+- **Surface:** api
+
+`WasherEarningsQuery.forWasher` (`apps/api/src/domains/carwash/queries/washer-earnings.query.ts`)
+returns every completed job as a line for `period=all`, and each line runs two correlated
+subqueries against `ledger_entries` (the `platform_revenue` fee and the `owner_payable` net on
+the job's `txn_id`). There is no limit and no pagination.
+
+- **Why deferred:** fine at current scale — `ledger_entries_txn_id_idx` makes each subquery an
+  index lookup, and no partner has a lifetime job count that makes this measurable. Paginating
+  now would change the response contract (a cursor in `meta`) for a problem nobody has.
+- **Done means:** when a partner's lifetime job count makes `period=all` slow (measure it —
+  `EXPLAIN ANALYZE` on a seeded partner with a realistic history), the lines become cursor
+  paginated by `completed_at, id`, or the two subqueries become one grouped join, and the
+  summary stays a single aggregate.
+
+### S-32 — Nothing requires `completed_at` on a completed wash job
+
+- **Status:** `open`
+- **Found in:** task 14 task-3 review (earnings period filter and per-job lines)
+- **Surface:** database
+
+Migration 0030's `wash_jobs_assignee_presence_check` makes `price_paise` and `txn_id` NOT NULL
+once a job is accepted, but no CHECK ties `completed_at` to `status = 'completed'`. The earnings
+query used to paper over that with a 1970 fallback; it now passes the raw value, so a completed
+row with a null `completed_at` fails the response parse loudly instead — which is the right
+failure, but the database should make the row impossible.
+
+- **Why deferred:** a schema change is a migration with its own review gate
+  (`postgres-migration-reviewer`, R-GIT-07), and task-3 is a read-path change with no migration.
+- **Done means:** a migration adds
+  `CHECK (status <> 'completed' OR completed_at IS NOT NULL)` to `wash_jobs` (as `NOT VALID`
+  then `VALIDATE CONSTRAINT`), reviewed SAFE, with an integration test that a completed row
+  without `completed_at` is refused.
+
+### S-33 — A server-side response parse failure answers `400 VALIDATION_FAILED`
+
+- **Status:** `open`
+- **Found in:** task 14 task-3 review (earnings period filter and per-job lines)
+- **Surface:** api
+
+`apps/api/src/platform/http/exception.filter.ts` (`map()`, around line 106) maps ANY `ZodError`
+to `400 VALIDATION_FAILED`. That is right for request validation, and wrong for a query or
+command that parses its own RESPONSE through Zod (R-VAL-01) and finds the server built
+something invalid — that is a server bug and should be a `500`, logged at error with the trace
+id, not blamed on the caller. Task-3's review found exactly this: a negative period net failed
+`washerEarningsViewSchema.parse` and the partner's default earnings screen answered 400.
+
+- **Why deferred:** the fix is a cross-cutting change to the global filter and to how every
+  response parse is written (a distinct error type, or a wrapper), touching every role's
+  endpoints — far outside a single endpoint's review round.
+- **Done means:** response-parse failures are distinguishable from request validation (e.g. a
+  `ResponseContractError` thrown by a shared response-parse helper, or request parsing moved to
+  a pipe that tags its `ZodError`), the filter maps them to `500 INTERNAL_ERROR`, and an HTTP
+  test proves a malformed request still answers 400 while a malformed response answers 500.
