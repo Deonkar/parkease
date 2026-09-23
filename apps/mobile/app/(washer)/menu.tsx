@@ -5,6 +5,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { resolveScreenState } from '@/features/shared/screen-state';
+import { ProfileGear } from '@/features/washer/components/ProfileGear';
 import { RefreshNotice } from '@/features/washer/components/RefreshNotice';
 import { ServiceRow } from '@/features/washer/components/ServiceRow';
 import { useServiceSave } from '@/features/washer/hooks/useServiceSave';
@@ -97,9 +98,12 @@ export default function WasherMenuScreen() {
   return (
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-        <Text style={styles.title} accessibilityRole="header">
-          Service menu
-        </Text>
+        <View style={styles.titleRow}>
+          <Text style={styles.title} accessibilityRole="header">
+            Service menu
+          </Text>
+          <ProfileGear />
+        </View>
         <Text style={styles.subtitle}>A car price and a bike price for each wash you offer.</Text>
       </View>
       {content()}
@@ -117,6 +121,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { fontSize: fontSize.lg, fontWeight: fontWeight.bold, color: colors.text },
   subtitle: { fontSize: fontSize.sm, color: colors.textTertiary },
   body: { padding: spacing.base, gap: spacing.base },

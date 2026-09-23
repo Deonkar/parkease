@@ -17,6 +17,8 @@ import { formatPaise } from '@/lib/money';
 import { SERVICE_LABELS } from '../labels';
 import { paiseToRupees, parseMinutes, rupeesToPaise, type MenuRow } from '../menu-rows';
 
+import { FieldError } from './FieldError';
+
 export interface ServiceRowProps {
   readonly row: MenuRow;
   /** Both prices, the duration and the switch, as one upsert (spec §6.3). */
@@ -320,15 +322,6 @@ export function ServiceRow({ row, onSave, saving = false, failure = null }: Serv
   );
 }
 
-function FieldError({ testID, message }: { readonly testID: string; readonly message: string }) {
-  return (
-    <View style={styles.fieldError} testID={testID} accessibilityLiveRegion="polite">
-      <MaterialCommunityIcons name="alert-circle-outline" size={14} color={colors.errorInk} />
-      <Text style={styles.fieldErrorText}>{message}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   card: {
     gap: spacing.md,
@@ -414,8 +407,6 @@ const styles = StyleSheet.create({
   saveDisabled: { backgroundColor: colors.surfaceTertiary },
   saveLabel: { fontSize: fontSize.sm, fontWeight: fontWeight.bold, color: colors.textInverse },
   saveLabelDisabled: { color: colors.textTertiary },
-  fieldError: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs },
-  fieldErrorText: { flex: 1, fontSize: fontSize.xs, color: colors.errorInk },
   failure: {
     flexDirection: 'row',
     alignItems: 'center',

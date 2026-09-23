@@ -28,7 +28,9 @@ export default function WasherLayout() {
         <Tabs.Screen name="active" options={{ title: 'Active' }} />
         <Tabs.Screen name="menu" options={{ title: 'Menu' }} />
         <Tabs.Screen name="earnings" options={{ title: 'Earnings' }} />
-        <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
+        {/* Out of the bar, which holds §14.3's four tabs; reached from the header
+            gear on Offers and Menu. */}
+        <Tabs.Screen name="profile" options={{ href: null }} />
       </Tabs>
     </WasherPresenceProvider>
   );

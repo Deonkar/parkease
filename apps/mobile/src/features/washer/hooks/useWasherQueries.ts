@@ -1,5 +1,10 @@
 import type { CarwashJobEvent, CarwashServiceName } from '@parkease/contracts/enums';
-import type { UpsertWashService, WasherEarningsPeriod } from '@parkease/contracts/washer';
+import type {
+  CreateWasherProfile,
+  SubmitWasherDocuments,
+  UpsertWashService,
+  WasherEarningsPeriod,
+} from '@parkease/contracts/washer';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type { Intent } from '@/lib/api';
@@ -9,11 +14,13 @@ import {
   acceptOffer,
   advanceJob,
   attachPhoto,
+  createProfile,
   fetchActiveJob,
   fetchEarnings,
   fetchMenu,
   fetchOffers,
   fetchProfile,
+  submitDocuments,
   upsertService,
 } from '../api/washer';
 
@@ -147,6 +154,35 @@ export function useUpsertService() {
     onSuccess: (menu) => {
       // The endpoint returns the WHOLE menu, so the app never merges by hand.
       client.setQueryData(washerKeys.menu, menu);
+    },
+  });
+}
+
+/**
+ * Registering. The profile AND the menu are new on the server — registration
+ * seeds the menu with the ticked services switched on (ruling T10-S1) — so
+ * both caches are stale the moment it succeeds.
+ */
+export function useCreateProfile() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ input, intent }: { input: CreateWasherProfile; intent: Intent }) =>
+      createProfile(input, intent),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: washerKeys.profile });
+      void client.invalidateQueries({ queryKey: washerKeys.menu });
+    },
+  });
+}
+
+/** The ID image for review. Moves verification to `pending` on the server. */
+export function useSubmitDocuments() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ input, intent }: { input: SubmitWasherDocuments; intent: Intent }) =>
+      submitDocuments(input, intent),
+    onSuccess: (profile) => {
+      client.setQueryData(washerKeys.profile, profile);
     },
   });
 }

@@ -5,12 +5,13 @@ import { Alert, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { warn } from '@/lib/log';
 
-import type { PhotoSlot } from '../photo-gate';
-
-export interface WashCameraProps {
-  /** The slot being photographed; `null` keeps the camera closed. */
-  readonly slot: PhotoSlot | null;
-  readonly onCaptured: (slot: PhotoSlot, uri: string) => void;
+export interface WashCameraProps<S extends string> {
+  /**
+   * What is being photographed — a job's `before`/`after`, or a registration
+   * photo — named in the shutter's label. `null` keeps the camera closed.
+   */
+  readonly slot: S | null;
+  readonly onCaptured: (slot: S, uri: string) => void;
   readonly onClose: () => void;
 }
 
@@ -22,7 +23,7 @@ export interface WashCameraProps {
  * component's job ends at "here is a photograph" — compression, upload and the
  * retry live in `usePhotoSlot`.
  */
-export function WashCamera({ slot, onCaptured, onClose }: WashCameraProps) {
+export function WashCamera<S extends string>({ slot, onCaptured, onClose }: WashCameraProps<S>) {
   const camera = useRef<CameraView>(null);
 
   const shoot = async () => {

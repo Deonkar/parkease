@@ -740,6 +740,10 @@ change together.
   `features/shared/hooks/usePhotoCapture.ts` (attach injected) back both roles; the valet and
   washer copies are deleted; `proof-upload.test.tsx` and `photo-slot.test.tsx` run against the
   shared hook.
+- **Grown in task 14 task-10:** the camera-permission flow now has a third copy. The washer
+  registration and profile screens share `features/washer/hooks/useCameraGate.ts` (extracted on
+  its second use), and `WashCamera` is generic over its slot name; the washer active screen still
+  carries its own inline permission code. The shared `CameraSheet` should take over all three.
 
 ### S-39 — Framed slots, the dashed cue and the switch off-track sit under the 3:1 non-text floor
 
@@ -808,3 +812,71 @@ too ("Fri 12 Sep · 2:22 PM"), which the shared formatter does not produce.
 - **Done means:** `formatDateIST` uses a fixed month table (`Jan`…`Dec`) so the output is
   identical on Node and Hermes, an optional weekday variant exists for list rows, and
   `format.test.ts` covers September.
+
+### S-42 — The ID proof has one side; §14.2 draws a front and a back
+
+- **Status:** `open`
+- **Found in:** task 14 task-10 (washer registration), ruling T10-D1
+- **Surface:** db, contracts, api, admin, mobile
+
+§14.2's gig form draws "Upload front" and "Upload back". `submitWasherDocumentsSchema` has one
+`idDocumentId`, `washer_profiles` one `id_document_id` column, and task 18's admin review is
+single-document, so v1 collects ONE image, labelled for the side with the partner's photo.
+
+- **Why deferred:** a second side is a migration, a contract field, an admin review change and a
+  second capture — four surfaces for a task scoped to the mobile screens.
+- **Done means:** a nullable `id_document_back_id` (or an array) through migration, contract,
+  `POST /washer/profile/documents`, the admin review and the gig form; an admin can see both sides;
+  existing single-image profiles stay valid.
+
+### S-43 — No endpoint writes a user's name or avatar, so the gig form's name goes to `business_name`
+
+- **Status:** `open`
+- **Found in:** task 14 task-10 (washer registration), ruling T10-D2
+- **Surface:** api, contracts, mobile (cross-role identity)
+
+`users.name` and `users.avatar_url` exist, but nothing writes either: `user.repository.ts`
+inserts only phone and Firebase uid, and there is no `PATCH /me`. So the gig form's "Profile
+photo" is not collected at all in v1 (T10-D2), and its "Your name" is sent as
+`createWasherProfile.businessName` — the only field the contract has for it, and the name the
+partner trades under — rather than being dropped.
+
+- **Why deferred:** a name/avatar endpoint is identity for every role, not a washer feature.
+- **Done means:** `PATCH /me` (Zod contract, avatar as an upload id from the `avatars` folder)
+  writes `users.name` / `users.avatar_url`; the gig form writes the name there and collects a
+  profile photo; decide whether gig rows keep `business_name` as their trading name.
+
+### S-44 — `washerCardSchema.name` is non-null, and `users.name` is never written
+
+- **Status:** `open`
+- **Found in:** task 14 task-10, while tracing where the gig form's name could go
+- **Surface:** contracts, api (driver car wash detail)
+
+`packages/contracts/src/driver/carwash-job-detail.ts` types the assigned partner's `name` as
+`z.string()`, and `CarwashService.washerCard` selects it from `users.name` — which no code path
+writes (S-43). The integration harness seeds users WITH a name, so every test passes; a real
+partner has `name = NULL`, and `GET /driver/carwash/requests/:id` for an assigned job would fail
+the parse instead of returning the job.
+
+- **Why deferred:** a driver-surface contract change, outside a washer-app task; it needs a
+  decision on what a driver sees for an unnamed partner (business name, "Your washer").
+- **Done means:** the card's name is nullable (or falls back to `business_name`) end to end, the
+  driver UI renders the fallback, and an HTTP test seeds a washer with `name = NULL` and gets 200.
+
+### S-45 — A business registration lands `unverified`, not `pending`
+
+- **Status:** `open`
+- **Found in:** task 14 task-10 (washer registration)
+- **Surface:** api, mobile, product
+
+Spec §6.5 says both partner types land at `verification_status = 'pending'`. On the server only
+`POST /washer/profile/documents` moves a profile to `pending`, and it requires an `idDocumentId`;
+the §14.2 business form collects no ID image. So a business registers as `unverified`, and the
+profile screen honestly tells them to add a photo of their ID to send it for review (it does not
+say "Submitted for review" until the server says `pending`).
+
+- **Why deferred:** needs a product ruling — whether a business is reviewed on its photos and
+  GSTIN alone (then registration sets `pending` for a business with photos) or must also show an
+  owner's ID (then the business form gains the ID capture).
+- **Done means:** the ruling is recorded, and a business that completes its form reaches
+  `pending` with an HTTP test proving it, or the business form carries the ID and does.

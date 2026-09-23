@@ -1,0 +1,51 @@
+import {
+  resolveScreenState,
+  type QueryShape,
+  type ScreenState,
+} from '@/features/shared/screen-state';
+import { verificationStateFor } from '@/features/shared/verification';
+
+import { isUnregisteredWasher } from './api/errors';
+
+export type ProfileScreenState = ScreenState | 'unregistered';
+
+export interface ProfileQueryShape<T> extends QueryShape<T> {
+  readonly error: unknown;
+}
+
+/**
+ * Which state the profile screen is in.
+ *
+ * The profile is the default entry for a washer who has not registered, so
+ * `404 WASHER_PROFILE_NOT_FOUND` is its first-run state with a next step, never
+ * an error. Everything else is the shared decision (R-FE-08): a cached profile
+ * stays on screen when a refetch fails (ruling T7-I2), so "not registered" is
+ * only believed when there is no profile to show.
+ */
+export function profileScreenState<T>(query: ProfileQueryShape<T>): ProfileScreenState {
+  const state = resolveScreenState(query);
+  if (state === 'error' && isUnregisteredWasher(query.error)) return 'unregistered';
+  return state;
+}
+
+/** The reasons registration hands the profile screen, as a route param. */
+export type RegistrationNoticeKind = 'registered' | 'document-not-sent';
+
+/**
+ * The one line the profile says after registration, true to the server.
+ *
+ * "Submitted for review" only once the server holds the ID and says `pending`.
+ * A business registers without an ID image and lands `unverified` — telling
+ * them it is under review would leave them waiting on a review that has not
+ * started.
+ */
+export function registrationNotice(kind: string | undefined, status: string): string | null {
+  if (kind !== 'registered' && kind !== 'document-not-sent') return null;
+  // Also true once an ID sent from this screen later puts the profile in review.
+  if (verificationStateFor(status) === 'pending') {
+    return "Submitted for review. We'll let you know once your documents are checked.";
+  }
+  return kind === 'registered'
+    ? 'Profile saved. Add a photo of your ID below to send it for review.'
+    : "Your profile is saved, but your ID photo didn't send. Add it again below.";
+}

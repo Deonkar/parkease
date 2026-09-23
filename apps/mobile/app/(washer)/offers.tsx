@@ -16,6 +16,7 @@ import {
   isUnregisteredWasher,
 } from '@/features/washer/api/errors';
 import { OnlineRail } from '@/features/washer/components/OnlineRail';
+import { ProfileGear } from '@/features/washer/components/ProfileGear';
 import { VerificationNotice } from '@/features/washer/components/VerificationNotice';
 import { WashOfferCard } from '@/features/washer/components/WashOfferCard';
 import {
@@ -463,6 +464,7 @@ export default function WasherOffersScreen() {
         <Text style={styles.brand} accessibilityRole="header">
           Car Wash
         </Text>
+        <ProfileGear />
       </View>
       {content()}
     </View>
@@ -472,8 +474,12 @@ export default function WasherOffersScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surfaceSecondary },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: spacing.base,
-    paddingBottom: spacing.md,
+    // The gear's 48dp target carries its own vertical room.
+    paddingBottom: spacing.xs,
     backgroundColor: colors.surface,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
