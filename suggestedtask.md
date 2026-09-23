@@ -656,6 +656,9 @@ from, so the number is the partner's own quote; it is dropped when the menu has 
   from the priced menu row), the offers query selects them, `carwash-http.spec.ts` asserts both
   on `GET /washer/jobs/offers`, and `WashOfferCard` renders the address under the vehicle line
   and reads duration from the offer instead of the menu lookup in `app/(washer)/offers.tsx`.
+  The active-job header (`app/(washer)/active/index.tsx`, task 7) has the same gap:
+  `WashJobView` carries no address either, so it shows "Your active job" where mockup B2 names
+  the space; the same change should add `spaceAddress` to the job view.
 
 ### S-35 — Shared client error matching expects a `NOT_FOUND` code the API never sends
 
@@ -680,3 +683,22 @@ from, so the number is the partner's own quote; it is dropped when the menu has 
   throws a domain error with a stable code, or the filter derives a code from the status when the
   response has no `error` field (e.g. 404 → `NOT_FOUND`). `useMessageForError` matches only
   codes the API actually emits, and an HTTP test pins the code for a bare 404.
+
+### S-36 — The step rail advances without its `spring.gentle` motion
+
+- **Status:** `open`
+- **Found in:** task 14 task-7 (washer active-job screen)
+- **Surface:** mobile
+
+Spec §2 gives the evidence pair's slot fill `duration.base` + `easing.decelerate` and the step
+rail's advance `spring.gentle`. The slot fill ships (`EvidencePair.tsx`, asserted by test);
+`StepRail.tsx` changes marker state with no motion. The controller ruling for task 7 allowed
+"the tokens' motion or no animation", and a rail that snaps is honest — but it is not yet what
+the direction specified.
+
+- **Why deferred:** the marker's ring-to-check change needs a Reanimated shared value driven by
+  `withSpring(…, spring.gentle)`, plus a reduced-motion path, and nothing in the unit harness can
+  see it — the only real check is on a device, which is task 11's pass.
+- **Done means:** the current-step marker animates its fill with `spring.gentle` from
+  `@parkease/tokens`, skipped under `useReducedMotion()`, checked on an Android device in the
+  task-11 walkthrough.

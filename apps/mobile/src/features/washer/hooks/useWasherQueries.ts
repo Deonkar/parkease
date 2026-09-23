@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type { Intent } from '@/lib/api';
 
+import { apiErrorCodeOf } from '../api/errors';
 import {
   acceptOffer,
   advanceJob,
@@ -112,6 +113,14 @@ export function useAttachPhoto() {
     }) => attachPhoto(jobId, slot, photoId, intent),
     onSuccess: (job) => {
       client.setQueryData(washerKeys.active, job);
+    },
+    onError: (error) => {
+      // T7-S1: the job moved past this slot, so the screen was stale. Only this
+      // code refetches — a transport failure leaves the cached job alone, so
+      // the pair keeps rendering while the partner retries.
+      if (apiErrorCodeOf(error) === 'PHOTO_SLOT_CLOSED') {
+        void client.invalidateQueries({ queryKey: washerKeys.active });
+      }
     },
   });
 }
