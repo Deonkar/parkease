@@ -24,7 +24,8 @@ const servicePriceSchema = paiseSchema.refine((value) => value > 0, {
 
 /**
  * A service price on writes (UPSERTs). Tightened to the ₹10–₹9,999 range that
- * the mobile app enforces. This schema is used ONLY by `upsertWashServiceSchema`.
+ * this contract enforces and the mobile app checks against. This schema is used
+ * ONLY by `upsertWashServiceSchema`.
  */
 const boundedServicePriceSchema = paiseSchema.refine(
   (value) => value >= MIN_SERVICE_PRICE_PAISE && value <= MAX_SERVICE_PRICE_PAISE,

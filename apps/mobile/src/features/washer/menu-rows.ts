@@ -17,14 +17,6 @@ import {
  * Pure and free of `react-native`, so the node test environment can reach it.
  */
 
-/**
- * Re-exported from the contract so they are enforced as a single source of truth.
- * `rupeesToPaise` checks against these bounds; the API's `upsertWashServiceSchema`
- * checks the same.
- */
-export const MIN_PRICE_PAISE = MIN_SERVICE_PRICE_PAISE;
-export const MAX_PRICE_PAISE = MAX_SERVICE_PRICE_PAISE;
-
 export interface MenuRow {
   readonly serviceName: CarwashServiceName;
   /** Null when this partner has never priced this combination. */
@@ -73,7 +65,7 @@ export function rupeesToPaise(input: string): number | null {
   const [rupees = '0', decimals = ''] = trimmed.split('.');
   const paise = Number(rupees) * 100 + Number(decimals.padEnd(2, '0'));
 
-  if (paise < MIN_PRICE_PAISE || paise > MAX_PRICE_PAISE) return null;
+  if (paise < MIN_SERVICE_PRICE_PAISE || paise > MAX_SERVICE_PRICE_PAISE) return null;
   return paise;
 }
 

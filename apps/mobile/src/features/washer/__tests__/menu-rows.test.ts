@@ -1,12 +1,7 @@
+import { MAX_SERVICE_PRICE_PAISE, MIN_SERVICE_PRICE_PAISE } from '@parkease/contracts/washer';
 import { describe, expect, it } from 'vitest';
 
-import {
-  MAX_PRICE_PAISE,
-  MIN_PRICE_PAISE,
-  paiseToRupees,
-  rupeesToPaise,
-  toMenuRows,
-} from '../menu-rows';
+import { paiseToRupees, rupeesToPaise, toMenuRows } from '../menu-rows';
 
 const service = (serviceName: string, vehicleType: string, pricePaise: number, isActive = true) =>
   ({ serviceName, vehicleType, pricePaise, durationMinutes: 40, isActive }) as never;
@@ -78,8 +73,8 @@ describe('rupeesToPaise', () => {
 
   it('refuses anything outside the contract bounds', () => {
     expect(rupeesToPaise('9')).toBeNull();
-    expect(rupeesToPaise('10')).toBe(MIN_PRICE_PAISE);
-    expect(rupeesToPaise('9999')).toBe(MAX_PRICE_PAISE);
+    expect(rupeesToPaise('10')).toBe(MIN_SERVICE_PRICE_PAISE);
+    expect(rupeesToPaise('9999')).toBe(MAX_SERVICE_PRICE_PAISE);
     expect(rupeesToPaise('10000')).toBeNull();
   });
 
