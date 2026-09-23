@@ -13,6 +13,7 @@ import { z } from 'zod';
 
 import { api, type Intent } from '@/lib/api';
 import { warn } from '@/lib/log';
+import { defaultUploadDeps, uploadImage } from '@/lib/uploads';
 
 import type { LocationFix, SendResult } from '../location/queue';
 
@@ -84,25 +85,25 @@ export async function advanceJob(
   return envelope(valetJobViewSchema).parse(response.data).data;
 }
 
-const proofResponseSchema = z.object({ proofPhotoId: z.string() });
-
+/**
+ * The proof photo, uploaded and then attached.
+ *
+ * This posted `multipart/form-data` to an endpoint that parses
+ * `{ proofPhotoId }` until task 14 — so it had never worked. The upload now
+ * goes to Cloudinary through the shared client and only the resulting id is
+ * sent here, which is what the endpoint has always asked for.
+ */
 export async function uploadProof(uri: string, jobId: string, intent: Intent): Promise<string> {
-  const body = new FormData();
-  // React Native's FormData takes this shape for a file part; the cast is the
-  // documented RN idiom, not an assertion on data from outside the process.
-  body.append('file', {
-    uri,
-    name: 'proof.jpg',
-    type: 'image/jpeg',
-  } as unknown as Blob);
+  const uploaded = await uploadImage(uri, 'proofs', defaultUploadDeps());
+  if (!uploaded.ok) throw new Error(uploaded.message);
 
-  const response = await api.post<unknown>(`/valet/jobs/${jobId}/proof`, body, {
-    headers: {
-      'Idempotency-Key': intent.idempotencyKey,
-      'Content-Type': 'multipart/form-data',
-    },
-  });
-  return envelope(proofResponseSchema).parse(response.data).data.proofPhotoId;
+  await api.post<unknown>(
+    `/valet/jobs/${jobId}/proof`,
+    { proofPhotoId: uploaded.uploadId },
+    { headers: { 'Idempotency-Key': intent.idempotencyKey } },
+  );
+
+  return uploaded.uploadId;
 }
 
 export async function setAvailability(

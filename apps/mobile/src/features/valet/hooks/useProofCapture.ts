@@ -1,4 +1,3 @@
-import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { useCallback, useState } from 'react';
 
 import { newIntent } from '@/lib/api';
@@ -22,9 +21,9 @@ export interface ProofCaptureState {
 /**
  * Compress-and-upload for the proof photo, with the image retained on failure.
  *
- * The compression runs before the request, not after a failure: a 4MB original
- * on a 3G connection in a basement car park is the difference between a proof
- * photo and a valet stuck on this screen.
+ * The compression itself now lives in `lib/uploads.ts`, which `uploadProof`
+ * calls — this hook's own `deps.compress` is a pass-through so `submitProof`'s
+ * compress-then-upload shape still holds, without compressing the image twice.
  */
 export function useProofCapture(jobId: string | null): ProofCaptureState {
   const [uri, setUri] = useState<string | null>(null);
@@ -33,16 +32,7 @@ export function useProofCapture(jobId: string | null): ProofCaptureState {
   const [proofPhotoId, setProofPhotoId] = useState<string | null>(null);
 
   const deps: ProofDeps = {
-    compress: async (source, width, quality) => {
-      // SDK 57's contextual API. `manipulateAsync` still exists but is
-      // deprecated, and eslint's no-deprecated rule fails the build on it.
-      const rendered = await ImageManipulator.manipulate(source).resize({ width }).renderAsync();
-      const result = await rendered.saveAsync({
-        compress: quality,
-        format: SaveFormat.JPEG,
-      });
-      return { uri: result.uri, width: result.width, height: result.height };
-    },
+    compress: (source) => Promise.resolve({ uri: source, width: 0, height: 0 }),
     upload: async (source) => {
       if (jobId === null) throw new Error('no active job to attach a photo to');
       return uploadProof(
