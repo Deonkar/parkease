@@ -155,7 +155,7 @@ describe('createWasherProfileSchema', () => {
     expect(
       createWasherProfileSchema.safeParse({
         partnerType: 'business',
-        capabilities: ['car_wash'],
+        capabilities: ['premium_wash'],
       }).success,
     ).toBe(false);
 
@@ -163,7 +163,7 @@ describe('createWasherProfileSchema', () => {
       createWasherProfileSchema.safeParse({
         partnerType: 'business',
         businessName: 'Shine Co',
-        capabilities: ['car_wash'],
+        capabilities: ['premium_wash'],
       }).success,
     ).toBe(true);
   });
@@ -172,7 +172,7 @@ describe('createWasherProfileSchema', () => {
     expect(
       createWasherProfileSchema.safeParse({
         partnerType: 'gig',
-        capabilities: ['car_wash'],
+        capabilities: ['premium_wash'],
       }).success,
     ).toBe(true);
   });
@@ -184,7 +184,7 @@ describe('createWasherProfileSchema', () => {
   it('has no field for an identity number', () => {
     const parsed = createWasherProfileSchema.parse({
       partnerType: 'gig',
-      capabilities: ['car_wash'],
+      capabilities: ['premium_wash'],
       aadhaarNumber: '1234 5678 9012',
     });
 
@@ -195,7 +195,7 @@ describe('createWasherProfileSchema', () => {
     const parsed = createWasherProfileSchema.parse({
       partnerType: 'business',
       businessName: 'Shine Co',
-      capabilities: ['car_wash'],
+      capabilities: ['premium_wash'],
       operatingHours: { mon: { open: '09:00', close: '18:00' } },
     });
 
@@ -207,9 +207,55 @@ describe('createWasherProfileSchema', () => {
       createWasherProfileSchema.safeParse({
         partnerType: 'business',
         businessName: 'Shine Co',
-        capabilities: ['car_wash'],
+        capabilities: ['premium_wash'],
         operatingHours: { mon: { open: '9am', close: '18:00' } },
       }).success,
+    ).toBe(false);
+  });
+});
+
+/**
+ * Ruling T10-S1. What a partner ticks decides what they are offered, so the
+ * list is the closed catalogue: a free string would let a typo (or a stale
+ * client's 'car_wash') register a partner who silently offers nothing.
+ */
+describe('createWasherProfileSchema capabilities', () => {
+  const gig = (capabilities: unknown) =>
+    createWasherProfileSchema.safeParse({ partnerType: 'gig', capabilities });
+
+  it('accepts every service in the catalogue', () => {
+    expect(
+      gig(['basic_exterior', 'premium_wash', 'interior_only', 'full_detailing', 'quick_wipe'])
+        .success,
+    ).toBe(true);
+  });
+
+  it('refuses a service outside the catalogue', () => {
+    const parsed = gig(['car_wash']);
+    expect(parsed.success).toBe(false);
+    expect(parsed.error?.issues[0]?.path).toEqual(['capabilities', 0]);
+  });
+
+  it('refuses an empty list: a partner offering nothing is never dispatchable', () => {
+    expect(gig([]).success).toBe(false);
+  });
+
+  it('refuses the same service twice, on the capabilities field', () => {
+    const parsed = gig(['quick_wipe', 'quick_wipe']);
+    expect(parsed.success).toBe(false);
+    expect(parsed.error?.issues[0]?.path).toEqual(['capabilities']);
+  });
+
+  it('refuses more services than the catalogue holds', () => {
+    expect(
+      gig([
+        'basic_exterior',
+        'premium_wash',
+        'interior_only',
+        'full_detailing',
+        'quick_wipe',
+        'quick_wipe',
+      ]).success,
     ).toBe(false);
   });
 });

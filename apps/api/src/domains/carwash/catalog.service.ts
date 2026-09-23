@@ -21,8 +21,8 @@ export interface StandardService {
  * which is why `wash_services.service_name` is a CHECK constraint rather than
  * free text. The defaults are a starting point a partner can ignore — what they
  * buy is a menu that is complete from the first minute, so a partner who
- * registers and goes online is immediately eligible for every service a driver
- * can ask for rather than invisible until they fill a form in.
+ * registers and goes online is immediately eligible for every service they
+ * ticked rather than invisible until they fill a price form in.
  */
 export const STANDARD_SERVICES: readonly StandardService[] = [
   {
@@ -89,26 +89,39 @@ export class CatalogService {
    * idempotent POST, so a retried one must not fail on rows it already wrote,
    * and a check-then-insert would be a race with itself anyway. This runs
    * inside registration's transaction so a partner never exists without a menu.
+   *
+   * Every service is PRICED, and only the ones the partner said they offer are
+   * switched on (ruling T10-S1). The menu is what dispatch reads, so an active
+   * row for a service they did not tick would send them jobs they said they do
+   * not do; a missing row would make switching it on later a re-pricing
+   * exercise instead of a toggle.
    */
-  async seedMenu(tx: TxHandle, washerUserId: string): Promise<void> {
-    const rows = STANDARD_SERVICES.flatMap((service) => [
-      {
-        washerUserId,
-        serviceName: service.name,
-        vehicleType: 'car',
-        pricePaise: service.carPaise,
-        durationMinutes: service.durationMin,
-        isActive: true,
-      },
-      {
-        washerUserId,
-        serviceName: service.name,
-        vehicleType: 'two_wheeler',
-        pricePaise: service.bikePaise,
-        durationMinutes: service.durationMin,
-        isActive: true,
-      },
-    ]);
+  async seedMenu(
+    tx: TxHandle,
+    washerUserId: string,
+    offered: readonly CarwashServiceName[],
+  ): Promise<void> {
+    const rows = STANDARD_SERVICES.flatMap((service) => {
+      const isActive = offered.includes(service.name);
+      return [
+        {
+          washerUserId,
+          serviceName: service.name,
+          vehicleType: 'car',
+          pricePaise: service.carPaise,
+          durationMinutes: service.durationMin,
+          isActive,
+        },
+        {
+          washerUserId,
+          serviceName: service.name,
+          vehicleType: 'two_wheeler',
+          pricePaise: service.bikePaise,
+          durationMinutes: service.durationMin,
+          isActive,
+        },
+      ];
+    });
 
     await tx.insert(washServices).values(rows).onConflictDoNothing();
   }

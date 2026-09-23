@@ -1,5 +1,9 @@
 import { z } from 'zod';
 
+import {
+  CARWASH_SERVICE_NAME_VALUES,
+  carwashServiceNameSchema,
+} from '../enums/carwash-service-name.js';
 import { verificationStatusSchema } from '../enums/verification-status.js';
 
 export const WASHER_PARTNER_TYPE_VALUES = ['business', 'gig'] as const;
@@ -57,7 +61,17 @@ export const createWasherProfileSchema = z
       .optional(),
     businessPhotoIds: z.array(z.string().min(1).max(255)).max(10).default([]),
     operatingHours: operatingHoursSchema.optional(),
-    capabilities: z.array(z.string().min(1).max(64)).min(1).max(20),
+    /**
+     * The services this partner offers, from the closed catalogue (ruling
+     * T10-S1). Registration seeds prices for every service and switches on only
+     * these, so this list is what decides which offers they see. A free string
+     * would let a typo silently switch a service off.
+     */
+    capabilities: z
+      .array(carwashServiceNameSchema)
+      .min(1)
+      .max(CARWASH_SERVICE_NAME_VALUES.length)
+      .refine((names) => new Set(names).size === names.length, 'a service listed twice'),
   })
   .superRefine((value, ctx) => {
     if (value.partnerType === 'business' && value.businessName === undefined) {
@@ -101,6 +115,7 @@ export const washerProfileViewSchema = z.object({
   gstin: z.string().nullable(),
   businessPhotoIds: z.array(z.string()),
   operatingHours: operatingHoursSchema.nullable(),
+  /** Echoes stored data, so it stays readable for rows written before T10-S1. */
   capabilities: z.array(z.string()),
   idDocumentId: z.string().nullable(),
   verificationStatus: verificationStatusSchema,

@@ -55,7 +55,7 @@ export class CreateWasherProfileCommand {
         capabilities: input.capabilities,
       });
 
-      await this.catalog.seedMenu(tx, input.userId);
+      await this.catalog.seedMenu(tx, input.userId, input.capabilities);
     });
 
     const profile = await this.carwash.profileFor(input.userId);

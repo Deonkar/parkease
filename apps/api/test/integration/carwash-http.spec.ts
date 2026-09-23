@@ -895,12 +895,70 @@ describe('the service menu', () => {
       method: 'POST',
       url: '/api/v1/washer/profile',
       headers: key(),
-      payload: { partnerType: 'gig', capabilities: ['car_wash'] },
+      payload: { partnerType: 'gig', capabilities: ['premium_wash'] },
     });
     expect(created.status).toBe(201);
 
     const menu = await http.request({ method: 'GET', url: '/api/v1/washer/services' });
     expect(dataOf<{ services: unknown[] }>(menu.body).services).toHaveLength(10);
+  });
+
+  /**
+   * Ruling T10-S1. The services a partner ticks at registration are the ones
+   * they are offered: the menu drives eligibility, so a row seeded active for
+   * an unticked service would send them jobs they said they do not do. Every
+   * row is still PRICED, so switching one on later from the menu needs no
+   * re-pricing.
+   */
+  it('switches on only the services the partner ticked, and prices all ten', async () => {
+    const washerId = await seedUser(h, 'washer');
+    asUser(washerId, ['washer']);
+
+    const ticked = ['basic_exterior', 'premium_wash', 'quick_wipe'];
+    const created = await http.request({
+      method: 'POST',
+      url: '/api/v1/washer/profile',
+      headers: key(),
+      payload: { partnerType: 'gig', capabilities: ticked },
+    });
+    expect(created.status).toBe(201);
+
+    const menu = await http.request({ method: 'GET', url: '/api/v1/washer/services' });
+    const { services } = dataOf<{
+      services: {
+        serviceName: string;
+        vehicleType: string;
+        pricePaise: number;
+        isActive: boolean;
+      }[];
+    }>(menu.body);
+
+    expect(services).toHaveLength(10);
+    expect(services.every((row) => row.pricePaise > 0)).toBe(true);
+
+    const active = services.filter((row) => row.isActive);
+    expect(active).toHaveLength(6);
+    expect(new Set(active.map((row) => row.serviceName))).toEqual(new Set(ticked));
+    expect(
+      services
+        .filter((row) => !row.isActive)
+        .map((row) => row.serviceName)
+        .sort(),
+    ).toEqual(['full_detailing', 'full_detailing', 'interior_only', 'interior_only']);
+  });
+
+  it('refuses a registration naming a service outside the catalogue', async () => {
+    const washerId = await seedUser(h, 'washer');
+    asUser(washerId, ['washer']);
+
+    const res = await http.request({
+      method: 'POST',
+      url: '/api/v1/washer/profile',
+      headers: key(),
+      payload: { partnerType: 'gig', capabilities: ['car_wash'] },
+    });
+
+    expect(res.status).toBe(400);
   });
 
   it('refuses a business registration with no business name', async () => {
@@ -911,7 +969,7 @@ describe('the service menu', () => {
       method: 'POST',
       url: '/api/v1/washer/profile',
       headers: key(),
-      payload: { partnerType: 'business', capabilities: ['car_wash'] },
+      payload: { partnerType: 'business', capabilities: ['premium_wash'] },
     });
 
     expect(res.status).toBe(400);

@@ -14,6 +14,9 @@ import { type Harness, seedUser, startHarness, stopHarness } from './harness.js'
  * unique constraint, so it needs Postgres.
  */
 
+/** A partner who ticked every service at registration. */
+const EVERY_SERVICE = STANDARD_SERVICES.map((service) => service.name);
+
 let h: Harness;
 let catalog: CatalogService;
 let washerId: string;
@@ -34,7 +37,7 @@ beforeEach(async () => {
 
 describe('seeding a new partner', () => {
   it('creates two rows per service, one per vehicle type', async () => {
-    await withTransaction(h.db, (tx) => catalog.seedMenu(tx, washerId));
+    await withTransaction(h.db, (tx) => catalog.seedMenu(tx, washerId, EVERY_SERVICE));
 
     const rows = await catalog.menuFor(washerId);
 
@@ -47,7 +50,7 @@ describe('seeding a new partner', () => {
   });
 
   it('prices a car and a bike differently, which is the point', async () => {
-    await withTransaction(h.db, (tx) => catalog.seedMenu(tx, washerId));
+    await withTransaction(h.db, (tx) => catalog.seedMenu(tx, washerId, EVERY_SERVICE));
 
     const car = await catalog.findServicePrice(washerId, 'premium_wash', 'car');
     const bike = await catalog.findServicePrice(washerId, 'premium_wash', 'two_wheeler');
@@ -61,9 +64,27 @@ describe('seeding a new partner', () => {
    * not blow up on a partner who already has a menu — a retried registration is
    * a normal outcome of an idempotent POST.
    */
+  /**
+   * Ruling T10-S1: what the partner ticked decides what they are offered, and
+   * an unticked service is still priced so switching it on later is a toggle.
+   */
+  it('prices every service and switches on only the ones offered', async () => {
+    await withTransaction(h.db, (tx) => catalog.seedMenu(tx, washerId, ['quick_wipe']));
+
+    const rows = await catalog.menuFor(washerId);
+
+    expect(rows).toHaveLength(STANDARD_SERVICES.length * 2);
+    expect(rows.every((r) => r.pricePaise > 0)).toBe(true);
+    expect(rows.filter((r) => r.isActive).map((r) => r.serviceName)).toEqual([
+      'quick_wipe',
+      'quick_wipe',
+    ]);
+    expect(await catalog.findServicePrice(washerId, 'premium_wash', 'car')).toBeUndefined();
+  });
+
   it('is idempotent', async () => {
-    await withTransaction(h.db, (tx) => catalog.seedMenu(tx, washerId));
-    await withTransaction(h.db, (tx) => catalog.seedMenu(tx, washerId));
+    await withTransaction(h.db, (tx) => catalog.seedMenu(tx, washerId, EVERY_SERVICE));
+    await withTransaction(h.db, (tx) => catalog.seedMenu(tx, washerId, EVERY_SERVICE));
 
     expect(await catalog.menuFor(washerId)).toHaveLength(STANDARD_SERVICES.length * 2);
   });
@@ -71,7 +92,7 @@ describe('seeding a new partner', () => {
 
 describe('editing a service', () => {
   beforeEach(async () => {
-    await withTransaction(h.db, (tx) => catalog.seedMenu(tx, washerId));
+    await withTransaction(h.db, (tx) => catalog.seedMenu(tx, washerId, EVERY_SERVICE));
   });
 
   it('upserts both vehicle-type rows from one edit', async () => {
@@ -145,7 +166,7 @@ describe('editing a service', () => {
 
 describe('the constraint that resolves v1s ambiguity', () => {
   it('refuses a third row for a service the partner already prices twice', async () => {
-    await withTransaction(h.db, (tx) => catalog.seedMenu(tx, washerId));
+    await withTransaction(h.db, (tx) => catalog.seedMenu(tx, washerId, EVERY_SERVICE));
 
     await expect(
       h.sql`
