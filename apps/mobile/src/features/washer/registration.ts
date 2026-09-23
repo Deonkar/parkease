@@ -141,7 +141,8 @@ export function buildBusinessProfile(draft: BusinessDraft): BusinessBuild {
   // The contract's own rule, restated: its refinement does not run while
   // another field is failing, and every error should show on the first submit.
   if (businessName === undefined) errors.name ??= COPY.businessName;
-  // The contract lets a business register with no photo; §14.2 does not.
+  // The contract's photo rule (T10-C1) is a refinement too, so it is restated
+  // for the same reason.
   if (draft.photoIds.length === 0) errors.photos ??= COPY.photos;
   // `HH:mm` compares chronologically as a string. Overnight hours are not a v1
   // case, and a range that closes before it opens is far likelier a slip.
@@ -156,8 +157,8 @@ export function buildGigProfile(draft: GigDraft): GigBuild {
 
   const parsed = createWasherProfileSchema.safeParse({
     partnerType: 'gig',
-    // The name a gig partner trades under. The contract has no other field
-    // for it (see the task-10 report); it is never an identity number.
+    // The name a gig partner trades under, and what a driver sees on the
+    // washer card (ruling T10-C2). Never an identity number.
     ...(name === undefined ? {} : { businessName: name }),
     businessPhotoIds: [],
     capabilities: [...draft.services],
@@ -169,7 +170,7 @@ export function buildGigProfile(draft: GigDraft): GigBuild {
   const errors: FieldErrors = {};
   if (!parsed.success) collect(errors, parsed.error.issues, 'gig');
   if (!documents.success) collect(errors, documents.error.issues, 'gig');
-  // Optional in the contract (it is the business name's column); §14.2 requires it.
+  // Required by the contract as well; restated so it shows beside the others.
   if (name === undefined) errors.name ??= COPY.gigName;
 
   if (!parsed.success || !documents.success || Object.keys(errors).length > 0) {

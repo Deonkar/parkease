@@ -55,6 +55,14 @@ describe('the profile screen', () => {
     expect(screen).toContain('<VerificationNotice');
   });
 
+  /** Ruling T10-C1: a business is reviewed on its photos, so it is never asked for an ID. */
+  it('shows the ID row to a gig partner only; a business sees its photos', () => {
+    expect(code(screen)).toMatch(/isBusiness\s*\?[\s\S]{0,1200}:\s*\(?\s*idDocument\(view\)/);
+    expect(screen).toContain(
+      'registrationNotice(noticeKind, view.verificationStatus, view.partnerType)',
+    );
+  });
+
   it('offers an upload for a missing ID, through the held-upload hook and one intent', () => {
     expect(screen).toContain("useHeldUploads('documents', 1)");
     expect(screen).toContain('sendDocument(');

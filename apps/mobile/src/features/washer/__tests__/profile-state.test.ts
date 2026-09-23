@@ -49,31 +49,47 @@ describe('profileScreenState', () => {
 });
 
 describe('registrationNotice', () => {
-  it('says "Submitted for review" once the server has the documents', () => {
-    expect(registrationNotice('registered', 'pending')).toMatch(/^Submitted for review/);
+  /** Ruling T10-C1: a business registration is complete, so it lands in review. */
+  it('tells a business "Submitted for review" straight after registering', () => {
+    expect(registrationNotice('registered', 'pending', 'business')).toMatch(
+      /^Submitted for review/,
+    );
+  });
+
+  it('says "Submitted for review" to a gig partner once the server has the ID', () => {
+    expect(registrationNotice('registered', 'pending', 'gig')).toMatch(/^Submitted for review/);
+  });
+
+  it('never asks a business for an ID photo, whatever the status', () => {
+    for (const status of ['pending', 'unverified', 'rejected', 'verified']) {
+      for (const kind of ['registered', 'document-not-sent']) {
+        expect(registrationNotice(kind, status, 'business') ?? '').not.toMatch(/\bID\b/);
+      }
+    }
   });
 
   it('does not claim a review the server has not started', () => {
-    // A business registers without an ID image and lands `unverified`.
-    const notice = registrationNotice('registered', 'unverified') ?? '';
+    const notice = registrationNotice('registered', 'unverified', 'gig') ?? '';
 
     expect(notice).not.toMatch(/submitted for review/i);
     expect(notice).toMatch(/ID/);
   });
 
-  it('tells a partner whose ID did not send that the profile is saved and the ID is not', () => {
-    const notice = registrationNotice('document-not-sent', 'unverified') ?? '';
+  it('tells a gig partner whose ID did not send that the profile is saved and the ID is not', () => {
+    const notice = registrationNotice('document-not-sent', 'unverified', 'gig') ?? '';
 
     expect(notice).toMatch(/saved/i);
     expect(notice).toMatch(/ID/);
   });
 
   it('says "Submitted for review" once an ID sent later has put the profile in review', () => {
-    expect(registrationNotice('document-not-sent', 'pending')).toMatch(/^Submitted for review/);
+    expect(registrationNotice('document-not-sent', 'pending', 'gig')).toMatch(
+      /^Submitted for review/,
+    );
   });
 
   it('says nothing without a notice to give', () => {
-    expect(registrationNotice(undefined, 'pending')).toBeNull();
-    expect(registrationNotice('something-else', 'pending')).toBeNull();
+    expect(registrationNotice(undefined, 'pending', 'gig')).toBeNull();
+    expect(registrationNotice('something-else', 'pending', 'business')).toBeNull();
   });
 });

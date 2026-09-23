@@ -151,10 +151,13 @@ describe('upsertWashServiceSchema', () => {
 });
 
 describe('createWasherProfileSchema', () => {
+  const PHOTO = ['spaces/shop-front'];
+
   it('requires a business name from a business partner', () => {
     expect(
       createWasherProfileSchema.safeParse({
         partnerType: 'business',
+        businessPhotoIds: PHOTO,
         capabilities: ['premium_wash'],
       }).success,
     ).toBe(false);
@@ -163,15 +166,57 @@ describe('createWasherProfileSchema', () => {
       createWasherProfileSchema.safeParse({
         partnerType: 'business',
         businessName: 'Shine Co',
+        businessPhotoIds: PHOTO,
         capabilities: ['premium_wash'],
       }).success,
     ).toBe(true);
   });
 
-  it('does not require one from a gig partner', () => {
+  /**
+   * Ruling T10-C2. `businessName` is the name a partner trades under — a gig
+   * partner's own name — and it is what a driver sees on the washer card.
+   * Nothing else captures a display name, so a gig partner without one would
+   * be a card that cannot be drawn.
+   */
+  it('requires a trading name from a gig partner too, on businessName', () => {
+    const parsed = createWasherProfileSchema.safeParse({
+      partnerType: 'gig',
+      capabilities: ['premium_wash'],
+    });
+
+    expect(parsed.success).toBe(false);
+    expect(parsed.error?.issues.map((issue) => issue.path)).toEqual([['businessName']]);
+
     expect(
       createWasherProfileSchema.safeParse({
         partnerType: 'gig',
+        businessName: 'Raju M.',
+        capabilities: ['premium_wash'],
+      }).success,
+    ).toBe(true);
+  });
+
+  /**
+   * Ruling T10-C1. A business registration is a complete submission — its
+   * photos are what an admin reviews — so it must carry at least one.
+   */
+  it('refuses a business with no photo, on businessPhotoIds', () => {
+    const parsed = createWasherProfileSchema.safeParse({
+      partnerType: 'business',
+      businessName: 'Shine Co',
+      capabilities: ['premium_wash'],
+    });
+
+    expect(parsed.success).toBe(false);
+    expect(parsed.error?.issues.map((issue) => issue.path)).toEqual([['businessPhotoIds']]);
+    expect(parsed.error?.issues[0]?.message).toMatch(/photo/i);
+  });
+
+  it('does not ask a gig partner for business photos', () => {
+    expect(
+      createWasherProfileSchema.safeParse({
+        partnerType: 'gig',
+        businessName: 'Raju M.',
         capabilities: ['premium_wash'],
       }).success,
     ).toBe(true);
@@ -184,6 +229,7 @@ describe('createWasherProfileSchema', () => {
   it('has no field for an identity number', () => {
     const parsed = createWasherProfileSchema.parse({
       partnerType: 'gig',
+      businessName: 'Raju M.',
       capabilities: ['premium_wash'],
       aadhaarNumber: '1234 5678 9012',
     });
@@ -195,6 +241,7 @@ describe('createWasherProfileSchema', () => {
     const parsed = createWasherProfileSchema.parse({
       partnerType: 'business',
       businessName: 'Shine Co',
+      businessPhotoIds: PHOTO,
       capabilities: ['premium_wash'],
       operatingHours: { mon: { open: '09:00', close: '18:00' } },
     });
@@ -207,6 +254,7 @@ describe('createWasherProfileSchema', () => {
       createWasherProfileSchema.safeParse({
         partnerType: 'business',
         businessName: 'Shine Co',
+        businessPhotoIds: PHOTO,
         capabilities: ['premium_wash'],
         operatingHours: { mon: { open: '9am', close: '18:00' } },
       }).success,
@@ -221,7 +269,11 @@ describe('createWasherProfileSchema', () => {
  */
 describe('createWasherProfileSchema capabilities', () => {
   const gig = (capabilities: unknown) =>
-    createWasherProfileSchema.safeParse({ partnerType: 'gig', capabilities });
+    createWasherProfileSchema.safeParse({
+      partnerType: 'gig',
+      businessName: 'Raju M.',
+      capabilities,
+    });
 
   it('accepts every service in the catalogue', () => {
     expect(

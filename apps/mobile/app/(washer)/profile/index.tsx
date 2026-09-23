@@ -126,7 +126,7 @@ export default function WasherProfileScreen() {
 
   const ready = (view: WasherProfileView): ReactNode => {
     const { banner } = describeWasherVerification(view.verificationStatus);
-    const notice = registrationNotice(noticeKind, view.verificationStatus);
+    const notice = registrationNotice(noticeKind, view.verificationStatus, view.partnerType);
     const isBusiness = view.partnerType === 'business';
 
     return (
@@ -188,7 +188,8 @@ export default function WasherProfileScreen() {
           <Text style={styles.section} accessibilityRole="header">
             DOCUMENTS
           </Text>
-          {idDocument(view)}
+          {/* A business is reviewed on its photos (ruling T10-C1) and is never
+              asked for an ID; a gig partner's review material is the ID. */}
           {isBusiness ? (
             <View style={styles.docRow}>
               <MaterialCommunityIcons
@@ -206,7 +207,9 @@ export default function WasherProfileScreen() {
                     }`}
               </Text>
             </View>
-          ) : null}
+          ) : (
+            idDocument(view)
+          )}
         </View>
       </>
     );

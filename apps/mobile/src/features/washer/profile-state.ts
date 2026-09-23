@@ -1,3 +1,5 @@
+import type { WasherPartnerType } from '@parkease/contracts/washer';
+
 import {
   resolveScreenState,
   type QueryShape,
@@ -34,17 +36,21 @@ export type RegistrationNoticeKind = 'registered' | 'document-not-sent';
 /**
  * The one line the profile says after registration, true to the server.
  *
- * "Submitted for review" only once the server holds the ID and says `pending`.
- * A business registers without an ID image and lands `unverified` — telling
- * them it is under review would leave them waiting on a review that has not
- * started.
+ * "Submitted for review" only once the server says `pending`: a business lands
+ * there on registering (ruling T10-C1), a gig partner once their ID image has
+ * arrived. A business is reviewed on its photos, so it is never asked for an ID.
  */
-export function registrationNotice(kind: string | undefined, status: string): string | null {
+export function registrationNotice(
+  kind: string | undefined,
+  status: string,
+  partnerType: WasherPartnerType,
+): string | null {
   if (kind !== 'registered' && kind !== 'document-not-sent') return null;
   // Also true once an ID sent from this screen later puts the profile in review.
   if (verificationStateFor(status) === 'pending') {
     return "Submitted for review. We'll let you know once your documents are checked.";
   }
+  if (partnerType === 'business') return 'Profile saved.';
   return kind === 'registered'
     ? 'Profile saved. Add a photo of your ID below to send it for review.'
     : "Your profile is saved, but your ID photo didn't send. Add it again below.";

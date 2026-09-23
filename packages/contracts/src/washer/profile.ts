@@ -41,8 +41,12 @@ export type OperatingHours = z.infer<typeof operatingHoursSchema>;
  * One schema with a discriminating field rather than two, because both land in
  * one `washer_profiles` row and take the same assignment path — the difference
  * is what they must supply, not what they become. `superRefine` puts the
- * business-name rule on the field it concerns, so the error names
- * `businessName` rather than "invalid input".
+ * business-photo rule on the field it concerns, so the error names
+ * `businessPhotoIds` rather than "invalid input".
+ *
+ * A business must show at least one photo (ruling T10-C1): its registration is
+ * a complete submission for review, and the photos are what is reviewed. A gig
+ * partner's review material is the ID image sent afterwards.
  *
  * **There is no field for an identity number, deliberately.** security.md §5.3:
  * the Aadhaar number is never collected. A gig partner submits an *image* of an
@@ -53,7 +57,12 @@ export type OperatingHours = z.infer<typeof operatingHoursSchema>;
 export const createWasherProfileSchema = z
   .object({
     partnerType: washerPartnerTypeSchema,
-    businessName: z.string().min(1).max(120).optional(),
+    /**
+     * The name the partner trades under, and what a driver sees on the washer
+     * card: a business's business name, a gig partner's own name. Required for
+     * both (ruling T10-C2) — nothing else captures a display name.
+     */
+    businessName: z.string().trim().min(1).max(120),
     /** Optional for a business, meaningless for a gig partner. */
     gstin: z
       .string()
@@ -74,11 +83,11 @@ export const createWasherProfileSchema = z
       .refine((names) => new Set(names).size === names.length, 'a service listed twice'),
   })
   .superRefine((value, ctx) => {
-    if (value.partnerType === 'business' && value.businessName === undefined) {
+    if (value.partnerType === 'business' && value.businessPhotoIds.length === 0) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ['businessName'],
-        message: 'a business partner needs a business name',
+        path: ['businessPhotoIds'],
+        message: 'Add at least one photo of your business.',
       });
     }
   });

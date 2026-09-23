@@ -36,7 +36,8 @@ export interface BusinessFormProps {
 
 /**
  * The business registration of §14.2: name, optional GSTIN, photos, hours and
- * services, sent as ONE `createProfile` carrying the photo ids.
+ * services, sent as ONE `createProfile` carrying the photo ids. It is the whole
+ * submission for review (ruling T10-C1): the server lands it `pending`.
  */
 export function BusinessForm({
   photos,
@@ -159,7 +160,7 @@ export function BusinessForm({
       />
 
       <SubmitBlock
-        label="Save business profile"
+        label="Submit for review"
         waitingForUploads={photos.busy}
         submitting={submitting}
         failure={failure}

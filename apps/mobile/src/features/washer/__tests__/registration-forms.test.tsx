@@ -115,6 +115,11 @@ describe('the gig form', () => {
     }
   });
 
+  // Ruling T10-C2: the name is what a driver sees on the washer card.
+  it('says who sees the name', () => {
+    expect(text(byTestId(gig().tree(), 'field-name') ?? null)).toMatch(/drivers see/i);
+  });
+
   it('says why there is no number field', () => {
     expect(text(gig().tree())).toContain('We verify your identity, not your number.');
   });
@@ -312,6 +317,13 @@ describe('the business form', () => {
 
     expect(text(byTestId(view.tree(), 'field-hours') ?? null)).not.toBe(before);
     expect(text(byTestId(view.tree(), 'field-hours') ?? null)).toContain('7:30 AM');
+  });
+
+  // Ruling T10-C1: a business registration IS the submission for review.
+  it('submits for review, and says so on the button', () => {
+    expect(byTestId(business().tree(), 'submit-registration')?.props['accessibilityLabel']).toBe(
+      'Submit for review',
+    );
   });
 
   it('holds its submit while a photo is uploading', () => {

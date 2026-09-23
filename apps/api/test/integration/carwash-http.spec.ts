@@ -895,7 +895,7 @@ describe('the service menu', () => {
       method: 'POST',
       url: '/api/v1/washer/profile',
       headers: key(),
-      payload: { partnerType: 'gig', capabilities: ['premium_wash'] },
+      payload: { partnerType: 'gig', businessName: 'Raju M.', capabilities: ['premium_wash'] },
     });
     expect(created.status).toBe(201);
 
@@ -919,7 +919,7 @@ describe('the service menu', () => {
       method: 'POST',
       url: '/api/v1/washer/profile',
       headers: key(),
-      payload: { partnerType: 'gig', capabilities: ticked },
+      payload: { partnerType: 'gig', businessName: 'Raju M.', capabilities: ticked },
     });
     expect(created.status).toBe(201);
 
@@ -955,7 +955,7 @@ describe('the service menu', () => {
       method: 'POST',
       url: '/api/v1/washer/profile',
       headers: key(),
-      payload: { partnerType: 'gig', capabilities: ['car_wash'] },
+      payload: { partnerType: 'gig', businessName: 'Raju M.', capabilities: ['car_wash'] },
     });
 
     expect(res.status).toBe(400);
@@ -969,7 +969,11 @@ describe('the service menu', () => {
       method: 'POST',
       url: '/api/v1/washer/profile',
       headers: key(),
-      payload: { partnerType: 'business', capabilities: ['premium_wash'] },
+      payload: {
+        partnerType: 'business',
+        businessPhotoIds: ['spaces/shop-front'],
+        capabilities: ['premium_wash'],
+      },
     });
 
     expect(res.status).toBe(400);
@@ -1021,6 +1025,129 @@ describe('the service menu', () => {
     });
 
     expect(res.status).toBe(400);
+  });
+});
+
+/**
+ * Ruling T10-C1. A business registration is a complete submission — name,
+ * photos, hours, services — so it lands in review. A gig partner's is not
+ * complete until their ID image arrives, which is what moves them.
+ */
+describe('POST /washer/profile — where verification starts', () => {
+  const register = (payload: Record<string, unknown>) =>
+    http.request({ method: 'POST', url: '/api/v1/washer/profile', headers: key(), payload });
+
+  const statusOf = async () => {
+    const res = await http.request({ method: 'GET', url: '/api/v1/washer/profile' });
+    return dataOf<{ verificationStatus: string }>(res.body).verificationStatus;
+  };
+
+  it('puts a business with a photo straight into review', async () => {
+    const washerId = await seedUser(h, 'washer');
+    asUser(washerId, ['washer']);
+
+    const created = await register({
+      partnerType: 'business',
+      businessName: 'SparkleWash',
+      businessPhotoIds: ['spaces/shop-front'],
+      capabilities: ['premium_wash'],
+    });
+
+    expect(created.status).toBe(201);
+    expect(dataOf<{ verificationStatus: string }>(created.body).verificationStatus).toBe('pending');
+    expect(await statusOf()).toBe('pending');
+  });
+
+  it('refuses a business with no photo', async () => {
+    const washerId = await seedUser(h, 'washer');
+    asUser(washerId, ['washer']);
+
+    const res = await register({
+      partnerType: 'business',
+      businessName: 'SparkleWash',
+      capabilities: ['premium_wash'],
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('leaves a gig partner unverified until the ID image arrives, then in review', async () => {
+    const washerId = await seedUser(h, 'washer');
+    asUser(washerId, ['washer']);
+
+    const created = await register({
+      partnerType: 'gig',
+      businessName: 'Raju M.',
+      capabilities: ['premium_wash'],
+    });
+    expect(created.status).toBe(201);
+    expect(await statusOf()).toBe('unverified');
+
+    const sent = await http.request({
+      method: 'POST',
+      url: '/api/v1/washer/profile/documents',
+      headers: key(),
+      payload: { idDocumentId: 'documents/id-front' },
+    });
+    expect(sent.status).toBe(201);
+    expect(await statusOf()).toBe('pending');
+  });
+});
+
+/**
+ * Ruling T10-C2. Nothing writes `users.name`, so a partner registered through
+ * the app has none; the driver's card must read the name they registered
+ * under. This partner is created WITHOUT `users.name`, unlike `seedUser`,
+ * because that is what every real one looks like.
+ */
+describe('the washer card, for a partner registered through the app', () => {
+  it('shows the driver the name the partner registered under', async () => {
+    const [user] = await h.sql<{ id: string }[]>`
+      INSERT INTO users (phone, firebase_uid) VALUES ('+919812300001', 'fb-washer-unnamed')
+      RETURNING id
+    `;
+    if (user === undefined) throw new Error('failed to seed user');
+    const washerId = user.id;
+    await h.sql`INSERT INTO user_roles (user_id, role) VALUES (${washerId}, 'washer')`;
+
+    asUser(washerId, ['washer']);
+    const created = await http.request({
+      method: 'POST',
+      url: '/api/v1/washer/profile',
+      headers: key(),
+      payload: { partnerType: 'gig', businessName: 'Raju M.', capabilities: ['premium_wash'] },
+    });
+    expect(created.status).toBe(201);
+
+    // What an admin's approval and going online would do (tasks 18 and 6).
+    const degPerM = 1 / (111_320 * Math.cos((SPACE.lat * Math.PI) / 180));
+    await h.sql`
+      UPDATE washer_profiles
+      SET verification_status = 'verified', is_online = true, last_seen_at = now(),
+          current_location = ST_SetSRID(
+            ST_MakePoint(${SPACE.lng + 500 * degPerM}, ${SPACE.lat}), 4326
+          )::geography
+      WHERE user_id = ${washerId}
+    `;
+    await h.sql`
+      INSERT INTO linked_accounts (user_id, razorpay_account_id, kyc_status)
+      VALUES (${washerId}, ${`acc_${washerId.slice(0, 12)}`}, 'activated')
+    `;
+
+    const jobId = await openJob();
+    const accepted = await accept(jobId, washerId);
+    expect(accepted.status).toBe(200);
+
+    asUser(h.driverId, ['driver']);
+    const res = await http.request({
+      method: 'GET',
+      url: `/api/v1/driver/carwash/requests/${jobId}`,
+    });
+
+    expect(res.status).toBe(200);
+    const view = dataOf<{ washer: { userId: string; name: string } | null }>(res.body);
+    expect(view.washer?.userId).toBe(washerId);
+    expect(view.washer?.name).toBe('Raju M.');
   });
 });
 

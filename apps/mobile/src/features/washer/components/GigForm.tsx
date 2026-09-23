@@ -66,7 +66,7 @@ export function GigForm({ idPhoto, onTakeIdPhoto, submitting, failure, onSubmit 
       <TextField
         id="name"
         label="Your name"
-        hint="The name you work under."
+        hint="Drivers see this name when you take their wash."
         value={name}
         onChangeText={(value) => {
           setName(value);

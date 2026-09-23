@@ -829,54 +829,23 @@ single-document, so v1 collects ONE image, labelled for the side with the partne
   `POST /washer/profile/documents`, the admin review and the gig form; an admin can see both sides;
   existing single-image profiles stay valid.
 
-### S-43 — No endpoint writes a user's name or avatar, so the gig form's name goes to `business_name`
+### S-43 — Rename `washer_profiles.business_name` to `display_name` (expand-contract)
 
 - **Status:** `open`
-- **Found in:** task 14 task-10 (washer registration), ruling T10-D2
-- **Surface:** api, contracts, mobile (cross-role identity)
+- **Found in:** task 14 task-10, rulings T10-D2 and T10-C2
+- **Surface:** db, contracts, api, mobile
 
-`users.name` and `users.avatar_url` exist, but nothing writes either: `user.repository.ts`
-inserts only phone and Firebase uid, and there is no `PATCH /me`. So the gig form's "Profile
-photo" is not collected at all in v1 (T10-D2), and its "Your name" is sent as
-`createWasherProfile.businessName` — the only field the contract has for it, and the name the
-partner trades under — rather than being dropped.
+Ruling T10-C2 made `businessName` required for both partner types: it is the name a partner
+trades under — a business's business name, a gig partner's OWN name — and `washerCard()` reads it
+(`coalesce(business_name, users.name)`) as the name a driver sees. The column and field kept
+their names to avoid a migration inside a mobile task, so a gig partner's personal name now sits
+in a column called `business_name`, which misleads every future reader. Separately, nothing
+writes `users.name` or `users.avatar_url` (no `PATCH /me`), which is why no gig profile photo is
+collected in v1 (T10-D2).
 
-- **Why deferred:** a name/avatar endpoint is identity for every role, not a washer feature.
-- **Done means:** `PATCH /me` (Zod contract, avatar as an upload id from the `avatars` folder)
-  writes `users.name` / `users.avatar_url`; the gig form writes the name there and collects a
-  profile photo; decide whether gig rows keep `business_name` as their trading name.
-
-### S-44 — `washerCardSchema.name` is non-null, and `users.name` is never written
-
-- **Status:** `open`
-- **Found in:** task 14 task-10, while tracing where the gig form's name could go
-- **Surface:** contracts, api (driver car wash detail)
-
-`packages/contracts/src/driver/carwash-job-detail.ts` types the assigned partner's `name` as
-`z.string()`, and `CarwashService.washerCard` selects it from `users.name` — which no code path
-writes (S-43). The integration harness seeds users WITH a name, so every test passes; a real
-partner has `name = NULL`, and `GET /driver/carwash/requests/:id` for an assigned job would fail
-the parse instead of returning the job.
-
-- **Why deferred:** a driver-surface contract change, outside a washer-app task; it needs a
-  decision on what a driver sees for an unnamed partner (business name, "Your washer").
-- **Done means:** the card's name is nullable (or falls back to `business_name`) end to end, the
-  driver UI renders the fallback, and an HTTP test seeds a washer with `name = NULL` and gets 200.
-
-### S-45 — A business registration lands `unverified`, not `pending`
-
-- **Status:** `open`
-- **Found in:** task 14 task-10 (washer registration)
-- **Surface:** api, mobile, product
-
-Spec §6.5 says both partner types land at `verification_status = 'pending'`. On the server only
-`POST /washer/profile/documents` moves a profile to `pending`, and it requires an `idDocumentId`;
-the §14.2 business form collects no ID image. So a business registers as `unverified`, and the
-profile screen honestly tells them to add a photo of their ID to send it for review (it does not
-say "Submitted for review" until the server says `pending`).
-
-- **Why deferred:** needs a product ruling — whether a business is reviewed on its photos and
-  GSTIN alone (then registration sets `pending` for a business with photos) or must also show an
-  owner's ID (then the business form gains the ID capture).
-- **Done means:** the ruling is recorded, and a business that completes its form reaches
-  `pending` with an HTTP test proving it, or the business form carries the ID and does.
+- **Why deferred:** a column rename is an expand-contract migration across db, contracts, api and
+  mobile, reviewed with `postgres-migration-reviewer`; out of scope for the registration screens.
+- **Done means:** migration 1 adds `display_name` and backfills from `business_name`; writers
+  write both; readers move to `display_name`; the contract field is renamed; migration 2 drops
+  `business_name` and makes `display_name NOT NULL`. A `PATCH /me` for an avatar is its own row
+  if still wanted.

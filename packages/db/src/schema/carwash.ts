@@ -33,6 +33,12 @@ export const washerProfiles = pgTable(
      * what they become.
      */
     partnerType: text('partner_type').notNull(),
+    /**
+     * The partner's trading/display name, for BOTH types (ruling T10-C2): a
+     * business's business name, a gig partner's own name. It is what a driver
+     * sees on the washer card. Nullable in the column only because rows predate
+     * the rule; registration always writes it. S-43 renames it `display_name`.
+     */
     businessName: text('business_name'),
     gstin: text('gstin'),
     /** Upload ids, never URLs. Files go through POST /uploads (R-VAL-01). */

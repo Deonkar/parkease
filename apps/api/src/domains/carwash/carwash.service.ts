@@ -424,12 +424,17 @@ export class CarwashService {
    * Selects columns explicitly rather than the whole row, because `users` holds
    * a phone number and a `SELECT *` here is one careless spread away from
    * putting it in a response (security.md §5.3).
+   *
+   * The name is the one the partner registered under (ruling T10-C2):
+   * `business_name` holds a gig partner's own name too, and nothing writes
+   * `users.name`. Both null means a row made outside registration, and the
+   * card's parse refuses it loudly rather than showing a blank partner.
    */
   async washerCard(washerUserId: string): Promise<WasherCard | null> {
     const [row] = await this.db
       .select({
         userId: washerProfiles.userId,
-        name: users.name,
+        name: sql<string | null>`coalesce(${washerProfiles.businessName}, ${users.name})`,
         partnerType: washerProfiles.partnerType,
         businessName: washerProfiles.businessName,
         ratingAvgBp: washerProfiles.ratingAvgBp,
