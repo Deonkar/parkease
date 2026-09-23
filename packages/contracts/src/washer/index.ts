@@ -30,6 +30,14 @@ export {
   type WashJobView,
   washerEarningsSummarySchema,
   type WasherEarningsSummary,
+  WASHER_EARNINGS_PERIOD_VALUES,
+  washerEarningsPeriodSchema,
+  type WasherEarningsPeriod,
+  washerEarningsQuerySchema,
+  washerEarningsLineSchema,
+  type WasherEarningsLine,
+  washerEarningsViewSchema,
+  type WasherEarningsView,
 } from './job-view.js';
 
 export {

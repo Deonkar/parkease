@@ -52,3 +52,49 @@ export const washerEarningsSummarySchema = z.object({
 });
 
 export type WasherEarningsSummary = z.infer<typeof washerEarningsSummarySchema>;
+
+export const WASHER_EARNINGS_PERIOD_VALUES = ['today', 'week', 'month', 'all'] as const;
+export const washerEarningsPeriodSchema = z.enum(WASHER_EARNINGS_PERIOD_VALUES);
+export type WasherEarningsPeriod = z.infer<typeof washerEarningsPeriodSchema>;
+
+/** `?period=` on `GET /washer/earnings`. A partner is paid weekly, so week is the default. */
+export const washerEarningsQuerySchema = z.object({
+  period: washerEarningsPeriodSchema.default('week'),
+});
+
+/**
+ * One completed job, as the earnings screen lists it.
+ *
+ * Three amounts and no rule tying them together. `netPaise` is what the ledger
+ * credited this partner, `feePaise` is what it credited `platform_revenue` on
+ * the same transaction, and `grossPaise` is the price frozen on the job at
+ * accept (R-MONEY-03). A clawback or a correction can make them disagree with
+ * the obvious subtraction, and when they do, the books are right.
+ *
+ * This is where the account-level refusal to report commission
+ * (`washerEarningsSummarySchema`, below) does NOT apply: an aggregate over one
+ * account genuinely cannot name a commission total without relabelling
+ * something, but a single job has exactly one commission entry to point at.
+ */
+export const washerEarningsLineSchema = z.object({
+  jobId: washJobIdSchema,
+  serviceName: carwashServiceNameSchema,
+  vehicleType: vehicleTypeSchema,
+  completedAt: z.string().datetime(),
+  /** The driver-facing service price, frozen on the job at accept. */
+  grossPaise: paiseSchema,
+  /** Credited to `platform_revenue` on this job's transaction. Read, never subtracted. */
+  feePaise: paiseSchema,
+  /** Credited to this partner. */
+  netPaise: paiseSchema,
+});
+
+export type WasherEarningsLine = z.infer<typeof washerEarningsLineSchema>;
+
+export const washerEarningsViewSchema = z.object({
+  period: washerEarningsPeriodSchema,
+  summary: washerEarningsSummarySchema,
+  lines: z.array(washerEarningsLineSchema),
+});
+
+export type WasherEarningsView = z.infer<typeof washerEarningsViewSchema>;

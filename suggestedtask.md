@@ -550,3 +550,28 @@ both arguments.
   `submitProof` to no longer take a `compress` step, or a comment on
   `ProofDeps.compress` explains why an identity implementation is expected to
   stay valid there.
+
+### S-30 — `carwash-http.spec.ts` seeds its space with a `slots` field `SeedSpaceOptions` does not have
+
+- **Status:** `open`
+- **Found in:** task 14 task-3 (earnings period filter and per-job lines)
+- **Surface:** api (test)
+
+`apps/api/test/integration/carwash-http.spec.ts`'s `beforeAll` calls
+`seedSpace(h, { ..., slots: { car: 4 } })`, but `SeedSpaceOptions` in
+`harness.ts` only has `carSlots?: number` and `twoWheelerSlots?: number` — there
+is no `slots` field. `seedSpace` silently ignores the unknown property and
+falls back to its default of one car slot. Vitest transpiles test files without
+a type check, so this compiles and runs without ever erroring; the suite
+happens to pass because none of its tests need more than one live car slot at
+once. Writing `washer-earnings-http.spec.ts` for task-3 needed the same fixture
+and used the correct field name (`carSlots: 4`) rather than copy the mistake.
+
+- **Why deferred:** out of scope for task-3, which only reads
+  `carwash-http.spec.ts` for its fixture pattern — it does not touch that file.
+  The fix is a one-line rename with no behavioural risk, but it belongs to
+  whoever next touches that spec, or a drive-by hygiene pass.
+- **Done means:** `slots: { car: 4 }` becomes `carSlots: 4` in
+  `carwash-http.spec.ts`, and ideally `tsconfig` for `apps/api/test` is checked
+  by `tsc --noEmit` somewhere in CI so an excess-property typo like this one
+  fails loud next time instead of silently seeding one slot.

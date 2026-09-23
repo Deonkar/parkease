@@ -475,7 +475,9 @@ describe('the ledger', () => {
     `;
 
     expect(res.status).toBe(200);
-    expect(dataOf<{ netPaise: number }>(res.body).netPaise).toBe(Number(balance?.net));
+    expect(dataOf<{ summary: { netPaise: number } }>(res.body).summary.netPaise).toBe(
+      Number(balance?.net),
+    );
   });
 });
 
