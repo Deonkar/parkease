@@ -92,15 +92,27 @@ export async function advanceJob(
  * `{ proofPhotoId }` until task 14 — so it had never worked. The upload now
  * goes to Cloudinary through the shared client and only the resulting id is
  * sent here, which is what the endpoint has always asked for.
+ *
+ * TWO intents, not one: the sign POST (`/me/upload-signature`) and the attach
+ * POST (`/valet/jobs/:id/proof`) are different endpoints, and the server's
+ * idempotency store keys on the header alone while detecting drift via
+ * endpoint + request hash — replaying one key against two endpoints comes
+ * back `conflict` / 422 "Something changed in that request." The caller mints
+ * both once per captured photo and reuses both across every retry of that
+ * photo (R-FE-05).
  */
-export async function uploadProof(uri: string, jobId: string, intent: Intent): Promise<string> {
-  const uploaded = await uploadImage(uri, 'proofs', defaultUploadDeps());
+export async function uploadProof(
+  uri: string,
+  jobId: string,
+  intents: { sign: Intent; attach: Intent },
+): Promise<string> {
+  const uploaded = await uploadImage(uri, 'proofs', intents.sign, defaultUploadDeps());
   if (!uploaded.ok) throw new Error(uploaded.message);
 
   await api.post<unknown>(
     `/valet/jobs/${jobId}/proof`,
     { proofPhotoId: uploaded.uploadId },
-    { headers: { 'Idempotency-Key': intent.idempotencyKey } },
+    { headers: { 'Idempotency-Key': intents.attach.idempotencyKey } },
   );
 
   return uploaded.uploadId;

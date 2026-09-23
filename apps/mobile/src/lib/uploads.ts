@@ -4,6 +4,7 @@ import {
 } from '@parkease/contracts/shared';
 import { z } from 'zod';
 
+import type { Intent } from '@/lib/api';
 import { warn } from '@/lib/log';
 
 /**
@@ -41,11 +42,17 @@ export interface CompressedImage {
 
 export interface UploadDeps {
   compress(uri: string, width: number, quality: number): Promise<CompressedImage>;
-  sign(input: {
-    fileName: string;
-    contentType: string;
-    folder: UploadFolder;
-  }): Promise<UploadSignatureResponse>;
+  /**
+   * `intent` carries the Idempotency-Key for THIS sign request. It is a
+   * separate key from whatever attaches the resulting upload id to a
+   * domain record — the server keys its idempotency store on the header
+   * alone and detects drift via endpoint + request hash, so one key reused
+   * across two different endpoints comes back `conflict` (422).
+   */
+  sign(
+    input: { fileName: string; contentType: string; folder: UploadFolder },
+    intent: Intent,
+  ): Promise<UploadSignatureResponse>;
   put(uploadUrl: string, fields: Record<string, string>, uri: string): Promise<unknown>;
 }
 
@@ -63,16 +70,20 @@ const cloudinaryResponseSchema = z.object({ public_id: z.string().min(1) });
 export async function uploadImage(
   uri: string,
   folder: UploadFolder,
+  intent: Intent,
   deps: UploadDeps,
 ): Promise<UploadResult> {
   try {
     const compressed = await deps.compress(uri, UPLOAD_MAX_WIDTH, UPLOAD_QUALITY);
 
-    const signature = await deps.sign({
-      fileName: `${folder}.jpg`,
-      contentType: 'image/jpeg',
-      folder,
-    });
+    const signature = await deps.sign(
+      {
+        fileName: `${folder}.jpg`,
+        contentType: 'image/jpeg',
+        folder,
+      },
+      intent,
+    );
 
     const raw = await deps.put(signature.uploadUrl, signature.fields, compressed.uri);
 
@@ -113,9 +124,17 @@ export function defaultUploadDeps(): UploadDeps {
     // `lib/api.ts` pulls in `secure-storage.ts`, which reads `Platform` from
     // `react-native` at module scope, and a node-environment test that only
     // exercises `uploadImage` must not pay for that load either.
-    sign: async (input) => {
+    //
+    // `/me/upload-signature` is a POST, and `lib/api.ts`'s request
+    // interceptor throws synchronously for any non-GET/HEAD request with no
+    // `Idempotency-Key` header — the server's `IdempotencyInterceptor` agrees
+    // (only GET/HEAD and `/api/v1/webhooks/` are exempt). Without this header
+    // every real upload threw here before it ever reached the network.
+    sign: async (input, intent) => {
       const { api } = await import('@/lib/api');
-      const response = await api.post<unknown>('/me/upload-signature', input);
+      const response = await api.post<unknown>('/me/upload-signature', input, {
+        headers: { 'Idempotency-Key': intent.idempotencyKey },
+      });
       return uploadSignatureResponseSchema.parse(
         z.object({ data: z.unknown() }).parse(response.data).data,
       );

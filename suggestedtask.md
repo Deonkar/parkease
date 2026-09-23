@@ -522,3 +522,31 @@ document.
 - **Done means:** an ADR records the retention period for each class (proof photos, partner
   location, identity documents, ledger), a job enforces it, and a user deletion anonymises
   what it cannot remove instead of failing on a foreign key.
+
+### S-29 — `proof.ts`'s compression constants are now unused
+
+- **Status:** `open`
+- **Found in:** task 14, task 1 (the shared signed-upload client)
+- **Surface:** mobile
+
+`apps/mobile/src/features/valet/proof.ts` exports `PROOF_MAX_BYTES`,
+`PROOF_MAX_WIDTH` and `PROOF_QUALITY`, and its `submitProof` orchestration still
+calls `deps.compress(uri, PROOF_MAX_WIDTH, PROOF_QUALITY)`. Task 1 moved the real
+compression into `lib/uploads.ts` (`uploadImage` owns it now, called from
+`uploadProof`) and made `useProofCapture.ts`'s `deps.compress` an identity
+pass-through, specifically to avoid compressing the photo twice. That leaves
+`PROOF_MAX_BYTES` unreferenced anywhere, and `PROOF_MAX_WIDTH` / `PROOF_QUALITY`
+referenced only by `submitProof`'s call to an identity function that ignores
+both arguments.
+
+- **Why deferred:** `proof.ts` was outside task 1's file list (only
+  `valet/api/valet.ts` and `valet/hooks/useProofCapture.ts` were in scope), and
+  a grep found no other consumer of these three constants — but removing them,
+  or restructuring `submitProof`'s compress-then-upload shape now that
+  compression genuinely lives one layer up, is a design call for whichever task
+  owns `proof.ts` next, not a drive-by edit from the task that stopped calling
+  them.
+- **Done means:** either `proof.ts` drops the now-dead constants and simplifies
+  `submitProof` to no longer take a `compress` step, or a comment on
+  `ProofDeps.compress` explains why an identity implementation is expected to
+  stay valid there.
