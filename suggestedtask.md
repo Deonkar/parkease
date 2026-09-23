@@ -770,3 +770,41 @@ are faint in sunlight, which is the washer's working condition.
 - **Done means:** slot boundaries, the dashed cue and the switch off-track each measure ≥3:1
   against their surface, asserted in `packages/tokens/test/contrast.spec.ts`; `ServiceRow`,
   `EvidencePair`, `OnlineRail` and `OnlineStatusBar` use the new tokens.
+
+### S-40 — The earnings sparkline needs daily buckets from the API
+
+- **Status:** `open`
+- **Found in:** task 14 design spec §4.3 / §9; written when task-9 built the earnings screen
+- **Surface:** api, contracts, mobile
+
+The task file's §14.6 wireframe draws a five-bar week sparkline (`M T W T F`) under the earnings
+headline. `GET /washer/earnings` returns a period summary and per-job lines, so sizing a bar
+per day would mean grouping lines by day and summing paise in `apps/mobile` — the arithmetic
+R-FE-06 forbids — and the lines count by completion time while the summary counts by posting
+time, so client-summed bars would not even agree with the headline above them.
+
+- **Why deferred:** it is the least load-bearing element on the screen, and the only honest
+  version needs a contract change.
+- **Done means:** the earnings response carries server-computed daily buckets for the period
+  (IST days, `owner_payable` movement by `occurred_at`, the same basis as `summary.netPaise`),
+  parsed by the contract, and the mobile sparkline renders them with no arithmetic beyond
+  scaling bar heights to the largest bucket — with the bars labelled in text (R-FE-12).
+
+### S-41 — `formatDateIST` renders "Sept" and no weekday
+
+- **Status:** `open`
+- **Found in:** task 14 task-9 (earnings screen)
+- **Surface:** mobile
+
+`apps/mobile/src/lib/format.ts` `formatDateIST` asks `toLocaleString('en-IN', { month: 'short' })`,
+which Node's ICU renders as `Sept` for September (`12 Sept 2026`), not `Sep`. Hermes on
+Android may or may not match, depending on its ICU build. The earnings line wanted a weekday
+too ("Fri 12 Sep · 2:22 PM"), which the shared formatter does not produce.
+
+- **Why deferred:** the task ruled "reuse, do not write new date formatting", and the formatter
+  is app-wide (driver bookings, valet, washer) — changing its output is its own change with its
+  own callers to check. `earnings-arithmetic.test.tsx` asserts through the formatter, not a
+  pinned month spelling, so it holds either way.
+- **Done means:** `formatDateIST` uses a fixed month table (`Jan`…`Dec`) so the output is
+  identical on Node and Hermes, an optional weekday variant exists for list rows, and
+  `format.test.ts` covers September.

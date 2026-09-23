@@ -1,9 +1,10 @@
-import type { Paise } from '@parkease/contracts/primitives';
+import type { Paise, PaiseDelta } from '@parkease/contracts/primitives';
 import { describe, it, expect } from 'vitest';
 
 import { formatPaise } from '../money';
 
 const p = (n: number) => n as Paise;
+const d = (n: number) => n as PaiseDelta;
 
 describe('formatPaise', () => {
   it.each([
@@ -60,5 +61,34 @@ describe('formatPaise', () => {
   it('handles single-digit paise correctly', () => {
     expect(formatPaise(p(1))).toBe('₹0.01');
     expect(formatPaise(p(99))).toBe('₹0.99');
+  });
+
+  describe('a signed amount (a period net can be a clawback)', () => {
+    // U+2212 MINUS SIGN, not a hyphen: TalkBack reads it as "minus", and it is
+    // the width of a digit, so a negative figure does not look shorter.
+    it.each([
+      [-31920, '−₹319.20'],
+      [-100, '−₹1'],
+      [-1, '−₹0.01'],
+      [-10000000, '−₹1,00,000'],
+      [0, '₹0'],
+      [31920, '₹319.20'],
+    ])('formats %i paise as %s', (input, expected) => {
+      expect(formatPaise(d(input))).toBe(expected);
+    });
+
+    it('never splits the sign across the rupees and the paise', () => {
+      // The bug this replaces: Math.trunc and % both carry the sign, which
+      // rendered -31920 as "₹-319.-20".
+      expect(formatPaise(d(-31920))).not.toContain('-');
+    });
+
+    it('keeps the minus in front of the number when the symbol is dropped', () => {
+      expect(formatPaise(d(-31920), { symbol: false })).toBe('−319.20');
+    });
+
+    it('keeps the decimals option for a negative amount', () => {
+      expect(formatPaise(d(-100), { alwaysDecimals: true })).toBe('−₹1.00');
+    });
   });
 });
