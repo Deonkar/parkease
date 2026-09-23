@@ -1,4 +1,4 @@
-import { Body, Controller, Get, NotFoundException, Post } from '@nestjs/common';
+import { Body, Controller, Get, Post } from '@nestjs/common';
 import { Role } from '@parkease/contracts/enums';
 import {
   createWasherProfileSchema,
@@ -8,6 +8,7 @@ import {
 
 import { CarwashService } from '../../domains/carwash/carwash.service.js';
 import { CreateWasherProfileCommand } from '../../domains/carwash/commands/create-washer-profile.command.js';
+import { WasherProfileNotFoundError } from '../../domains/carwash/errors.js';
 import { type AuthUser, CurrentUser } from '../../platform/auth/current-user.decorator.js';
 import { Roles } from '../../platform/rbac/roles.decorator.js';
 
@@ -22,7 +23,10 @@ export class WasherProfileController {
   @Get()
   async profile(@CurrentUser() user: AuthUser): Promise<WasherProfileView> {
     const profile = await this.carwash.profileFor(user.id);
-    if (profile === null) throw new NotFoundException();
+    // A domain code, not a bare NotFoundException: a bare one carries no `error`
+    // field, so the filter answers code 'ERROR' and the app cannot tell "not
+    // registered yet" (a first-run state with a next step) from a real failure.
+    if (profile === null) throw new WasherProfileNotFoundError();
     return profile;
   }
 

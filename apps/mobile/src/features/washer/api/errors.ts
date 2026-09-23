@@ -14,21 +14,41 @@ const httpFailureSchema = z.object({
   }),
 });
 
+/** Only the status: a refusal need not carry the envelope (a proxy's 404 does not). */
+const httpStatusSchema = z.object({ response: z.object({ status: z.number().int() }) });
+
+/** Statuses the server answered with that are nonetheless worth retrying. */
+const TRANSIENT_4XX = new Set([408, 429]);
+
+/**
+ * The server answered, and the answer is no — retrying the same request cannot
+ * change it. A transport failure (no response), a 5xx, a rate limit or a
+ * request timeout are NOT refusals: pressing the button again may work, so the
+ * caller keeps its intent for a replay.
+ */
+export function isDefiniteRefusal(error: unknown): boolean {
+  const parsed = httpStatusSchema.safeParse(error);
+  if (!parsed.success) return false;
+  const { status } = parsed.data.response;
+  return status >= 400 && status < 500 && !TRANSIENT_4XX.has(status);
+}
+
 export function apiErrorCodeOf(error: unknown): string | null {
   const parsed = httpFailureSchema.safeParse(error);
   return parsed.success ? parsed.data.response.data.error.code : null;
 }
 
 /**
- * `GET /washer/profile` answers 404 `NOT_FOUND` for a washer who has not
- * registered — a first-run state with a next step, not an error. Both the status
- * AND the envelope code are required, so a proxy's 404 page stays an error.
+ * `GET /washer/profile` answers 404 `WASHER_PROFILE_NOT_FOUND` for a washer who
+ * has not registered — a first-run state with a next step, not an error. Both
+ * the status AND the domain code are required, so a proxy's 404 page, or a bare
+ * Nest 404 (whose code is `'ERROR'`), stays an error.
  */
 export function isUnregisteredWasher(error: unknown): boolean {
   const parsed = httpFailureSchema.safeParse(error);
   return (
     parsed.success &&
     parsed.data.response.status === 404 &&
-    parsed.data.response.data.error.code === 'NOT_FOUND'
+    parsed.data.response.data.error.code === 'WASHER_PROFILE_NOT_FOUND'
   );
 }

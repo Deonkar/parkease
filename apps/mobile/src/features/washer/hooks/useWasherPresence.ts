@@ -12,17 +12,13 @@ import {
   type BeatResult,
   type LocateOutcome,
   type PresenceDeps,
+  type PresenceError,
   type PresenceHandle,
 } from '../presence';
 
 import { useWasherProfile, washerKeys } from './useWasherQueries';
 
-export type PresenceError =
-  | 'permission_denied'
-  | 'location_failed'
-  | 'not_verified'
-  | 'not_registered'
-  | 'unreachable';
+export type { PresenceError } from '../presence';
 
 export type PresenceResult =
   | { readonly ok: true }
@@ -32,7 +28,10 @@ export interface WasherPresence {
   readonly isOnline: boolean;
   /** A toggle is in flight. */
   readonly busy: boolean;
-  /** Why the last beat failed, while online; `null` once one lands again. */
+  /**
+   * While online: why the last beat failed, `null` once one lands again.
+   * While offline: why an automatic resume after an app restart did not work.
+   */
   readonly error: PresenceError | null;
   readonly goOnline: () => Promise<PresenceResult>;
   readonly goOffline: () => Promise<PresenceResult>;
@@ -154,13 +153,18 @@ export function useWasherPresence(): WasherPresence {
   }, [client]);
 
   // An app restart while the server says online resumes the heartbeat — once,
-  // from the first profile answer, and without prompting: a partner who has
-  // since revoked location sees Offline and can flip the switch themselves.
+  // from the first profile answer, and without prompting. A resume that fails
+  // is surfaced as state, never discarded: the partner believed they were
+  // online, so the rail says why they are not (T6-P1, R-FAIL-01). `start`
+  // never rejects and has already logged the failure at warn.
   const serverSaysOnline = profile.data?.isOnline;
   useEffect(() => {
     if (resumeChecked.current || serverSaysOnline === undefined) return;
     resumeChecked.current = true;
-    if (serverSaysOnline) void start(false);
+    if (!serverSaysOnline) return;
+    void start(false).then((resumed) => {
+      if (!resumed.ok) setError(resumed.reason);
+    });
   }, [serverSaysOnline, start]);
 
   // Leaving the washer tabs (sign-out, role switch) stops the beat but sends

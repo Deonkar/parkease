@@ -694,6 +694,21 @@ describe('idempotency', () => {
   });
 });
 
+describe('GET /washer/profile — before registering', () => {
+  it('answers 404 with the domain code the app routes on, not a bare NOT FOUND', async () => {
+    // The partner app shows "Finish setting up your partner profile" on exactly
+    // this code. A bare NotFoundException answers code 'ERROR', which the app
+    // must treat as a failure, so an unregistered washer saw an error screen.
+    const washerId = await seedUser(h, 'washer');
+    asUser(washerId, ['washer']);
+
+    const res = await http.request({ method: 'GET', url: '/api/v1/washer/profile' });
+
+    expect(res.status).toBe(404);
+    expect(errorOf(res.body).code).toBe('WASHER_PROFILE_NOT_FOUND');
+  });
+});
+
 describe('the service menu', () => {
   it('returns ten rows for a partner who registered', async () => {
     const washerId = await seedUser(h, 'washer');

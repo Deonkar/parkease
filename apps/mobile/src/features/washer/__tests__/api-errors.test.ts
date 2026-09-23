@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { apiErrorCodeOf, isUnregisteredWasher } from '../api/errors';
+import { apiErrorCodeOf, isDefiniteRefusal, isUnregisteredWasher } from '../api/errors';
 
 const httpError = (status: number, data: unknown) => ({
   isAxiosError: true,
@@ -32,12 +32,26 @@ describe('apiErrorCodeOf', () => {
  * partner to "finish setting up" would send them in a loop.
  */
 describe('isUnregisteredWasher', () => {
-  it("is true for the API's own 404", () => {
-    const error = httpError(404, {
-      error: { code: 'NOT_FOUND', message: 'Not Found', traceId: 't' },
-    });
+  // The REAL envelope `GET /washer/profile` answers, pinned server-side by
+  // carwash-http.spec.ts ("GET /washer/profile — before registering"). The first
+  // version of this fixture invented a `NOT_FOUND` code no Nest exception emits,
+  // and passed while every unregistered washer saw an error screen.
+  const unregistered = {
+    error: {
+      code: 'WASHER_PROFILE_NOT_FOUND',
+      message: 'Finish setting up your partner profile before going online.',
+      traceId: '0192f2a1-0000-7000-8000-00000000abcd',
+    },
+  };
 
-    expect(isUnregisteredWasher(error)).toBe(true);
+  it("is true for the API's own 404", () => {
+    expect(isUnregisteredWasher(httpError(404, unregistered))).toBe(true);
+  });
+
+  it("is false for a bare Nest 404, whose code is 'ERROR'", () => {
+    const bare = { error: { code: 'ERROR', message: 'Not Found', traceId: 't' } };
+
+    expect(isUnregisteredWasher(httpError(404, bare))).toBe(false);
   });
 
   it('is false for a 404 with no envelope', () => {
@@ -45,9 +59,7 @@ describe('isUnregisteredWasher', () => {
   });
 
   it('is false for any other status', () => {
-    const error = httpError(500, {
-      error: { code: 'NOT_FOUND', message: 'x', traceId: 't' },
-    });
+    const error = httpError(500, unregistered);
 
     expect(isUnregisteredWasher(error)).toBe(false);
   });
@@ -55,5 +67,32 @@ describe('isUnregisteredWasher', () => {
   it('is false for a transport failure, and for nothing at all', () => {
     expect(isUnregisteredWasher(new Error('timeout'))).toBe(false);
     expect(isUnregisteredWasher(null)).toBe(false);
+  });
+});
+
+/**
+ * Whether pressing Accept again could possibly work. A definite refusal (the
+ * offer is gone, the service is not on this partner's menu) must not be met
+ * with "Please try again"; a dead network or a 5xx must.
+ */
+describe('isDefiniteRefusal', () => {
+  it('is true for a 4xx the server answered', () => {
+    expect(isDefiniteRefusal(httpError(404, { error: { code: 'ERROR' } }))).toBe(true);
+    expect(isDefiniteRefusal(httpError(400, { error: { code: 'SERVICE_NOT_OFFERED' } }))).toBe(
+      true,
+    );
+  });
+
+  it('is false for a 5xx, which a retry may clear', () => {
+    expect(isDefiniteRefusal(httpError(503, 'Service Unavailable'))).toBe(false);
+  });
+
+  it('is false for a rate limit or a request timeout, which are transient', () => {
+    expect(isDefiniteRefusal(httpError(429, {}))).toBe(false);
+    expect(isDefiniteRefusal(httpError(408, {}))).toBe(false);
+  });
+
+  it('is false for a transport failure with no response at all', () => {
+    expect(isDefiniteRefusal(new Error('Network Error'))).toBe(false);
   });
 });

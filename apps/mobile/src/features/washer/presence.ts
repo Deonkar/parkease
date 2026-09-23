@@ -17,11 +17,22 @@ import { warn } from '@/lib/log';
  */
 
 /**
- * Half the server's window, so two beats land inside every window and one lost
- * beat is survivable. Derived from the contract constant: if the server ever
+ * Half the server's window, measured from each beat's START (not from when the
+ * last one settled), so two beats start inside every window and a single lost
+ * beat leaves the next one landing at the window's edge instead of a whole
+ * interval past it. Derived from the contract constant: if the server ever
  * shortens its window, this follows on the same day.
  */
 export const HEARTBEAT_INTERVAL_MS = (WASH_ONLINE_HEARTBEAT_WINDOW_SECONDS * 1000) / 2;
+
+/**
+ * How long a beat waits for the GPS. A third of the interval, so the fix and
+ * the PATCH that follows it (bounded by the API client's own timeout) both fit
+ * inside one interval. Without a bound, a GPS that never answers — a basement
+ * car park, which is where washers work — stops the heartbeat in silence while
+ * the rail still reads online.
+ */
+export const LOCATE_TIMEOUT_MS = HEARTBEAT_INTERVAL_MS / 3;
 
 export interface Fix {
   readonly lat: number;
@@ -38,11 +49,25 @@ export type BeatResult =
   /** `cause` is the rejected PATCH, so a caller can tell a 403 from a dead network. */
   | { readonly ok: false; readonly reason: 'unreachable'; readonly cause: unknown };
 
+type BeatFailure = Exclude<BeatResult, { readonly ok: true }>;
+
+/**
+ * Why presence is not working, in words a screen can act on. `unreachable` is
+ * split into the server's own refusals by `useWasherPresence`, which can read
+ * the HTTP error; this module cannot.
+ */
+export type PresenceError =
+  | 'permission_denied'
+  | 'location_failed'
+  | 'not_verified'
+  | 'not_registered'
+  | 'unreachable';
+
 export interface PresenceDeps {
   /** A fresh foreground fix. Never prompts — asking is the caller's job, once. */
   locate(): Promise<LocateOutcome>;
   send(isOnline: boolean, fix?: Fix): Promise<void>;
-  /** Every heartbeat after the first, so the screen can say "Reconnecting…". */
+  /** Every heartbeat after the first, so the screen can say what is wrong. */
   onBeat(result: BeatResult): void;
 }
 
@@ -56,35 +81,41 @@ export interface PresenceHandle {
   halt(): void;
 }
 
-export type StartResult =
-  | { readonly ok: true; readonly handle: PresenceHandle }
-  | Exclude<BeatResult, { readonly ok: true }>;
+export type StartResult = { readonly ok: true; readonly handle: PresenceHandle } | BeatFailure;
 
 /**
- * One beat: a fresh fix, then the PATCH. Every failure is logged here and
- * returned typed, never thrown — a heartbeat that could reject would need a
- * catch at every call site, and the one that was forgotten would be silent.
+ * A fix, or a typed reason there is none — within `LOCATE_TIMEOUT_MS`. Never
+ * rejects: a heartbeat that could reject would need a catch at every call
+ * site, and the one that was forgotten would be silent.
  */
-async function beat(deps: PresenceDeps, isStopped: () => boolean): Promise<BeatResult> {
-  let located: LocateOutcome;
+async function locateWithin(deps: PresenceDeps): Promise<LocateOutcome | BeatFailure> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<'timed_out'>((resolve) => {
+    timer = setTimeout(() => {
+      resolve('timed_out');
+    }, LOCATE_TIMEOUT_MS);
+  });
+
   try {
-    located = await deps.locate();
+    const located = await Promise.race([deps.locate(), timedOut]);
+    if (located === 'timed_out') {
+      warn('washer.presence: the GPS did not answer in time');
+      return { ok: false, reason: 'location_failed' };
+    }
+    if (!located.ok) warn('washer.presence: location permission is not granted');
+    return located;
   } catch (error) {
     warn('washer.presence: no location fix for the heartbeat', error);
     return { ok: false, reason: 'location_failed' };
+  } finally {
+    clearTimeout(timer);
   }
+}
 
-  if (!located.ok) {
-    warn('washer.presence: location permission is not granted');
-    return located;
-  }
-
-  // Stopped while the GPS was answering: a late `isOnline: true` must never
-  // land after the offline PATCH, or it puts the partner back in the pool.
-  if (isStopped()) return { ok: true };
-
+/** The online PATCH. Never rejects, for the same reason as `locateWithin`. */
+async function sendOnline(deps: PresenceDeps, fix: Fix): Promise<BeatResult> {
   try {
-    await deps.send(true, located.fix);
+    await deps.send(true, fix);
     return { ok: true };
   } catch (error) {
     warn('washer.presence: availability PATCH did not land', error);
@@ -100,8 +131,9 @@ async function beat(deps: PresenceDeps, isStopped: () => boolean): Promise<BeatR
  * agreed. After that a failed beat is reported and superseded by the next one,
  * never retried — each beat is a new fact about where the partner is.
  *
- * Beats are chained with `setTimeout` after each one settles, not
- * `setInterval`, so a slow GPS can never stack two beats on top of each other.
+ * Each beat is scheduled only after the previous one settles, so two can never
+ * overlap; the delay subtracts the time the previous one took, so a slow beat
+ * does not push the next one back.
  *
  * ponytail: FOREGROUND ONLY. JS timers stop when Android backgrounds the app,
  * so a washer who switches apps stops beating and falls out of dispatch after
@@ -111,24 +143,35 @@ async function beat(deps: PresenceDeps, isStopped: () => boolean): Promise<BeatR
  */
 export async function startPresence(deps: PresenceDeps): Promise<StartResult> {
   let stopped = false;
-  const isStopped = () => stopped;
-
-  const first = await beat(deps, isStopped);
-  if (!first.ok) return first;
-
   let timer: ReturnType<typeof setTimeout> | null = null;
-  let inFlight: Promise<void> | null = null;
+  /** An online PATCH that is on the wire right now. */
+  let landing: Promise<BeatResult> | null = null;
 
-  const schedule = () => {
+  const runBeat = async (): Promise<BeatResult> => {
+    const located = await locateWithin(deps);
+    if (!located.ok) return located;
+
+    // Stopped while the GPS was answering: a late `isOnline: true` must never
+    // follow the offline PATCH, or it puts the partner back in the pool.
+    if (stopped) return { ok: true };
+
+    landing = sendOnline(deps, located.fix);
+    const result = await landing;
+    landing = null;
+    return result;
+  };
+
+  const schedule = (lastStartedAt: number) => {
+    const delay = Math.max(0, HEARTBEAT_INTERVAL_MS - (Date.now() - lastStartedAt));
     timer = setTimeout(() => {
       timer = null;
-      inFlight = beat(deps, isStopped).then((result) => {
-        inFlight = null;
+      const startedAt = Date.now();
+      void runBeat().then((result) => {
         if (stopped) return;
         deps.onBeat(result);
-        schedule();
+        schedule(startedAt);
       });
-    }, HEARTBEAT_INTERVAL_MS);
+    }, delay);
   };
 
   const halt = () => {
@@ -137,7 +180,10 @@ export async function startPresence(deps: PresenceDeps): Promise<StartResult> {
     timer = null;
   };
 
-  schedule();
+  const firstStartedAt = Date.now();
+  const first = await runBeat();
+  if (!first.ok) return first;
+  schedule(firstStartedAt);
 
   return {
     ok: true,
@@ -145,8 +191,11 @@ export async function startPresence(deps: PresenceDeps): Promise<StartResult> {
       halt,
       stop: async () => {
         halt();
-        // Wait out a beat already in flight so its PATCH cannot overtake ours.
-        if (inFlight !== null) await inFlight;
+        // An online PATCH already on the wire must land before the offline
+        // one is sent, or the two race and `true` can arrive second. A beat
+        // still waiting on the GPS is not waited for: it sees `stopped` and
+        // never sends, so a dead GPS cannot hold the partner online.
+        if (landing !== null) await landing;
         try {
           await deps.send(false);
           return { ok: true };

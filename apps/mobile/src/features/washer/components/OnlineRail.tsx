@@ -2,26 +2,77 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, fontSize, fontWeight, radius, spacing } from '@parkease/tokens';
 import { StyleSheet, Switch, Text, View } from 'react-native';
 
+import type { PresenceError } from '../presence';
+
 export interface OnlineRailProps {
   readonly isOnline: boolean;
   /** A toggle is in flight; the switch waits for the server's answer. */
   readonly busy: boolean;
   readonly onToggle: (next: boolean) => void;
-  /** The last heartbeat did not land; the next one is already scheduled. */
-  readonly reconnecting?: boolean;
+  /**
+   * Online: why the last heartbeat failed (the next is already scheduled).
+   * Offline: why an automatic resume after a restart did not work.
+   */
+  readonly problem?: PresenceError | null;
   /** The switch cannot be used, and this says why in words. */
   readonly disabledReason?: string;
 }
+
+type Icon = keyof typeof MaterialCommunityIcons.glyphMap;
 
 interface Presentation {
   readonly ground: string;
   /** The offline ground is close to the screen's own, so it needs an edge. */
   readonly edge: string;
   readonly ink: string;
-  readonly icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  readonly icon: Icon;
   readonly title: string;
   readonly detail: string | null;
 }
+
+/**
+ * Each failure is named for what it is. "Reconnecting…" over a revoked
+ * permission tells the partner to wait for something that will never clear on
+ * its own; the words have to point at the thing they can fix.
+ */
+const ONLINE_PROBLEM: Readonly<
+  Record<PresenceError, Pick<Presentation, 'icon' | 'title' | 'detail'>>
+> = {
+  unreachable: {
+    icon: 'signal-off',
+    title: 'Reconnecting…',
+    detail: 'New offers may not reach you until this clears',
+  },
+  location_failed: {
+    icon: 'crosshairs-question',
+    title: 'Location not updating',
+    detail: "We can't get a GPS fix here. Offers may not reach you until it returns",
+  },
+  permission_denied: {
+    icon: 'map-marker-off',
+    title: 'Location permission is off',
+    detail: 'Turn it back on in Settings to keep getting offers',
+  },
+  not_verified: {
+    icon: 'shield-alert-outline',
+    title: 'Offers paused: verification needed',
+    detail: 'Your documents need approving before you can take new jobs',
+  },
+  not_registered: {
+    icon: 'account-alert-outline',
+    title: 'Partner profile not found',
+    detail: 'Finish setting up your profile to keep getting offers',
+  },
+};
+
+/** Offline because an automatic resume failed: what stopped it. */
+const RESUME_FAILED: Readonly<Record<PresenceError, string>> = {
+  unreachable: "Couldn't reach ParkEase to put you back online",
+  location_failed: "Couldn't find your location to put you back online",
+  permission_denied: 'Turn on location to go back online',
+  not_verified: 'You can go online once your documents are approved',
+  not_registered: 'Finish setting up your profile to go online',
+};
 
 /**
  * Colour is never the only signal (R-FE-12): each state has its own icon and
@@ -30,7 +81,8 @@ interface Presentation {
  */
 function present(
   isOnline: boolean,
-  reconnecting: boolean,
+  busy: boolean,
+  problem: PresenceError | null,
   disabledReason: string | undefined,
 ): Presentation {
   if (!isOnline) {
@@ -39,18 +91,28 @@ function present(
       edge: colors.border,
       ink: colors.textSecondary,
       icon: 'power-sleep',
-      title: 'Offline',
-      detail: disabledReason ?? 'Go online to get wash jobs near you',
+      title: busy ? 'Going online…' : 'Offline',
+      detail:
+        disabledReason ??
+        (problem === null ? 'Go online to get wash jobs near you' : RESUME_FAILED[problem]),
     };
   }
-  if (reconnecting) {
+  if (busy) {
+    return {
+      ground: colors.surfaceTertiary,
+      edge: colors.border,
+      ink: colors.textSecondary,
+      icon: 'power-sleep',
+      title: 'Going offline…',
+      detail: null,
+    };
+  }
+  if (problem !== null) {
     return {
       ground: colors.warningLight,
       edge: colors.warningLight,
       ink: colors.warning,
-      icon: 'signal-off',
-      title: 'Reconnecting…',
-      detail: 'New offers may not reach you until this clears',
+      ...ONLINE_PROBLEM[problem],
     };
   }
   return {
@@ -74,19 +136,19 @@ export function OnlineRail({
   isOnline,
   busy,
   onToggle,
-  reconnecting = false,
+  problem = null,
   disabledReason,
 }: OnlineRailProps) {
-  const view = present(isOnline, reconnecting, disabledReason);
+  const view = present(isOnline, busy, problem, disabledReason);
   const disabled = busy || disabledReason !== undefined;
 
   return (
     <View
       style={[styles.root, { backgroundColor: view.ground, borderColor: view.edge }]}
       testID="online-rail"
-      // A lost heartbeat is the one thing here a partner must hear about
+      // A failing heartbeat is the one thing here a partner must hear about
       // without looking at the screen.
-      accessibilityLiveRegion={reconnecting ? 'polite' : 'none'}
+      accessibilityLiveRegion={problem === null ? 'none' : 'polite'}
     >
       <MaterialCommunityIcons name={view.icon} size={20} color={view.ink} />
 
@@ -100,6 +162,8 @@ export function OnlineRail({
       <Switch
         accessibilityRole="switch"
         accessibilityLabel={`Available for jobs. Currently ${isOnline ? 'online' : 'offline'}.`}
+        // TalkBack on a disabled switch otherwise hears only "disabled".
+        accessibilityHint={disabledReason}
         accessibilityState={{ checked: isOnline, disabled, busy }}
         disabled={disabled}
         value={isOnline}

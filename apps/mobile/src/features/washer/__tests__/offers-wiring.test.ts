@@ -32,8 +32,24 @@ describe('the offers screen', () => {
     expect(offers).not.toContain('startPresence(');
   });
 
-  it('shows "Reconnecting" from the real heartbeat state', () => {
-    expect(offers).toMatch(/reconnecting=\{presence\.isOnline && presence\.error !== null\}/);
+  it('hands the rail the real presence failure, not a flattened flag', () => {
+    expect(offers).toContain('problem={presence.error}');
+  });
+
+  it('gates the list on the active-job query having resolved, not only on its data', () => {
+    // `active.data` alone is undefined while pending or errored, which would
+    // show offers to a partner who may already be on a job.
+    expect(offers).toContain('resolveScreenState(active)');
+  });
+
+  it('removes a taken job from the cache so it cannot be pressed again', () => {
+    expect(offers).toContain('setQueryData<WashJobOffer[]>(washerKeys.offers');
+    expect(offers).toMatch(/case 'WASH_JOB_TAKEN':[\s\S]{0,300}removeOffer\(jobId\)/);
+  });
+
+  it('meets a definite refusal with "no longer available", not "try again"', () => {
+    expect(offers).toContain('isDefiniteRefusal(error)');
+    expect(offers).toContain('no longer available');
   });
 
   it('polls offers only while online', () => {

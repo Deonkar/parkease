@@ -3,24 +3,30 @@ import type { WashJobOffer } from '@parkease/contracts/washer';
 import { colors, fontSize, fontWeight, radius, spacing } from '@parkease/tokens';
 import { EmptyState, ErrorState, Skeleton } from '@parkease/ui-native';
 import { FlashList } from '@shopify/flash-list';
+import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Alert, Linking, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { resolveScreenState } from '@/features/shared/screen-state';
-import { apiErrorCodeOf, isUnregisteredWasher } from '@/features/washer/api/errors';
+import {
+  apiErrorCodeOf,
+  isDefiniteRefusal,
+  isUnregisteredWasher,
+} from '@/features/washer/api/errors';
 import { OnlineRail } from '@/features/washer/components/OnlineRail';
 import { VerificationNotice } from '@/features/washer/components/VerificationNotice';
 import { WashOfferCard } from '@/features/washer/components/WashOfferCard';
-import type { PresenceError } from '@/features/washer/hooks/useWasherPresence';
 import {
   useAcceptWash,
   useActiveWash,
   useServiceMenu,
   useWasherOffers,
   useWasherProfile,
+  washerKeys,
 } from '@/features/washer/hooks/useWasherQueries';
+import type { PresenceError } from '@/features/washer/presence';
 import { usePresence } from '@/features/washer/presence-context';
 import { describeWasherVerification } from '@/features/washer/verification-copy';
 import { newIntent, type Intent } from '@/lib/api';
@@ -104,6 +110,7 @@ export default function WasherOffersScreen() {
   const offers = useWasherOffers(presence.isOnline);
   const menu = useServiceMenu();
   const accept = useAcceptWash();
+  const client = useQueryClient();
 
   // R-FE-05: one intent per offer, minted the first time the partner presses
   // Accept on it and REUSED if that accept is retried — so a retry after a
@@ -120,7 +127,25 @@ export default function WasherOffersScreen() {
 
   // Losing the race is an ordinary outcome — two of every three partners
   // offered a job see it — so it reads inline, never as a banner or an alert.
-  const [takenNotice, setTakenNotice] = useState<string | null>(null);
+  // It is pinned to the list it was shown with and disappears once that list
+  // changes (T6-M4). Structural sharing keeps the reference when a refetch
+  // returns the same offers, so the notice outlives a no-op refetch.
+  const [takenNotice, setTakenNotice] = useState<{
+    readonly text: string;
+    readonly shownWith: WashJobOffer[] | undefined;
+  } | null>(null);
+  const visibleNotice =
+    takenNotice !== null && takenNotice.shownWith === offers.data ? takenNotice.text : null;
+
+  // A job that can no longer be accepted leaves the list NOW, not when the
+  // refetch lands — until then it would still be tappable.
+  const removeOffer = useCallback(
+    (jobId: string) =>
+      client.setQueryData<WashJobOffer[]>(washerKeys.offers, (current) =>
+        current?.filter((offer) => offer.jobId !== jobId),
+      ),
+    [client],
+  );
 
   const items = useMemo(
     () => (presence.isOnline ? (offers.data ?? []) : []),
@@ -207,7 +232,7 @@ export default function WasherOffersScreen() {
             switch (apiErrorCodeOf(error)) {
               case 'WASH_JOB_TAKEN':
                 intents.current.delete(jobId);
-                setTakenNotice(TAKEN_COPY);
+                setTakenNotice({ text: TAKEN_COPY, shownWith: removeOffer(jobId) });
                 return;
               case 'WASHER_NOT_VERIFIED':
                 intents.current.delete(jobId);
@@ -222,6 +247,18 @@ export default function WasherOffersScreen() {
                 );
                 return;
               default:
+                // The server answered and the answer is no (the offer is
+                // gone, the service is off this partner's menu): trying again
+                // cannot work, so neither the intent nor the card is kept.
+                if (isDefiniteRefusal(error)) {
+                  intents.current.delete(jobId);
+                  removeOffer(jobId);
+                  Alert.alert(
+                    'Offer no longer available',
+                    'This job is no longer available. New offers will appear here.',
+                  );
+                  return;
+                }
                 // Transport failures and 5xx keep the intent: pressing Accept
                 // again replays this attempt rather than starting a new one.
                 Alert.alert('Could not accept', 'Please try again.');
@@ -230,7 +267,7 @@ export default function WasherOffersScreen() {
         },
       );
     },
-    [accept, intentFor, profile],
+    [accept, intentFor, profile, removeOffer],
   );
 
   const acceptingId = accept.isPending ? accept.variables.jobId : null;
@@ -259,7 +296,21 @@ export default function WasherOffersScreen() {
   );
 
   const offersBody = (): ReactNode => {
-    if (active.data) {
+    // Offers only once we KNOW there is no active job: `active.data` alone is
+    // undefined while pending or errored, which would list offers to a
+    // partner who may already be mid-wash.
+    const activeState = resolveScreenState(active);
+    if (activeState === 'loading') return <OfferSkeletons />;
+    if (activeState === 'error') {
+      return (
+        <ErrorState
+          title="Couldn't check your current job"
+          body="Check your connection and try again."
+          onAction={() => void active.refetch()}
+        />
+      );
+    }
+    if (activeState === 'ready') {
       return (
         <EmptyState
           icon={<EmptyIcon name="car-wash" />}
@@ -286,12 +337,12 @@ export default function WasherOffersScreen() {
     }
 
     const notice =
-      takenNotice === null ? null : (
+      visibleNotice === null ? null : (
         // A live region, because the sighted cue is a card disappearing; a
         // screen reader user would otherwise hear silence after Accept.
         <View accessibilityLiveRegion="polite" style={styles.notice} testID="offer-taken-notice">
           <MaterialCommunityIcons name="information-outline" size={18} color={colors.primaryDark} />
-          <Text style={styles.noticeText}>{takenNotice}</Text>
+          <Text style={styles.noticeText}>{visibleNotice}</Text>
         </View>
       );
 
@@ -390,7 +441,7 @@ export default function WasherOffersScreen() {
         <OnlineRail
           isOnline={presence.isOnline}
           busy={presence.busy}
-          reconnecting={presence.isOnline && presence.error !== null}
+          problem={presence.error}
           // Going online is refused server-side until verified, so the switch
           // says so instead of letting the partner find out from an alert.
           disabledReason={

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { byTestId, render, style, text } from '../../shared/__tests__/render-native';
 import { OnlineRail, type OnlineRailProps } from '../components/OnlineRail';
+import type { PresenceError } from '../presence';
 
 vi.mock('react-native', () => ({
   View: 'View',
@@ -43,8 +44,43 @@ describe('the online rail', () => {
     expect(offline && style(offline)['backgroundColor']).toBe(colors.surfaceTertiary);
   });
 
-  it('says it is reconnecting when a heartbeat was lost', () => {
-    expect(text(rail({ reconnecting: true }))).toContain('Reconnecting');
+  it('says it is reconnecting when a heartbeat did not reach the server', () => {
+    expect(text(rail({ problem: 'unreachable' }))).toContain('Reconnecting');
+  });
+
+  it('names each failure for what it is, not all of them "Reconnecting"', () => {
+    const reasons: PresenceError[] = [
+      'unreachable',
+      'location_failed',
+      'permission_denied',
+      'not_verified',
+      'not_registered',
+    ];
+    const titles = reasons.map((problem) => text(rail({ problem })));
+
+    expect(new Set(titles).size).toBe(reasons.length);
+    expect(titles.filter((t) => t.includes('Reconnecting'))).toHaveLength(1);
+    expect(text(rail({ problem: 'permission_denied' }))).toContain('permission');
+    expect(text(rail({ problem: 'not_verified' }))).toContain('verif');
+  });
+
+  it('says why an automatic resume did not put the partner back online', () => {
+    const tree = rail({ isOnline: false, problem: 'permission_denied' });
+
+    expect(text(tree)).toContain('Offline');
+    expect(text(tree)).toContain('location');
+  });
+
+  it('shows words, not only a frozen switch, while a toggle is in flight', () => {
+    expect(text(rail({ isOnline: false, busy: true }))).toContain('Going online…');
+    expect(text(rail({ isOnline: true, busy: true }))).toContain('Going offline…');
+  });
+
+  it('gives TalkBack the reason a disabled switch cannot be used', () => {
+    const reason = 'You can go online once approved';
+    const control = byTestId(rail({ isOnline: false, disabledReason: reason }), 'online-switch');
+
+    expect(control?.props['accessibilityHint']).toBe(reason);
   });
 
   it('flips the switch through onToggle with the NEXT state', () => {

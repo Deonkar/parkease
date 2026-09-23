@@ -656,3 +656,27 @@ from, so the number is the partner's own quote; it is dropped when the menu has 
   from the priced menu row), the offers query selects them, `carwash-http.spec.ts` asserts both
   on `GET /washer/jobs/offers`, and `WashOfferCard` renders the address under the vehicle line
   and reads duration from the offer instead of the menu lookup in `app/(washer)/offers.tsx`.
+
+### S-35 — Shared client error matching expects a `NOT_FOUND` code the API never sends
+
+- **Status:** `open`
+- **Found in:** task 14 task-6 review (CRITICAL 1, unregistered washer saw an error screen)
+- **Surface:** mobile, api
+
+`apps/api/src/platform/http/exception.filter.ts` (`errorCodeFor`, lines 58-65) builds
+`error.code` from the `error` field of an HttpException's response. A bare
+`new NotFoundException()` in Nest 11 carries no such field, so it answers code `'ERROR'`, never
+`'NOT_FOUND'`. `apps/mobile/src/features/shared/hooks/useMessageForError.ts:26` matches
+`case 'NOT_FOUND'`, which therefore never fires. Task 6 fixed the one place this broke a flow
+(`GET /washer/profile` now throws `WasherProfileNotFoundError`), but bare
+`new NotFoundException()` is still thrown in at least ten commands, including
+`accept-wash.command.ts:48,51`, `advance-wash.command.ts:29`, `cancel-wash.command.ts:33`,
+`create-wash-order.command.ts:55`, `request-carwash.command.ts:40`, the valet `accept-job` /
+`advance-job` / `cancel-job` commands, and `roles/washer/jobs.controller.ts:136`.
+
+- **Why deferred:** the fix spans the global filter or every command's 404, and the shared
+  client hook used by the driver flows. That is cross-role, far outside one screen's fix round.
+- **Done means:** shared error matching uses domain codes. Either every 404 the app routes on
+  throws a domain error with a stable code, or the filter derives a code from the status when the
+  response has no `error` field (e.g. 404 → `NOT_FOUND`). `useMessageForError` matches only
+  codes the API actually emits, and an HTTP test pins the code for a bare 404.
