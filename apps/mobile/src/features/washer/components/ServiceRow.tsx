@@ -35,6 +35,8 @@ type PriceField = Exclude<Field, 'duration'>;
 const PRICE_ERROR = `Enter a price between ${formatPaise(toPaise(MIN_SERVICE_PRICE_PAISE))} and ${formatPaise(toPaise(MAX_SERVICE_PRICE_PAISE))}`;
 const DURATION_ERROR = `Enter a time between ${String(MIN_SERVICE_DURATION_MINUTES)} and ${String(MAX_SERVICE_DURATION_MINUTES)} minutes`;
 
+const UNPRICED_SWITCH = 'Set both prices and save them to switch this service on.';
+
 const SLOT_NAME: Readonly<Record<PriceField, string>> = { car: 'Car', bike: 'Bike' };
 const SLOT_ICON: Readonly<Record<PriceField, 'car-side' | 'motorbike'>> = {
   car: 'car-side',
@@ -59,16 +61,20 @@ const textOf = (row: MenuRow): Record<Field, string> => ({
  * when what they hold would be refused. One visual idea, used twice.
  *
  * Validation speaks late. A field is judged when it loses focus or when the
- * partner saves, never on a keystroke — `10.` is a price being typed, not a
- * mistake — and a shown error clears the moment the partner starts fixing it.
+ * partner saves, never on a keystroke — `9` may be the start of `99` — and a
+ * shown error clears the moment the partner starts fixing it.
  *
  * The switch saves straight away, because a switch that waits for a Save
- * button is a switch that lies about its state. It sends the prices on screen
- * with the new `isActive`, so switching a service off keeps its prices.
+ * button is a switch that lies about its state. It sends the SERVER's prices
+ * and duration with the new `isActive`, never the drafts (T8-I1): an unsaved
+ * typo must not go live with a flip, and an invalid draft must never block
+ * switching a service off. While that save is in flight the switch shows the
+ * value it is saving. A never-priced service has nothing to switch on, so the
+ * switch waits, and says so, until prices are saved.
  *
- * The screen resets this row by remounting it (a `key` over its server values),
- * so a failed save keeps what the partner typed and a successful one shows what
- * the server now holds.
+ * The screen remounts this row when its server PRICES or duration change (a
+ * `key` over them, not over `isActive`), so a successful Save shows what the
+ * server now holds, while a failed save or a toggle keeps what was typed.
  */
 export function ServiceRow({ row, onSave, saving = false, failure = null }: ServiceRowProps) {
   const name = row.serviceName;
@@ -78,6 +84,10 @@ export function ServiceRow({ row, onSave, saving = false, failure = null }: Serv
   const [text, setText] = useState(baseline);
   const [shown, setShown] = useState(NONE_SHOWN);
   const [focused, setFocused] = useState<Field | null>(null);
+  /** What the last flip asked for; shown only while a save is in flight. */
+  const [pendingActive, setPendingActive] = useState<boolean | null>(null);
+  /** The stored values could not be sent as they are (see `toggle`). */
+  const [toggleRefused, setToggleRefused] = useState(false);
 
   const parsed = {
     car: rupeesToPaise(text.car),
@@ -88,8 +98,19 @@ export function ServiceRow({ row, onSave, saving = false, failure = null }: Serv
 
   // Either price missing is a service the partner has not finished setting up.
   const unpriced = row.carPricePaise === null || row.bikePricePaise === null;
-  const dirty =
-    text.car !== baseline.car || text.bike !== baseline.bike || text.duration !== baseline.duration;
+  const offered = saving && pendingActive !== null ? pendingActive : row.isActive;
+
+  // Changed means a different VALUE (T8-M3): "399.00" over a stored ₹399 is
+  // not an edit. A field that will not parse is compared as text, so a
+  // half-typed price still enables Save, which is where it gets explained.
+  const server = {
+    car: row.carPricePaise,
+    bike: row.bikePricePaise,
+    duration: row.durationMinutes,
+  };
+  const changed = (field: Field) =>
+    parsed[field] === null ? text[field] !== baseline[field] : parsed[field] !== server[field];
+  const dirty = changed('car') || changed('bike') || changed('duration');
 
   const change = (field: Field, value: string) => {
     setText((current) => ({ ...current, [field]: value }));
@@ -104,16 +125,38 @@ export function ServiceRow({ row, onSave, saving = false, failure = null }: Serv
     setShown((current) => ({ ...current, [field]: text[field].trim() !== '' }));
   };
 
-  const commit = (isActive: boolean) => {
+  const save = () => {
+    setPendingActive(null);
+    setToggleRefused(false);
     setShown(ALL_SHOWN);
     const input = upsertWashServiceSchema.safeParse({
       carPricePaise: parsed.car,
       bikePricePaise: parsed.bike,
       durationMinutes: parsed.duration,
-      isActive,
+      // Pricing a service for the first time is asking to offer it.
+      isActive: row.isActive || unpriced,
     });
     // Not silent: every field that failed is now saying why, under itself.
     if (!input.success) return;
+    onSave(input.data);
+  };
+
+  const toggle = (next: boolean) => {
+    const input = upsertWashServiceSchema.safeParse({
+      carPricePaise: row.carPricePaise,
+      bikePricePaise: row.bikePricePaise,
+      durationMinutes: row.durationMinutes,
+      isActive: next,
+    });
+    // The read schema is looser than the write schema, so a stored price
+    // outside the bounds can reach this screen but cannot be sent back. Said
+    // under the switch, never dropped: the partner re-prices and saves.
+    if (!input.success) {
+      setToggleRefused(true);
+      return;
+    }
+    setToggleRefused(false);
+    setPendingActive(next);
     onSave(input.data);
   };
 
@@ -175,24 +218,37 @@ export function ServiceRow({ row, onSave, saving = false, failure = null }: Serv
           <Text style={styles.name} accessibilityRole="header">
             {label}
           </Text>
-          <Text style={[styles.state, row.isActive && styles.stateOn]}>
-            {row.isActive ? 'Offered' : 'Not offered'}
+          <Text style={[styles.state, offered && styles.stateOn]}>
+            {saving && pendingActive !== null ? 'Saving…' : offered ? 'Offered' : 'Not offered'}
           </Text>
         </View>
         <Switch
           testID={`active-${name}`}
           accessibilityRole="switch"
-          accessibilityLabel={`${label}: ${row.isActive ? 'offered' : 'not offered'}`}
-          accessibilityState={{ checked: row.isActive, disabled: saving, busy: saving }}
-          disabled={saving}
-          value={row.isActive}
-          onValueChange={commit}
+          accessibilityLabel={`${label}: ${offered ? 'offered' : 'not offered'}`}
+          // TalkBack on a disabled switch otherwise hears only "disabled".
+          accessibilityHint={unpriced ? UNPRICED_SWITCH : undefined}
+          accessibilityState={{ checked: offered, disabled: saving || unpriced, busy: saving }}
+          disabled={saving || unpriced}
+          value={offered}
+          onValueChange={toggle}
           trackColor={{ false: colors.borderStrong, true: colors.primary }}
           thumbColor={colors.surface}
         />
       </View>
 
-      {unpriced ? <Text style={styles.prompt}>Set your prices to offer this service</Text> : null}
+      {unpriced ? (
+        <Text style={styles.prompt}>
+          Set your prices to offer this service, then save them to switch it on.
+        </Text>
+      ) : null}
+
+      {toggleRefused ? (
+        <FieldError
+          testID={`active-error-${name}`}
+          message={`The saved prices can't be sent as they are. ${PRICE_ERROR}, then save.`}
+        />
+      ) : null}
 
       <View style={styles.pair}>
         {priceSlot('car')}
@@ -240,10 +296,7 @@ export function ServiceRow({ row, onSave, saving = false, failure = null }: Serv
           accessibilityLabel={`Save ${label}`}
           accessibilityState={{ disabled: !dirty || saving, busy: saving }}
           disabled={!dirty || saving}
-          onPress={() => {
-            // Pricing a service for the first time is asking to offer it.
-            commit(row.isActive || unpriced);
-          }}
+          onPress={save}
           // Material wants touch feedback; a pressed tone from the tokens gives it.
           style={({ pressed }) => [
             styles.save,

@@ -21,16 +21,24 @@ const httpStatusSchema = z.object({ response: z.object({ status: z.number().int(
 const TRANSIENT_4XX = new Set([408, 429]);
 
 /**
+ * The idempotency interceptor's 409 for a key whose first attempt has not
+ * finished. It is not an answer about the request: that attempt may still win.
+ */
+const REQUEST_IN_FLIGHT = 'REQUEST_IN_FLIGHT';
+
+/**
  * The server answered, and the answer is no — retrying the same request cannot
- * change it. A transport failure (no response), a 5xx, a rate limit or a
- * request timeout are NOT refusals: pressing the button again may work, so the
+ * change it. A transport failure (no response), a 5xx, a rate limit, a
+ * request timeout, or a duplicate that arrived while the first attempt was
+ * still running are NOT refusals: pressing the button again may work, so the
  * caller keeps its intent for a replay.
  */
 export function isDefiniteRefusal(error: unknown): boolean {
   const parsed = httpStatusSchema.safeParse(error);
   if (!parsed.success) return false;
   const { status } = parsed.data.response;
-  return status >= 400 && status < 500 && !TRANSIENT_4XX.has(status);
+  if (status < 400 || status >= 500 || TRANSIENT_4XX.has(status)) return false;
+  return apiErrorCodeOf(error) !== REQUEST_IN_FLIGHT;
 }
 
 export function apiErrorCodeOf(error: unknown): string | null {

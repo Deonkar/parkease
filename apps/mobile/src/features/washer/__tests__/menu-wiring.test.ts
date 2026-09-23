@@ -36,9 +36,15 @@ describe('the service menu screen', () => {
     );
   });
 
-  it('resets a row by remounting it when its server values change', () => {
+  it('resets a row by remounting it when its server prices or duration change', () => {
     expect(screen).toContain('key={rowKey(row)}');
     expect(code).toMatch(/const rowKey[\s\S]{0,200}carPricePaise[\s\S]{0,80}bikePricePaise/);
+  });
+
+  it('does not remount a row for a toggle, which would wipe its drafts (T8-I1)', () => {
+    const rowKey = /const rowKey[\s\S]*?;\r?\n/.exec(code)?.[0] ?? '';
+    expect(rowKey).toContain('durationMinutes');
+    expect(rowKey).not.toContain('isActive');
   });
 
   it('renders no fee rate: the 80% footnote is a rate in apps/mobile (R-FE-06)', () => {

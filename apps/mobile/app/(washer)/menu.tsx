@@ -11,11 +11,13 @@ import { useServiceSave } from '@/features/washer/hooks/useServiceSave';
 import { useServiceMenu } from '@/features/washer/hooks/useWasherQueries';
 import { toMenuRows, type MenuRow } from '@/features/washer/menu-rows';
 
-/** Remounts a row when ITS server values change, and never for another row's save. */
+/**
+ * Remounts a row when ITS server prices or duration change, and never for
+ * another row's save. Not over `isActive` (T8-I1): a successful toggle must not
+ * wipe the drafts the partner has typed but not yet saved.
+ */
 const rowKey = (row: MenuRow) =>
-  [row.serviceName, row.carPricePaise, row.bikePricePaise, row.durationMinutes, row.isActive].join(
-    ':',
-  );
+  [row.serviceName, row.carPricePaise, row.bikePricePaise, row.durationMinutes].join(':');
 
 function MenuSkeleton() {
   return (

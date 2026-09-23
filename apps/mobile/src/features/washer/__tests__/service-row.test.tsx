@@ -1,8 +1,13 @@
-import { act } from 'react';
+import {
+  MAX_SERVICE_DURATION_MINUTES,
+  MIN_SERVICE_DURATION_MINUTES,
+  type UpsertWashService,
+} from '@parkease/contracts/washer';
+import { act, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { byTestId, mount, text } from '../../shared/__tests__/render-native';
-import { ServiceRow, type ServiceRowProps } from '../components/ServiceRow';
+import { ServiceRow } from '../components/ServiceRow';
 import type { MenuRow } from '../menu-rows';
 
 // react-native ships Flow source the node-environment parser cannot read.
@@ -28,16 +33,48 @@ const row = (overrides: Partial<MenuRow> = {}): MenuRow => ({
   ...overrides,
 });
 
+interface HostProps {
+  readonly initial: MenuRow;
+  readonly initialSaving: boolean;
+  readonly failure: string | null;
+  readonly onSave: (input: UpsertWashService) => void;
+}
+
+/** What the screen would change underneath the row: its server values, and whether it saves. */
+let server: {
+  readonly setRow: (next: MenuRow) => void;
+  readonly setSaving: (next: boolean) => void;
+};
+
+/**
+ * Stands in for the screen: one `ServiceRow` element that is re-rendered, never
+ * remounted, when its props change — which is what the screen's `rowKey` does
+ * for a change of `isActive` alone.
+ */
+function Host({ initial, initialSaving, failure, onSave }: HostProps) {
+  const [current, setRow] = useState(initial);
+  const [saving, setSaving] = useState(initialSaving);
+  server = { setRow, setSaving };
+  return <ServiceRow row={current} saving={saving} failure={failure} onSave={onSave} />;
+}
+
+interface SetupOptions {
+  readonly row?: MenuRow;
+  readonly saving?: boolean;
+  readonly failure?: string | null;
+}
+
 /** Mounts a row and returns what it saved, plus the ways a partner touches it. */
-function setup(props: Partial<ServiceRowProps> = {}) {
+function setup({ row: initial = row(), saving = false, failure = null }: SetupOptions = {}) {
   const saved: unknown[] = [];
   const view = mount(
-    <ServiceRow
-      row={row()}
+    <Host
+      initial={initial}
+      initialSaving={saving}
+      failure={failure}
       onSave={(input) => {
         saved.push(input);
       }}
-      {...props}
     />,
   );
   // Always the CURRENT tree: a stale snapshot's handlers hold stale text.
@@ -69,8 +106,23 @@ function setup(props: Partial<ServiceRowProps> = {}) {
       handler(id, 'onValueChange')(next);
     });
   };
-  return { saved, node, type, blur, press, toggle, readable: () => text(view.tree()) };
+  const rerender = (change: () => void) => {
+    act(change);
+  };
+  return {
+    saved,
+    node,
+    type,
+    blur,
+    press,
+    toggle,
+    rerender,
+    readable: () => text(view.tree()),
+  };
 }
+
+const TOO_LONG = String(MAX_SERVICE_DURATION_MINUTES + 1);
+const DURATION_BOUNDS = `between ${String(MIN_SERVICE_DURATION_MINUTES)} and ${String(MAX_SERVICE_DURATION_MINUTES)}`;
 
 describe('saving a service', () => {
   it('sends both prices in one save, as paise', () => {
@@ -103,6 +155,15 @@ describe('saving a service', () => {
     type('price-car-premium_wash', '449');
     expect(node('save-premium_wash')?.props['disabled']).toBe(false);
   });
+
+  it('does not count a retyped equal value as a change (T8-M3)', () => {
+    const { node, type } = setup();
+
+    type('price-car-premium_wash', '399.00');
+    type('duration-premium_wash', '040');
+
+    expect(node('save-premium_wash')?.props['disabled']).toBe(true);
+  });
 });
 
 describe('a price the contract would refuse', () => {
@@ -131,11 +192,25 @@ describe('a price the contract would refuse', () => {
   it('says nothing while the partner is still typing, and speaks on blur', () => {
     const { node, type, blur, readable } = setup();
 
-    type('price-car-premium_wash', '10.');
+    // "9" on the way to "99": wrong only if the partner stops here.
+    type('price-car-premium_wash', '9');
     expect(readable()).not.toContain('Enter a price');
 
     blur('price-car-premium_wash');
     expect(node('price-car-error-premium_wash')).toBeDefined();
+  });
+
+  it('takes "10." as ten rupees on blur rather than calling it out of range (T8-M2)', () => {
+    const { saved, node, type, blur, press } = setup();
+
+    type('price-car-premium_wash', '10.');
+    blur('price-car-premium_wash');
+    press('save-premium_wash');
+
+    expect(node('price-car-error-premium_wash')).toBeUndefined();
+    expect(saved).toEqual([
+      { carPricePaise: 1000, bikePricePaise: 14900, durationMinutes: 40, isActive: true },
+    ]);
   });
 
   it('drops a shown error once the partner starts correcting the field', () => {
@@ -151,15 +226,15 @@ describe('a price the contract would refuse', () => {
   it('refuses a duration outside the contract bounds, under the duration field', () => {
     const { saved, node, type, press } = setup();
 
-    type('duration-premium_wash', '481');
+    type('duration-premium_wash', TOO_LONG);
     press('save-premium_wash');
 
     expect(saved).toEqual([]);
-    expect(text(node('duration-error-premium_wash') ?? null)).toContain('between 5 and 480');
+    expect(text(node('duration-error-premium_wash') ?? null)).toContain(DURATION_BOUNDS);
   });
 });
 
-describe('the Active switch', () => {
+describe('the Active switch (T8-I1)', () => {
   it('switching off saves the SAME prices with isActive false, never deleting them', () => {
     const { saved, toggle } = setup();
 
@@ -170,12 +245,79 @@ describe('the Active switch', () => {
     ]);
   });
 
+  it('sends the SERVER prices, never an unsaved draft', () => {
+    // A mistyped ₹4,490 that was never saved must not go live with a flip.
+    const { saved, type, toggle } = setup({ row: row({ isActive: false }) });
+
+    type('price-car-premium_wash', '4490');
+    type('duration-premium_wash', '90');
+    toggle('active-premium_wash', true);
+
+    expect(saved).toEqual([
+      { carPricePaise: 39900, bikePricePaise: 14900, durationMinutes: 40, isActive: true },
+    ]);
+  });
+
+  it('switches OFF even while a draft is invalid, and does not flag the draft', () => {
+    const { saved, node, type, toggle } = setup();
+
+    type('price-car-premium_wash', '9');
+    toggle('active-premium_wash', false);
+
+    expect(saved).toEqual([
+      { carPricePaise: 39900, bikePricePaise: 14900, durationMinutes: 40, isActive: false },
+    ]);
+    expect(node('price-car-error-premium_wash')).toBeUndefined();
+  });
+
+  it('keeps the partner’s unsaved drafts through a successful toggle', () => {
+    const { node, type, toggle, rerender } = setup();
+
+    type('price-car-premium_wash', '449');
+    toggle('active-premium_wash', false);
+    rerender(() => {
+      server.setRow(row({ isActive: false }));
+    });
+
+    expect(node('price-car-premium_wash')?.props['value']).toBe('449');
+    expect(node('save-premium_wash')?.props['disabled']).toBe(false);
+  });
+
+  it('shows the value it is saving while that save is in flight (T8-M6)', () => {
+    const { node, toggle, rerender, readable } = setup();
+
+    toggle('active-premium_wash', false);
+    rerender(() => {
+      server.setSaving(true);
+    });
+
+    expect(node('active-premium_wash')?.props['value']).toBe(false);
+    expect(readable()).toContain('Saving…');
+
+    // The save failed: the row is still offered, and the switch says so again.
+    rerender(() => {
+      server.setSaving(false);
+    });
+    expect(node('active-premium_wash')?.props['value']).toBe(true);
+  });
+
   it('says its state in words, not only in the track colour', () => {
     const { node } = setup({ row: row({ isActive: false }) });
     const toggleNode = node('active-premium_wash');
 
     expect(toggleNode?.props['accessibilityRole']).toBe('switch');
     expect(toggleNode?.props['accessibilityLabel']).toMatch(/not offered/i);
+  });
+
+  it('says why it cannot send a stored price the contract no longer accepts', () => {
+    // The read schema is looser than the write schema, so a stored ₹5 can
+    // reach the screen. The switch cannot send it; it must not just do nothing.
+    const { saved, toggle, readable } = setup({ row: row({ carPricePaise: 500 }) });
+
+    toggle('active-premium_wash', false);
+
+    expect(saved).toEqual([]);
+    expect(readable()).toContain('between ₹10 and ₹9,999');
   });
 });
 
@@ -188,6 +330,14 @@ describe('a service this partner has never priced', () => {
     expect(node('price-car-premium_wash')?.props['value']).toBe('');
     expect(node('price-bike-premium_wash')?.props['value']).toBe('');
     expect(readable()).toContain('Set your prices to offer this service');
+  });
+
+  it('holds the switch until it has been priced and saved, and says so in words', () => {
+    const { node, readable } = setup({ row: unpriced });
+
+    expect(node('active-premium_wash')?.props['disabled']).toBe(true);
+    expect(node('active-premium_wash')?.props['accessibilityHint']).toMatch(/save/i);
+    expect(readable()).toMatch(/save them to switch it on/i);
   });
 
   it('can be priced for the first time, and pricing it offers it', () => {

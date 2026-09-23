@@ -741,23 +741,32 @@ change together.
   washer copies are deleted; `proof-upload.test.tsx` and `photo-slot.test.tsx` run against the
   shared hook.
 
-### S-39 — Framed slot borders sit under the 3:1 non-text contrast floor
+### S-39 — Framed slots, the dashed cue and the switch off-track sit under the 3:1 non-text floor
 
 - **Status:** `open`
-- **Found in:** task 14 task-8 (service menu editor), design audit
+- **Found in:** task 14 task-8 (service menu editor), design audit; widened in fix round 1
 - **Surface:** mobile, tokens
 
-The evidence pair's empty frame (`EvidencePair.tsx`, `frameEmpty`) and the menu row's price
-slots (`ServiceRow.tsx`, `slot` / `slotEmpty`, which rhyme with it on purpose) draw their
-boundary in `colors.borderStrong` `#CBD5E1` (1.48:1 on white) or `colors.border` `#E2E8F0`.
-WCAG 1.4.11 asks 3:1 for the visual information needed to identify a component. Today the
-label (CAR / BIKE, "Needed to start"), the ₹ prefix and the placeholder carry identification,
-so this is not a blocker, but the frame itself is faint in sunlight — the washer's working
-condition.
+WCAG 1.4.11 asks 3:1 for the visual information needed to identify a component or its state.
+Measured with the `mobile-app-design` contrast script:
 
-- **Why deferred:** the fix is a token decision (a `borderInput` at ≥3:1, or darkening
-  `borderStrong`) that moves every bordered control in the app, and the two washer components
-  must change together to keep their rhyme. That wants its own look on a device, not a rider
-  on the menu task.
-- **Done means:** the slot and frame boundaries measure ≥3:1 against their surface, asserted
-  in `packages/tokens/test/contrast.spec.ts`, and both components use the same token.
+| Boundary                                                                                                                  | Token                                               | Against                      | Ratio  |
+| ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- | ---------------------------- | ------ |
+| Resting price slot (`ServiceRow` `slot`)                                                                                  | `colors.border` `#E2E8F0`                           | white card                   | 1.23:1 |
+| same, against its own fill                                                                                                | `colors.border`                                     | `surfaceSecondary` `#F8FAFC` | 1.18:1 |
+| Dashed "set your prices" cue (`ServiceRow` `slotEmpty`) and the evidence pair's empty frame (`EvidencePair` `frameEmpty`) | `colors.borderStrong` `#CBD5E1`                     | white                        | 1.48:1 |
+| Switch off-track, white thumb on a white card                                                                             | `colors.borderStrong` track, `colors.surface` thumb | white                        | 1.48:1 |
+
+The switch pattern is shared: `ServiceRow`, the washer `OnlineRail` and valet's
+`OnlineStatusBar` (twice) all pass `trackColor.false: colors.borderStrong`. Today the text beside
+each carries identification and state (CAR / BIKE and ₹, "Needed to start", "Offered" /
+"Not offered", "Online" / "Offline"), so nothing is unreadable, but the frames and the off switch
+are faint in sunlight, which is the washer's working condition.
+
+- **Why deferred:** the fix is a token decision (a `borderInput` and a `switchTrackOff` at ≥3:1,
+  or darkening `borderStrong`) that moves every bordered control and every switch in the app,
+  across three roles. The two washer components must change together to keep their rhyme. That
+  wants its own look on a device, not a rider on the menu task.
+- **Done means:** slot boundaries, the dashed cue and the switch off-track each measure ≥3:1
+  against their surface, asserted in `packages/tokens/test/contrast.spec.ts`; `ServiceRow`,
+  `EvidencePair`, `OnlineRail` and `OnlineStatusBar` use the new tokens.

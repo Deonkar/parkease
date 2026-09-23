@@ -50,8 +50,12 @@ export function toMenuRows(services: readonly WashService[]): MenuRow[] {
   });
 }
 
-/** `123` or `123.45`, nothing else — no exponents, no sign, at most two decimals. */
-const RUPEES = /^\d{1,5}(?:\.\d{1,2})?$/;
+/**
+ * `123`, `123.` or `123.45`, nothing else — no exponents, no sign, at most two
+ * decimals. A trailing dot is whole rupees (T8-M2): it is what a partner who
+ * typed "10." meant, and refusing it told them ₹10 was out of range.
+ */
+const RUPEES = /^\d{1,5}(?:\.\d{0,2})?$/;
 
 /**
  * Rupees as typed → paise, or null when it is not a price this contract accepts.

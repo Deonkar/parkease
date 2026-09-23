@@ -83,8 +83,15 @@ describe('rupeesToPaise', () => {
     expect(rupeesToPaise('10000')).toBeNull();
   });
 
+  it('reads a trailing dot as whole rupees, because that is what the partner typed', () => {
+    // T8-M2: "10." on blur used to say "between ₹10 and ₹9,999" to someone
+    // who had typed 10.
+    expect(rupeesToPaise('10.')).toBe(1000);
+    expect(rupeesToPaise('449.')).toBe(44900);
+  });
+
   it('refuses junk rather than coercing it to a number', () => {
-    for (const input of ['', 'abc', '-50', '1.234', '1e3']) {
+    for (const input of ['', 'abc', '-50', '1.234', '1e3', '.', '.5']) {
       expect(rupeesToPaise(input)).toBeNull();
     }
   });

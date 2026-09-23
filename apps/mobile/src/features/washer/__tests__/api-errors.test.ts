@@ -95,4 +95,16 @@ describe('isDefiniteRefusal', () => {
   it('is false for a transport failure with no response at all', () => {
     expect(isDefiniteRefusal(new Error('Network Error'))).toBe(false);
   });
+
+  it('is false while the first attempt is still running (409 REQUEST_IN_FLIGHT)', () => {
+    // The first attempt may yet win, so the intent is kept for a replay.
+    const inFlight = httpError(409, {
+      error: { code: 'REQUEST_IN_FLIGHT', message: 'still processing', traceId: 't' },
+    });
+    expect(isDefiniteRefusal(inFlight)).toBe(false);
+  });
+
+  it('is still true for any other 409, which is a real answer', () => {
+    expect(isDefiniteRefusal(httpError(409, { error: { code: 'WASH_JOB_TAKEN' } }))).toBe(true);
+  });
 });

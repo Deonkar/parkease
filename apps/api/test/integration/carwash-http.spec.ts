@@ -2,6 +2,11 @@ import { uuidv7 } from '@parkease/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import {
+  hashCanonicalBody,
+  IdempotencyService,
+} from '../../src/platform/idempotency/idempotency.service.js';
+
+import {
   type Harness,
   HOURLY_ONLY,
   OPEN_ALWAYS,
@@ -829,6 +834,40 @@ describe('idempotency', () => {
     });
 
     expect(changed.status).toBe(422);
+  });
+
+  it('answers REQUEST_IN_FLIGHT, not a bare CONFLICT, while the first attempt holds the key', async () => {
+    // A retry that lands while the first attempt is still running must be
+    // told apart from a real refusal: the client keeps its intent and retries,
+    // because the first attempt may yet succeed. The key is claimed here
+    // exactly as the interceptor claims it for an attempt that has not stored
+    // a response — same user, same route pattern, same body hash — which is
+    // the `in_flight` state without racing two requests.
+    const washerId = await seedWasher();
+    const payload = {
+      carPricePaise: 44900,
+      bikePricePaise: 17900,
+      durationMinutes: 45,
+      isActive: true,
+    };
+    const headers = key();
+    await new IdempotencyService(h.db).claim({
+      key: headers['idempotency-key'],
+      userId: washerId,
+      endpoint: 'PUT /api/v1/washer/services/:serviceName',
+      requestHash: hashCanonicalBody(payload),
+    });
+
+    asUser(washerId, ['washer']);
+    const retried = await http.request({
+      method: 'PUT',
+      url: '/api/v1/washer/services/premium_wash',
+      headers,
+      payload,
+    });
+
+    expect(retried.status).toBe(409);
+    expect(errorOf(retried.body).code).toBe('REQUEST_IN_FLIGHT');
   });
 });
 

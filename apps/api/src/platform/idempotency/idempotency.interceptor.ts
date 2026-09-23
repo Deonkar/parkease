@@ -76,7 +76,14 @@ export class IdempotencyInterceptor implements NestInterceptor {
         );
 
       case 'in_flight':
-        throw new ConflictException('That request is still being processed. Give it a moment.');
+        // Its own code, not the generic CONFLICT: a client must tell "your
+        // first attempt is still running" (keep the key, retry) from a real
+        // refusal (drop it). `errorCodeFor` upper-cases `error` into the
+        // envelope's code, so an already upper-snake value arrives unchanged.
+        throw new ConflictException({
+          error: 'REQUEST_IN_FLIGHT',
+          message: 'That request is still being processed. Give it a moment.',
+        });
 
       case 'proceed':
         return next.handle().pipe(
