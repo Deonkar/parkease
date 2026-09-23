@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { requestCarwashSchema } from '../src/driver/index.js';
 import {
+  MAX_SERVICE_DURATION_MINUTES,
+  MIN_SERVICE_DURATION_MINUTES,
   advanceWashJobSchema,
   attachWashPhotoSchema,
   createWasherProfileSchema,
@@ -274,6 +276,44 @@ describe('washJobOfferSchema', () => {
         expiresAt: '2026-09-22T10:03:00.000Z',
       }).success,
     ).toBe(false);
+  });
+});
+
+describe('service duration bounds (T8-D1)', () => {
+  /**
+   * The mobile editor reads these to say what it accepts, so the numbers live
+   * here once rather than as a 5 and a 480 typed into a screen.
+   */
+  const upsert = (durationMinutes: number) =>
+    upsertWashServiceSchema.safeParse({
+      carPricePaise: 44900,
+      bikePricePaise: 17900,
+      durationMinutes,
+      isActive: true,
+    }).success;
+
+  const read = (durationMinutes: number) =>
+    washServiceSchema.safeParse({
+      serviceName: 'premium_wash',
+      vehicleType: 'car',
+      pricePaise: 44900,
+      durationMinutes,
+      isActive: true,
+    }).success;
+
+  it('names the bounds: 5 to 480 minutes', () => {
+    expect(MIN_SERVICE_DURATION_MINUTES).toBe(5);
+    expect(MAX_SERVICE_DURATION_MINUTES).toBe(480);
+  });
+
+  it.each([
+    ['upsert', upsert],
+    ['read', read],
+  ] as const)('%s accepts 5 and 480, and refuses 4 and 481', (_name, parses) => {
+    expect(parses(5)).toBe(true);
+    expect(parses(480)).toBe(true);
+    expect(parses(4)).toBe(false);
+    expect(parses(481)).toBe(false);
   });
 });
 

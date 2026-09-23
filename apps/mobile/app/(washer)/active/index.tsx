@@ -12,6 +12,7 @@ import { resolveScreenState } from '@/features/shared/screen-state';
 import { apiErrorCodeOf, isDefiniteRefusal } from '@/features/washer/api/errors';
 import { ElapsedBar, elapsedMinutesSince } from '@/features/washer/components/ElapsedBar';
 import { EvidencePair, type EvidenceSlotView } from '@/features/washer/components/EvidencePair';
+import { RefreshNotice } from '@/features/washer/components/RefreshNotice';
 import { StepRail } from '@/features/washer/components/StepRail';
 import { WashActionBar } from '@/features/washer/components/WashActionBar';
 import { WashCamera } from '@/features/washer/components/WashCamera';
@@ -254,22 +255,11 @@ export default function WasherActiveScreen() {
         {active.isError ? (
           // The job stays on screen (ruling T7-I2); this only says the latest
           // refresh failed, and offers another.
-          <View
-            style={styles.refresh}
-            accessibilityLiveRegion="polite"
+          <RefreshNotice
             testID="active-refresh-notice"
-          >
-            <MaterialCommunityIcons name="cloud-off-outline" size={18} color={colors.warning} />
-            <Text style={styles.refreshText}>Couldn't refresh. Showing the last update.</Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Refresh the job"
-              onPress={() => void active.refetch()}
-              style={styles.refreshAction}
-            >
-              <Text style={styles.refreshActionLabel}>Retry</Text>
-            </Pressable>
-          </View>
+            retryLabel="Refresh the job"
+            onRetry={() => void active.refetch()}
+          />
         ) : null}
 
         <ScrollView contentContainerStyle={styles.body}>
@@ -402,19 +392,6 @@ const styles = StyleSheet.create({
     borderColor: colors.borderStrong,
   },
   body: { padding: spacing.base, gap: spacing.lg },
-  refresh: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingLeft: spacing.base,
-    paddingRight: spacing.xs,
-    backgroundColor: colors.warningLight,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  refreshText: { flex: 1, fontSize: fontSize.sm, color: colors.warning },
-  refreshAction: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.md },
-  refreshActionLabel: { fontSize: fontSize.sm, fontWeight: fontWeight.bold, color: colors.primary },
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,

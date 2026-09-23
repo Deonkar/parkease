@@ -1,6 +1,8 @@
 import { CARWASH_SERVICE_NAME_VALUES, type CarwashServiceName } from '@parkease/contracts/enums';
 import {
+  MAX_SERVICE_DURATION_MINUTES,
   MAX_SERVICE_PRICE_PAISE,
+  MIN_SERVICE_DURATION_MINUTES,
   MIN_SERVICE_PRICE_PAISE,
   type WashService,
 } from '@parkease/contracts/washer';
@@ -76,4 +78,17 @@ export function paiseToRupees(paise: number): string {
   return remainder === 0
     ? String(rupees)
     : `${String(rupees)}.${String(remainder).padStart(2, '0')}`;
+}
+
+/** Whole minutes, three digits at most — no sign, no decimals, no exponent. */
+const MINUTES = /^\d{1,3}$/;
+
+/** Minutes as typed → minutes, or null outside the contract's bounds or for junk. */
+export function parseMinutes(input: string): number | null {
+  const trimmed = input.trim();
+  if (!MINUTES.test(trimmed)) return null;
+
+  const minutes = Number(trimmed);
+  if (minutes < MIN_SERVICE_DURATION_MINUTES || minutes > MAX_SERVICE_DURATION_MINUTES) return null;
+  return minutes;
 }

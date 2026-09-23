@@ -1,7 +1,12 @@
-import { MAX_SERVICE_PRICE_PAISE, MIN_SERVICE_PRICE_PAISE } from '@parkease/contracts/washer';
+import {
+  MAX_SERVICE_DURATION_MINUTES,
+  MAX_SERVICE_PRICE_PAISE,
+  MIN_SERVICE_DURATION_MINUTES,
+  MIN_SERVICE_PRICE_PAISE,
+} from '@parkease/contracts/washer';
 import { describe, expect, it } from 'vitest';
 
-import { paiseToRupees, rupeesToPaise, toMenuRows } from '../menu-rows';
+import { paiseToRupees, parseMinutes, rupeesToPaise, toMenuRows } from '../menu-rows';
 
 const service = (serviceName: string, vehicleType: string, pricePaise: number, isActive = true) =>
   ({ serviceName, vehicleType, pricePaise, durationMinutes: 40, isActive }) as never;
@@ -89,6 +94,25 @@ describe('paiseToRupees', () => {
   it('round-trips through rupeesToPaise', () => {
     for (const paise of [1000, 1003, 1050, 31920, 44900, 999900]) {
       expect(rupeesToPaise(paiseToRupees(paise))).toBe(paise);
+    }
+  });
+});
+
+describe('parseMinutes', () => {
+  it('takes whole minutes inside the contract bounds', () => {
+    expect(parseMinutes(String(MIN_SERVICE_DURATION_MINUTES))).toBe(MIN_SERVICE_DURATION_MINUTES);
+    expect(parseMinutes(String(MAX_SERVICE_DURATION_MINUTES))).toBe(MAX_SERVICE_DURATION_MINUTES);
+    expect(parseMinutes(' 40 ')).toBe(40);
+  });
+
+  it('refuses a duration the contract would refuse', () => {
+    expect(parseMinutes(String(MIN_SERVICE_DURATION_MINUTES - 1))).toBeNull();
+    expect(parseMinutes(String(MAX_SERVICE_DURATION_MINUTES + 1))).toBeNull();
+  });
+
+  it('refuses junk rather than coercing it', () => {
+    for (const input of ['', 'abc', '-5', '40.5', '1e2']) {
+      expect(parseMinutes(input)).toBeNull();
     }
   });
 });

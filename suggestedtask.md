@@ -740,3 +740,24 @@ change together.
   `features/shared/hooks/usePhotoCapture.ts` (attach injected) back both roles; the valet and
   washer copies are deleted; `proof-upload.test.tsx` and `photo-slot.test.tsx` run against the
   shared hook.
+
+### S-39 — Framed slot borders sit under the 3:1 non-text contrast floor
+
+- **Status:** `open`
+- **Found in:** task 14 task-8 (service menu editor), design audit
+- **Surface:** mobile, tokens
+
+The evidence pair's empty frame (`EvidencePair.tsx`, `frameEmpty`) and the menu row's price
+slots (`ServiceRow.tsx`, `slot` / `slotEmpty`, which rhyme with it on purpose) draw their
+boundary in `colors.borderStrong` `#CBD5E1` (1.48:1 on white) or `colors.border` `#E2E8F0`.
+WCAG 1.4.11 asks 3:1 for the visual information needed to identify a component. Today the
+label (CAR / BIKE, "Needed to start"), the ₹ prefix and the placeholder carry identification,
+so this is not a blocker, but the frame itself is faint in sunlight — the washer's working
+condition.
+
+- **Why deferred:** the fix is a token decision (a `borderInput` at ≥3:1, or darkening
+  `borderStrong`) that moves every bordered control in the app, and the two washer components
+  must change together to keep their rhyme. That wants its own look on a device, not a rider
+  on the menu task.
+- **Done means:** the slot and frame boundaries measure ≥3:1 against their surface, asserted
+  in `packages/tokens/test/contrast.spec.ts`, and both components use the same token.

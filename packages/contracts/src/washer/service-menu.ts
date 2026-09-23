@@ -10,6 +10,19 @@ export const MIN_SERVICE_PRICE_PAISE = 1_000;
 /** Maximum service price: ₹9,999 (999,900 paise). */
 export const MAX_SERVICE_PRICE_PAISE = 999_900;
 
+/** Minimum service duration, in minutes. The mobile editor reads it; never retype it. */
+export const MIN_SERVICE_DURATION_MINUTES = 5;
+
+/** Maximum service duration, in minutes: an eight-hour detail is the longest job. */
+export const MAX_SERVICE_DURATION_MINUTES = 480;
+
+/** Both the read and the write side: a duration outside it is no service at all. */
+const serviceDurationSchema = z
+  .number()
+  .int()
+  .min(MIN_SERVICE_DURATION_MINUTES)
+  .max(MAX_SERVICE_DURATION_MINUTES);
+
 /**
  * A price must be positive, not merely non-negative.
  *
@@ -55,7 +68,7 @@ export const washServiceSchema = z.object({
   serviceName: carwashServiceNameSchema,
   vehicleType: vehicleTypeSchema,
   pricePaise: servicePriceSchema,
-  durationMinutes: z.number().int().min(5).max(480),
+  durationMinutes: serviceDurationSchema,
   isActive: z.boolean(),
 });
 
@@ -78,7 +91,7 @@ export type WashServiceMenu = z.infer<typeof washServiceMenuSchema>;
 export const upsertWashServiceSchema = z.object({
   carPricePaise: boundedServicePriceSchema,
   bikePricePaise: boundedServicePriceSchema,
-  durationMinutes: z.number().int().min(5).max(480),
+  durationMinutes: serviceDurationSchema,
   isActive: z.boolean(),
 });
 
