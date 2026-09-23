@@ -47,6 +47,7 @@ export {
   nextCarwashStatus,
   isTerminalCarwashStatus,
   LIVE_CARWASH_STATUSES,
+  PHOTO_SLOT_OPEN_STATUSES,
   IllegalCarwashTransitionError,
   parseCarwashJobStatus,
 } from './lifecycle.js';

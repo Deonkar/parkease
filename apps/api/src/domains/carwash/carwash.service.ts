@@ -10,6 +10,7 @@ import type {
 } from '@parkease/contracts/enums';
 import {
   LIVE_CARWASH_STATUSES,
+  PHOTO_SLOT_OPEN_STATUSES,
   type WasherProfileView,
   washerProfileViewSchema,
 } from '@parkease/contracts/washer';
@@ -29,6 +30,7 @@ import type { TxHandle } from '../../platform/db/transaction.js';
 
 import {
   BookingNotWashEligibleError,
+  PhotoSlotClosedError,
   WashAlreadyRequestedError,
   WasherProfileNotFoundError,
 } from './errors.js';
@@ -382,6 +384,15 @@ export class CarwashService {
    * Separate from the status change because the upload is the slow,
    * failure-prone half on a phone outdoors: a partner who uploads and then
    * loses signal should not have to upload again to retry the transition.
+   *
+   * The status condition sits in the same UPDATE as the ownership one, so
+   * there is no read-then-write window in which the job can move between the
+   * check and the write (T7-S1). The DB's photo-gate CHECK only requires the
+   * photos to exist at completion; this is what makes them stop changing.
+   *
+   * `undefined` means "not this partner's job" and becomes a 404 — never a
+   * 409 that would confirm the job exists (R-SEC-04). Only the owner learns
+   * that the slot is closed.
    */
   async attachPhoto(
     jobId: string,
@@ -389,16 +400,22 @@ export class CarwashService {
     slot: 'before' | 'after',
     photoId: string,
   ): Promise<WashJobRow | undefined> {
+    const mine = and(eq(washJobs.id, jobId), eq(washJobs.washerUserId, washerUserId));
+
     const [updated] = await this.db
       .update(washJobs)
       .set({
         ...(slot === 'before' ? { beforePhotoId: photoId } : { afterPhotoId: photoId }),
         updatedAt: new Date(),
       })
-      .where(and(eq(washJobs.id, jobId), eq(washJobs.washerUserId, washerUserId)))
+      .where(and(mine, inArray(washJobs.status, [...PHOTO_SLOT_OPEN_STATUSES[slot]])))
       .returning();
+    if (updated !== undefined) return updated;
 
-    return updated;
+    // Nothing written: say why, without saying more than the caller may know.
+    const [owned] = await this.db.select({ id: washJobs.id }).from(washJobs).where(mine);
+    if (owned === undefined) return undefined;
+    throw new PhotoSlotClosedError();
   }
 
   /**

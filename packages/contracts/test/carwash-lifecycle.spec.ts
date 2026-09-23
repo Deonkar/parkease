@@ -12,6 +12,7 @@ import {
   isTerminalCarwashStatus,
   nextCarwashStatus,
   parseCarwashJobStatus,
+  PHOTO_SLOT_OPEN_STATUSES,
 } from '../src/washer/lifecycle.js';
 
 /**
@@ -126,5 +127,25 @@ describe('IllegalCarwashTransitionError', () => {
    */
   it('is a plain Error, so no transport leaks into contracts', () => {
     expect(new IllegalCarwashTransitionError('washing', 'cancel')).toBeInstanceOf(Error);
+  });
+});
+
+/**
+ * T7-S1. The API's attach guard and the partner app's Retake button both read
+ * this, so it is asserted here, once, as the product rule it is.
+ */
+describe('PHOTO_SLOT_OPEN_STATUSES', () => {
+  it('opens the before slot from accept until washing starts', () => {
+    expect([...PHOTO_SLOT_OPEN_STATUSES.before]).toEqual(['accepted', 'en_route']);
+  });
+
+  it('opens the after slot only while washing', () => {
+    expect([...PHOTO_SLOT_OPEN_STATUSES.after]).toEqual(['washing']);
+  });
+
+  it('never opens a slot on a finished job', () => {
+    const open = [...PHOTO_SLOT_OPEN_STATUSES.before, ...PHOTO_SLOT_OPEN_STATUSES.after];
+
+    for (const status of open) expect(isTerminalCarwashStatus(status)).toBe(false);
   });
 });

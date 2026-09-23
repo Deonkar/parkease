@@ -144,13 +144,18 @@ const advance = (jobId: string, washerId: string, event: string) => {
   });
 };
 
-const attachPhoto = (jobId: string, washerId: string, slot: 'before' | 'after') => {
+const attachPhoto = (
+  jobId: string,
+  washerId: string,
+  slot: 'before' | 'after',
+  photoId = `wash/${slot}/abc123`,
+) => {
   asUser(washerId, ['washer']);
   return http.request({
     method: 'POST',
     url: `/api/v1/washer/jobs/${jobId}/${slot}-photo`,
     headers: key(),
-    payload: { photoId: `wash/${slot}/abc123` },
+    payload: { photoId },
   });
 };
 
@@ -539,6 +544,139 @@ describe('the photo gates', () => {
     });
 
     expect(res.status).toBe(400);
+  });
+});
+
+/**
+ * T7-S1. A photo is evidence of one moment, so each slot is writable only while
+ * that moment is the current one: `before` until washing starts, `after` while
+ * washing. Without this a partner could replace the before photo after the car
+ * was already clean, and the pair would no longer be evidence of anything.
+ */
+describe('photo slots close with the step they evidence', () => {
+  const photoIds = async (jobId: string) => {
+    const [row] = await h.sql<{ before: string | null; after: string | null }[]>`
+      SELECT before_photo_id AS before, after_photo_id AS after FROM wash_jobs WHERE id = ${jobId}
+    `;
+    return row;
+  };
+
+  it('accepts a before photo as soon as the job is accepted', async () => {
+    const washerId = await seedWasher();
+    const jobId = await openJob();
+    await accept(jobId, washerId);
+
+    const res = await attachPhoto(jobId, washerId, 'before');
+
+    expect(res.status).toBe(200);
+    expect(dataOf<{ beforePhotoId: string }>(res.body).beforePhotoId).toBe('wash/before/abc123');
+  });
+
+  it('lets the before photo be retaken while still on the way', async () => {
+    const washerId = await seedWasher();
+    const jobId = await openJob();
+    await accept(jobId, washerId);
+    await attachPhoto(jobId, washerId, 'before', 'wash/before/first');
+    await advance(jobId, washerId, 'en_route');
+
+    const res = await attachPhoto(jobId, washerId, 'before', 'wash/before/second');
+
+    expect(res.status).toBe(200);
+    expect((await photoIds(jobId))?.before).toBe('wash/before/second');
+  });
+
+  it('refuses a before photo once washing has started, and keeps the original', async () => {
+    const washerId = await seedWasher();
+    const jobId = await openJob();
+    await accept(jobId, washerId);
+    await advance(jobId, washerId, 'en_route');
+    await attachPhoto(jobId, washerId, 'before', 'wash/before/original');
+    await advance(jobId, washerId, 'start_washing');
+
+    const res = await attachPhoto(jobId, washerId, 'before', 'wash/before/replacement');
+
+    expect(res.status).toBe(409);
+    expect(errorOf(res.body).code).toBe('PHOTO_SLOT_CLOSED');
+    expect((await photoIds(jobId))?.before).toBe('wash/before/original');
+  });
+
+  it('refuses an after photo before washing has started', async () => {
+    const washerId = await seedWasher();
+    const jobId = await openJob();
+    await accept(jobId, washerId);
+    await advance(jobId, washerId, 'en_route');
+
+    const res = await attachPhoto(jobId, washerId, 'after');
+
+    expect(res.status).toBe(409);
+    expect(errorOf(res.body).code).toBe('PHOTO_SLOT_CLOSED');
+    expect((await photoIds(jobId))?.after).toBeNull();
+  });
+
+  it('refuses an after photo once the job is completed, and keeps the original', async () => {
+    const washerId = await seedWasher();
+    const jobId = await openJob();
+    await accept(jobId, washerId);
+    await advance(jobId, washerId, 'en_route');
+    await attachPhoto(jobId, washerId, 'before');
+    await advance(jobId, washerId, 'start_washing');
+    await attachPhoto(jobId, washerId, 'after', 'wash/after/original');
+    expect((await advance(jobId, washerId, 'complete')).status).toBe(200);
+
+    const res = await attachPhoto(jobId, washerId, 'after', 'wash/after/replacement');
+
+    expect(res.status).toBe(409);
+    expect(errorOf(res.body).code).toBe('PHOTO_SLOT_CLOSED');
+    expect((await photoIds(jobId))?.after).toBe('wash/after/original');
+  });
+
+  it('refuses a photo on a cancelled job', async () => {
+    const washerId = await seedWasher();
+    const jobId = await openJob();
+    await accept(jobId, washerId);
+    asUser(h.driverId, ['driver']);
+    const cancelled = await http.request({
+      method: 'POST',
+      url: `/api/v1/driver/carwash/requests/${jobId}/cancel`,
+      headers: key(),
+      payload: {},
+    });
+    expect(cancelled.status).toBe(200);
+
+    const res = await attachPhoto(jobId, washerId, 'before');
+
+    expect(res.status).toBe(409);
+    expect(errorOf(res.body).code).toBe('PHOTO_SLOT_CLOSED');
+  });
+
+  it('never says so about another partner s job — that is a 404 (R-SEC-04)', async () => {
+    const washerId = await seedWasher();
+    const stranger = await seedWasher({ metresAway: 900 });
+    const jobId = await openJob();
+    await accept(jobId, washerId);
+    await advance(jobId, washerId, 'en_route');
+    await attachPhoto(jobId, washerId, 'before', 'wash/before/owner');
+    await advance(jobId, washerId, 'start_washing');
+
+    // Both slot states: open for the owner (after) and closed for everybody
+    // (before). Neither may tell a stranger the job exists.
+    const open = await attachPhoto(jobId, stranger, 'after');
+    const closed = await attachPhoto(jobId, stranger, 'before');
+
+    expect(open.status).toBe(404);
+    expect(closed.status).toBe(404);
+    expect(errorOf(closed.body).code).not.toBe('PHOTO_SLOT_CLOSED');
+    const ids = await photoIds(jobId);
+    expect(ids?.before).toBe('wash/before/owner');
+    expect(ids?.after).toBeNull();
+  });
+
+  it('answers 404 for a job that does not exist', async () => {
+    const washerId = await seedWasher();
+
+    const res = await attachPhoto(uuidv7(), washerId, 'before');
+
+    expect(res.status).toBe(404);
   });
 });
 

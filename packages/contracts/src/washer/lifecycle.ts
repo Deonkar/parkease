@@ -104,6 +104,26 @@ export const LIVE_CARWASH_STATUSES: readonly CarwashJobStatus[] = [
 ];
 
 /**
+ * When each half of the evidence pair may be written (§13.8).
+ *
+ * A photo is evidence of one moment, so its slot is open only while that
+ * moment is the current one: `before` from accept until washing starts, and
+ * `after` only while washing. Once washing has started the car's prior
+ * condition is gone, and once the job is complete the pair is the record — a
+ * replacement then is not a retake, it is an edit to the evidence.
+ *
+ * The API's attach guard enforces it and the partner app's Retake offer
+ * mirrors it; both read this, so the button can never promise a write the
+ * server will refuse.
+ */
+export const PHOTO_SLOT_OPEN_STATUSES: Readonly<
+  Record<'before' | 'after', readonly CarwashJobStatus[]>
+> = {
+  before: [Status.ACCEPTED, Status.EN_ROUTE],
+  after: [Status.WASHING],
+};
+
+/**
  * Not an HTTP failure and not friendly copy: reaching this means a caller tried
  * a move the machine forbids, which is a bug or a stale client, never a routine
  * outcome. Each deployable wraps it in whatever its transport calls a conflict.
