@@ -6,6 +6,15 @@
  * the same reason `location/health.ts` sits outside its component.
  */
 
+import {
+  canAcceptWork,
+  verificationStateFor,
+  type BannerTone,
+  type VerificationBanner,
+} from '@/features/shared/verification';
+
+export type { BannerTone, VerificationBanner };
+
 /**
  * How far ahead to warn about a licence.
  *
@@ -17,15 +26,6 @@
 export const LICENCE_WARNING_DAYS = 45;
 
 const DAY_MS = 86_400_000;
-
-export type BannerTone = 'info' | 'error';
-
-export interface VerificationBanner {
-  readonly tone: BannerTone;
-  readonly title: string;
-  readonly body: string;
-  readonly action: string | null;
-}
 
 export interface VerificationView {
   /** Whether the app should let this valet accept a job. */
@@ -42,13 +42,15 @@ export interface VerificationView {
  * person behind someone's steering wheel. Unknown means not permitted.
  */
 export function describeVerification(status: string): VerificationView {
-  switch (status) {
+  const canAccept = canAcceptWork(status);
+
+  switch (verificationStateFor(status)) {
     case 'verified':
-      return { canAccept: true, banner: null };
+      return { canAccept, banner: null };
 
     case 'pending':
       return {
-        canAccept: false,
+        canAccept,
         banner: {
           tone: 'info',
           title: 'Verification in progress',
@@ -59,7 +61,7 @@ export function describeVerification(status: string): VerificationView {
 
     case 'unverified':
       return {
-        canAccept: false,
+        canAccept,
         banner: {
           tone: 'info',
           title: 'Finish setting up your account',
@@ -70,7 +72,7 @@ export function describeVerification(status: string): VerificationView {
 
     case 'rejected':
       return {
-        canAccept: false,
+        canAccept,
         banner: {
           tone: 'error',
           title: 'Your documents were not approved',
@@ -81,7 +83,7 @@ export function describeVerification(status: string): VerificationView {
 
     default:
       return {
-        canAccept: false,
+        canAccept,
         banner: {
           tone: 'info',
           title: 'Verification in progress',
@@ -146,6 +148,6 @@ export type DocumentState = 'verified' | 'pending' | 'failed' | 'missing';
  */
 export function documentStateFor(verificationStatus: string, hasDocument: boolean): DocumentState {
   if (!hasDocument) return 'missing';
-  if (describeVerification(verificationStatus).canAccept) return 'verified';
+  if (canAcceptWork(verificationStatus)) return 'verified';
   return verificationStatus === 'rejected' ? 'failed' : 'pending';
 }
