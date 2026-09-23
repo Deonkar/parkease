@@ -636,3 +636,23 @@ id, not blamed on the caller. Task-3's review found exactly this: a negative per
   `ResponseContractError` thrown by a shared response-parse helper, or request parsing moved to
   a pipe that tags its `ZodError`), the filter maps them to `500 INTERNAL_ERROR`, and an HTTP
   test proves a malformed request still answers 400 while a malformed response answers 500.
+
+### S-34 — A wash offer carries no address and no duration, so the card cannot show either
+
+- **Status:** `open`
+- **Found in:** task 14 task-6 (washer offers screen)
+- **Surface:** contracts, api, mobile
+
+Direction "Bay" (spec §2, mockup B1) draws each offer with the space's address and the job's
+duration. `washJobOfferSchema` (`packages/contracts/src/washer/job-offer.ts`) has neither: only
+`spaceLocation` (a point), `distanceM`, `serviceName`, `vehicleType` and `earningsPaise`. The
+card ships without an address line, and takes its duration chip from the partner's OWN menu row
+for that service and vehicle (`useServiceMenu`), which is the row the server priced the earnings
+from, so the number is the partner's own quote; it is dropped when the menu has no row.
+
+- **Why deferred:** adding fields to the offer is a contract + candidate-query change on the
+  server (task 13's surface), not a screen change; task 6 is mobile-only.
+- **Done means:** `washJobOfferSchema` gains `spaceAddress` (and `durationMinutes` snapshotted
+  from the priced menu row), the offers query selects them, `carwash-http.spec.ts` asserts both
+  on `GET /washer/jobs/offers`, and `WashOfferCard` renders the address under the vehicle line
+  and reads duration from the offer instead of the menu lookup in `app/(washer)/offers.tsx`.
