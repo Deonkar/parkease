@@ -7,16 +7,16 @@ import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Alert, Linking, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAnnounce } from '@/features/shared/hooks/useAnnounce';
 import { resolveScreenState } from '@/features/shared/screen-state';
 import { acceptOutcomeFor } from '@/features/washer/action-outcomes';
 import { isUnregisteredWasher, loadFailureCopy } from '@/features/washer/api/errors';
 import { OnlineRail } from '@/features/washer/components/OnlineRail';
-import { ProfileGear } from '@/features/washer/components/ProfileGear';
+import { ReadableColumn } from '@/features/washer/components/ReadableColumn';
 import { RefreshNotice } from '@/features/washer/components/RefreshNotice';
 import { VerificationNotice } from '@/features/washer/components/VerificationNotice';
+import { WasherHeader } from '@/features/washer/components/WasherHeader';
 import { WashOfferCard } from '@/features/washer/components/WashOfferCard';
 import {
   useAcceptWash,
@@ -107,7 +107,6 @@ function Separator() {
  * layout; this screen reads it and never starts a second one.
  */
 export default function WasherOffersScreen() {
-  const insets = useSafeAreaInsets();
   const presence = usePresence();
   const profile = useWasherProfile();
   const active = useActiveWash();
@@ -443,31 +442,15 @@ export default function WasherOffersScreen() {
 
   return (
     <View style={styles.root}>
-      <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-        <Text style={styles.brand} accessibilityRole="header">
-          Car Wash
-        </Text>
-        <ProfileGear />
-      </View>
-      {content()}
+      {/* The tab's own name (M13): the bar says Offers, so the header does. */}
+      <WasherHeader title="Offers" />
+      <ReadableColumn>{content()}</ReadableColumn>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surfaceSecondary },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.base,
-    // The gear's 48dp target carries its own vertical room.
-    paddingBottom: spacing.xs,
-    backgroundColor: colors.surface,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  brand: { fontSize: fontSize.lg, fontWeight: fontWeight.bold, color: colors.text },
   body: { flex: 1 },
   skeletons: { padding: spacing.base, gap: spacing.md },
   list: { paddingHorizontal: spacing.base, paddingBottom: spacing.xl },

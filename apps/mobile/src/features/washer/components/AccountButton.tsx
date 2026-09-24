@@ -4,15 +4,19 @@ import { router } from 'expo-router';
 import { Pressable, StyleSheet } from 'react-native';
 
 /**
- * The header gear of §14.2–§14.7. Profile left the tab bar to keep it at the
- * four tabs of §14.3, so this is how a partner reaches their documents,
- * Switch Role, Settings and Sign Out.
+ * The header's way to the partner's Profile (§14.2–§14.7). Profile left the tab
+ * bar to keep it at the four tabs of §14.3, so this is how a partner reaches
+ * their documents, Switch role, Settings and Sign out.
+ *
+ * An account icon, not a gear (M13): it opens the profile, and a gear promises
+ * Settings. The testID is the old one, because the walkthrough and the Maestro
+ * flows select by it.
  */
-export function ProfileGear() {
+export function AccountButton() {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel="Profile and settings"
+      accessibilityLabel="Your profile"
       onPress={() => {
         router.push('/(washer)/profile');
       }}
@@ -20,7 +24,11 @@ export function ProfileGear() {
       style={styles.root}
       testID="profile-gear"
     >
-      <MaterialCommunityIcons name="cog-outline" size={24} color={colors.textSecondary} />
+      <MaterialCommunityIcons
+        name="account-circle-outline"
+        size={24}
+        color={colors.textSecondary}
+      />
     </Pressable>
   );
 }

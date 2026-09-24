@@ -107,3 +107,27 @@ describe('the active screen s money', () => {
     expect(code).not.toMatch(/reduce\(/);
   });
 });
+
+/**
+ * M12: getting to the car. While the job is on its "On the way" step, Navigate
+ * is a real, labelled 48dp action next to the primary action, not a 44dp icon
+ * in the header.
+ */
+describe('navigating to the car', () => {
+  const source = readFileSync(
+    join(process.cwd(), 'app', '(washer)', 'active', 'index.tsx'),
+    'utf8',
+  );
+
+  it('is offered on the "On the way" step, beside the primary action', () => {
+    expect(source).toMatch(/gettingThere = currentStepFor\(job\.status\) === 0/);
+    expect(source).toMatch(
+      /\{gettingThere \? \([\s\S]{0,600}testID="active-navigate"[\s\S]{0,900}<WashActionBar/,
+    );
+  });
+
+  it('says what it does in words, at the touch target', () => {
+    expect(source).toMatch(/testID="active-navigate"[\s\S]{0,700}Navigate to the car/);
+    expect(source).toMatch(/navigate: \{[^}]*minHeight: touchTarget/);
+  });
+});

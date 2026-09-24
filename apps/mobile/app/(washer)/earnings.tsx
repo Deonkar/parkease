@@ -5,14 +5,15 @@ import { ErrorState, Skeleton } from '@parkease/ui-native';
 import { FlashList } from '@shopify/flash-list';
 import { useState, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { resolveScreenState } from '@/features/shared/screen-state';
 import { loadFailureCopy } from '@/features/washer/api/errors';
 import { EarningsLine } from '@/features/washer/components/EarningsLine';
 import { EarningsSummary } from '@/features/washer/components/EarningsSummary';
 import { PeriodTabs } from '@/features/washer/components/PeriodTabs';
+import { ReadableColumn } from '@/features/washer/components/ReadableColumn';
 import { RefreshNotice } from '@/features/washer/components/RefreshNotice';
+import { WasherHeader } from '@/features/washer/components/WasherHeader';
 import { useWasherEarnings } from '@/features/washer/hooks/useWasherQueries';
 import { PERIOD_LABELS } from '@/features/washer/labels';
 import { assertNever } from '@/lib/assert-never';
@@ -64,7 +65,6 @@ const renderLine = ({ item }: { readonly item: WasherEarningsLine }) => (
  * shows a skeleton rather than the previous period's money under the new tab.
  */
 export default function WasherEarningsScreen() {
-  const insets = useSafeAreaInsets();
   const [period, setPeriod] = useState<WasherEarningsPeriod>('week');
   const earnings = useWasherEarnings(period);
   // Only a pull shows the pull indicator; a background refetch stays silent.
@@ -139,27 +139,16 @@ export default function WasherEarningsScreen() {
 
   return (
     <View style={styles.root}>
-      <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-        <Text style={styles.title} accessibilityRole="header">
-          Earnings
-        </Text>
+      <WasherHeader title="Earnings">
         <PeriodTabs value={period} onChange={setPeriod} />
-      </View>
-      {content()}
+      </WasherHeader>
+      <ReadableColumn>{content()}</ReadableColumn>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surfaceSecondary },
-  header: {
-    gap: spacing.sm,
-    paddingHorizontal: spacing.base,
-    backgroundColor: colors.surface,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  title: { fontSize: fontSize.lg, fontWeight: fontWeight.bold, color: colors.text },
   skeletons: { padding: spacing.base, gap: spacing.md },
   // FlashList honours padding here, not gap: rows are spaced by the Separator.
   list: { padding: spacing.base, paddingBottom: spacing.xl },

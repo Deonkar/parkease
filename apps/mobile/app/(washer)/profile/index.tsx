@@ -5,6 +5,7 @@ import {
   elevation,
   fontSize,
   fontWeight,
+  layout,
   lineHeight,
   radius,
   spacing,
@@ -25,6 +26,7 @@ import { PhotoField } from '@/features/washer/components/PhotoField';
 import { RefreshNotice } from '@/features/washer/components/RefreshNotice';
 import { VerificationNotice } from '@/features/washer/components/VerificationNotice';
 import { WashCamera } from '@/features/washer/components/WashCamera';
+import { WasherHeader } from '@/features/washer/components/WasherHeader';
 import { useCameraGate } from '@/features/washer/hooks/useCameraGate';
 import { useHeldUploads } from '@/features/washer/hooks/useHeldUploads';
 import { useRegistration } from '@/features/washer/hooks/useRegistration';
@@ -291,14 +293,13 @@ export default function WasherProfileScreen() {
 
   return (
     <View style={styles.root}>
+      {/* The same header as the four tabs, at the same scale (M7); no account
+          button, because this IS the account. */}
+      <WasherHeader title="Profile" account={false} />
       <ScrollView
-        contentContainerStyle={[styles.body, { paddingTop: insets.top + spacing.xl }]}
+        contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + spacing['2xl'] }]}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.title} accessibilityRole="header">
-          Profile
-        </Text>
-
         {content()}
 
         <View style={styles.account}>
@@ -352,8 +353,15 @@ export default function WasherProfileScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surfaceSecondary },
-  body: { paddingHorizontal: spacing.base, paddingBottom: spacing['2xl'], gap: spacing.base },
-  title: { fontSize: fontSize['2xl'], fontWeight: fontWeight.bold, color: colors.text },
+  body: {
+    // M6: a readable column on a tablet or a landscape phone.
+    width: '100%',
+    maxWidth: layout.contentMaxWidth,
+    alignSelf: 'center',
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.base,
+    gap: spacing.base,
+  },
   skeleton: { gap: spacing.md },
   notice: {
     flexDirection: 'row',

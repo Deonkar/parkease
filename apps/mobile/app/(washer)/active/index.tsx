@@ -5,6 +5,7 @@ import {
   elevation,
   fontSize,
   fontWeight,
+  layout,
   radius,
   spacing,
   touchTarget,
@@ -22,10 +23,12 @@ import { advanceOutcomeFor } from '@/features/washer/action-outcomes';
 import { loadFailureCopy } from '@/features/washer/api/errors';
 import { ElapsedBar, elapsedMinutesSince } from '@/features/washer/components/ElapsedBar';
 import { EvidencePair, type EvidenceSlotView } from '@/features/washer/components/EvidencePair';
+import { ReadableColumn } from '@/features/washer/components/ReadableColumn';
 import { RefreshNotice } from '@/features/washer/components/RefreshNotice';
-import { StepRail } from '@/features/washer/components/StepRail';
+import { StepRail, currentStepFor } from '@/features/washer/components/StepRail';
 import { WashActionBar } from '@/features/washer/components/WashActionBar';
 import { WashCamera } from '@/features/washer/components/WashCamera';
+import { WasherHeader } from '@/features/washer/components/WasherHeader';
 import { usesDevCamera } from '@/features/washer/dev-camera';
 import { usePhotoSlot, type PhotoSlotCapture } from '@/features/washer/hooks/usePhotoSlot';
 import {
@@ -215,7 +218,6 @@ export default function WasherActiveScreen() {
   );
 
   const ready = (job: WashJobView): ReactNode => {
-    const service = SERVICE_LABELS[job.serviceName];
     const durationMinutes =
       menu.data?.services.find(
         (row) => row.serviceName === job.serviceName && row.vehicleType === job.vehicleType,
@@ -253,36 +255,13 @@ export default function WasherActiveScreen() {
             ),
             durationMinutes,
           };
-    const finished = job.status === 'completed' || job.status === 'cancelled';
+    // M12: on the "On the way" step the partner's next move is to reach the
+    // car, so directions sit beside the primary action, labelled and at the
+    // touch target, rather than as a small icon in the header.
+    const gettingThere = currentStepFor(job.status) === 0;
 
     return (
       <>
-        <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-          <View style={styles.headerText}>
-            <Text style={styles.title} accessibilityRole="header">
-              {`${service} · ${VEHICLE_LABELS[job.vehicleType]}`}
-            </Text>
-            <Text style={styles.subtitle}>Your active job</Text>
-          </View>
-          {finished ? null : (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Navigate to the car"
-              onPress={() => {
-                navigateTo(job);
-              }}
-              style={styles.navigate}
-              testID="active-navigate"
-            >
-              <MaterialCommunityIcons
-                name="navigation-variant-outline"
-                size={20}
-                color={colors.primary}
-              />
-            </Pressable>
-          )}
-        </View>
-
         {active.isError ? (
           // The job stays on screen (ruling T7-I2); this only says the latest
           // refresh failed, and offers another.
@@ -293,7 +272,7 @@ export default function WasherActiveScreen() {
           />
         ) : null}
 
-        <ScrollView contentContainerStyle={styles.body}>
+        <ScrollView contentContainerStyle={[styles.body, styles.column]}>
           <EvidencePair
             before={slotView('before')}
             after={slotView('after')}
@@ -335,58 +314,89 @@ export default function WasherActiveScreen() {
 
         {action === null ? null : (
           <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
-            {actionNotice === null ? null : (
-              <View style={styles.actionNotice} testID="active-action-notice">
-                <MaterialCommunityIcons
-                  name="alert-circle-outline"
-                  size={18}
-                  color={colors.errorInk}
-                />
-                <Text style={styles.actionNoticeText}>{actionNotice}</Text>
-              </View>
-            )}
-            <WashActionBar
-              action={action}
-              lockReason={lockReasonFor(action, attached)}
-              pending={advance.isPending}
-              onPress={() => {
-                runAction(job);
-              }}
-            />
+            <View style={styles.column}>
+              {actionNotice === null ? null : (
+                <View style={styles.actionNotice} testID="active-action-notice">
+                  <MaterialCommunityIcons
+                    name="alert-circle-outline"
+                    size={18}
+                    color={colors.errorInk}
+                  />
+                  <Text style={styles.actionNoticeText}>{actionNotice}</Text>
+                </View>
+              )}
+              {gettingThere ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Navigate to the car"
+                  onPress={() => {
+                    navigateTo(job);
+                  }}
+                  android_ripple={{ color: colors.primarySoft }}
+                  style={styles.navigate}
+                  testID="active-navigate"
+                >
+                  <MaterialCommunityIcons
+                    name="navigation-variant-outline"
+                    size={20}
+                    color={colors.primary}
+                  />
+                  <Text style={styles.navigateLabel}>Navigate to the car</Text>
+                </Pressable>
+              ) : null}
+              <WashActionBar
+                action={action}
+                lockReason={lockReasonFor(action, attached)}
+                pending={advance.isPending}
+                onPress={() => {
+                  runAction(job);
+                }}
+              />
+            </View>
           </View>
         )}
       </>
     );
   };
 
+  const shown = active.data;
+  const jobTitle =
+    shown === undefined || shown === null
+      ? null
+      : `${SERVICE_LABELS[shown.serviceName]} · ${VEHICLE_LABELS[shown.vehicleType]}`;
+
   const content = (): ReactNode => {
     const screen = resolveScreenState(active);
     switch (screen) {
       case 'loading':
         return (
-          <View style={{ paddingTop: insets.top }}>
+          <ReadableColumn>
             <ActiveSkeleton />
-          </View>
+          </ReadableColumn>
         );
       case 'error':
         return (
-          <ErrorState
-            title="Couldn't load your job"
-            body={loadFailureCopy(active.error)}
-            onAction={() => void active.refetch()}
-          />
+          <ReadableColumn>
+            <ErrorState
+              title="Couldn't load your job"
+              body={loadFailureCopy(active.error)}
+              onAction={() => void active.refetch()}
+            />
+          </ReadableColumn>
         );
       case 'empty':
         return (
-          <EmptyState
-            icon={<EmptyIcon name="car-wash" />}
-            title="No active job"
-            body="Accept a wash from Offers and it will appear here, with its photos and steps."
-            actionLabel="Go to offers"
-            onAction={() => {
-              router.navigate('/(washer)/offers');
-            }}
-          />
+          <ReadableColumn>
+            <EmptyState
+              icon={<EmptyIcon name="car-wash" />}
+              title="No active job"
+              body="Accept a wash from Offers and it will appear here, with its photos and steps."
+              actionLabel="Go to offers"
+              onAction={() => {
+                router.navigate('/(washer)/offers');
+              }}
+            />
+          </ReadableColumn>
         );
       case 'ready':
         return active.data ? ready(active.data) : null;
@@ -397,6 +407,8 @@ export default function WasherActiveScreen() {
 
   return (
     <View style={styles.root}>
+      {/* The tab's own name (M13); the job is the subtitle once there is one. */}
+      <WasherHeader title="Active" {...(jobTitle === null ? {} : { subtitle: jobTitle })} />
       {content()}
       {/* Outside the state switch, so a refetch that errors while the camera is
           open cannot tear the camera down mid-shot. */}
@@ -413,28 +425,21 @@ export default function WasherActiveScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surfaceSecondary },
-  header: {
+  navigate: {
+    minHeight: touchTarget,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    paddingHorizontal: spacing.base,
-    paddingBottom: spacing.md,
-    backgroundColor: colors.surface,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  headerText: { flex: 1, gap: spacing.xs },
-  title: { fontSize: fontSize.lg, fontWeight: fontWeight.bold, color: colors.text },
-  subtitle: { fontSize: fontSize.sm, color: colors.textTertiary },
-  navigate: {
-    width: touchTarget,
-    height: touchTarget,
-    alignItems: 'center',
     justifyContent: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: colors.borderStrong,
+    borderColor: colors.primary,
+    backgroundColor: colors.surface,
   },
+  navigateLabel: { fontSize: fontSize.base, fontWeight: fontWeight.bold, color: colors.primary },
+  // M6: the job reads at a readable width on a tablet or a landscape phone.
+  column: { width: '100%', maxWidth: layout.contentMaxWidth, alignSelf: 'center' },
   body: { padding: spacing.base, gap: spacing.lg },
   card: {
     backgroundColor: colors.surface,

@@ -30,9 +30,14 @@ describe('the washer route structure', () => {
     expect(layout).toContain('<WasherPresenceProvider>');
   });
 
-  it('reaches the profile from a header gear on offers and on the menu', () => {
+  it('reaches the profile from the account button in the one washer header (M13)', () => {
+    const header = readFileSync(
+      join(process.cwd(), 'src', 'features', 'washer', 'components', 'WasherHeader.tsx'),
+      'utf8',
+    );
+    expect(code(header)).toContain('<AccountButton');
     for (const screen of ['offers.tsx', 'menu.tsx']) {
-      expect(code(read(screen)), screen).toContain('<ProfileGear');
+      expect(code(read(screen)), screen).toContain('<WasherHeader');
     }
   });
 });

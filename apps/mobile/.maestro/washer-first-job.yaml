@@ -26,7 +26,7 @@ tags:
     permissions:
       all: allow
 
-# Offers tab, header "Car Wash".
+# Offers tab, header "Offers".
 - extendedWaitUntil:
     visible:
       id: 'online-rail'
@@ -66,7 +66,8 @@ tags:
 
 # Accept pushes the Active tab. Status `accepted`: first action is On My Way.
 - extendedWaitUntil:
-    visible: 'Your active job'
+    visible:
+      id: 'wash-primary-action'
     timeout: 15000
 - assertVisible: 'Before & after photos'
 - assertVisible: 'On the way, current step'
