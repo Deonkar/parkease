@@ -1,0 +1,145 @@
+# A verified washer's first job, end to end: online -> accept -> On My Way ->
+# before photo -> Start Washing -> after photo -> Mark Complete -> Earnings.
+#
+# NOT YET EXECUTED. Preconditions and how to run: see README.md.
+# Every selector below is a testID or visible string read from the screens:
+#   app/(washer)/offers.tsx, app/(washer)/active/index.tsx, app/(washer)/earnings.tsx
+#   and src/features/washer/components/*.
+appId: in.parkease.app
+name: Washer - first job, offer to earnings
+tags:
+  - washer
+  - e2e
+---
+# No clearState: the session (Firebase phone auth) is a precondition, and
+# clearing app data would sign the washer out.
+# `permissions: { all: allow }` is Maestro's documented way to grant runtime
+# permissions at launch, so no location or camera dialog appears mid-flow.
+- launchApp:
+    appId: in.parkease.app
+    permissions:
+      all: allow
+
+# Offers tab, header "Car Wash".
+- extendedWaitUntil:
+    visible:
+      id: 'online-rail'
+    timeout: 20000
+- assertNotVisible:
+    id: 'verification-notice'
+
+# Go online. Presence may resume on launch, so only tap the switch if the rail
+# still says "Offline" — tapping an online switch would take the washer OFFLINE.
+- runFlow:
+    when:
+      visible: 'Offline'
+    commands:
+      - tapOn:
+          id: 'online-switch'
+# Safety net if the launch grant did not cover location: Android's location
+# dialog. `optional` so the flow continues when no dialog is shown.
+- tapOn:
+    text: 'While using the app'
+    optional: true
+- extendedWaitUntil:
+    visible: 'Online · taking jobs'
+    timeout: 15000
+
+# Offers poll every 15s while online; wait for the seeded wash request's offer.
+- extendedWaitUntil:
+    visible:
+      id: 'wash-offer-card'
+    timeout: 60000
+- assertVisible: 'YOU EARN'
+- assertVisible:
+    id: 'offer-earnings'
+- tapOn:
+    id: 'offer-accept'
+    index: 0
+
+# Accept pushes the Active tab. Status `accepted`: first action is On My Way.
+- extendedWaitUntil:
+    visible: 'Your active job'
+    timeout: 15000
+- assertVisible: 'Before & after photos'
+- assertVisible: 'On the way, current step'
+- tapOn:
+    id: 'wash-primary-action'
+    text: 'On My Way'
+
+# en_route: Start Washing is locked until the before photo is attached.
+- extendedWaitUntil:
+    visible: 'Take the before photo to unlock'
+    timeout: 15000
+
+# Before photo. The empty frame is itself the camera button.
+- tapOn:
+    id: 'evidence-before-capture'
+# Camera permission was granted at launch; `optional` taps cover the Android
+# camera dialog if a device shows one anyway.
+- tapOn:
+    text: 'While using the app'
+    optional: true
+- tapOn:
+    text: 'Allow'
+    optional: true
+- extendedWaitUntil:
+    visible: 'Cancel'
+    timeout: 10000
+# Shutter: WashCamera's shutter has no testID, only the accessibility label
+# "Take the before photo" — the same label as the frame under the modal. The
+# `rightOf: Cancel` anchor picks the shutter, which sits beside Cancel in the
+# camera bar (Maestro orders relative matches by distance to the anchor).
+- tapOn:
+    text: 'Take the before photo'
+    rightOf:
+      text: 'Cancel'
+# Compress + signed upload + attach; can take a while on an emulator network.
+- extendedWaitUntil:
+    visible: 'Before · done'
+    timeout: 45000
+
+- tapOn:
+    id: 'wash-primary-action'
+    text: 'Start Washing'
+- extendedWaitUntil:
+    visible: 'Washing, current step'
+    timeout: 15000
+- assertVisible: 'Take the after photo to unlock'
+
+# After photo — slot opens only once washing.
+- tapOn:
+    id: 'evidence-after-capture'
+- extendedWaitUntil:
+    visible: 'Cancel'
+    timeout: 10000
+# Shutter by label, anchored to Cancel as above.
+- tapOn:
+    text: 'Take the after photo'
+    rightOf:
+      text: 'Cancel'
+- extendedWaitUntil:
+    visible: 'After · done'
+    timeout: 45000
+
+- tapOn:
+    id: 'wash-primary-action'
+    text: 'Mark Complete'
+- extendedWaitUntil:
+    visible: 'Job complete. Nice work.'
+    timeout: 15000
+
+# Earnings tab: the job is listed with its "You earned" amount.
+- tapOn: 'Earnings'
+- extendedWaitUntil:
+    visible:
+      id: 'earnings-summary'
+    timeout: 20000
+- assertVisible:
+    id: 'period-tab-week'
+- assertVisible: 'COMPLETED WASHES'
+- assertVisible:
+    id: 'earnings-line'
+- assertVisible: 'You earned'
+- assertVisible:
+    id: 'line-net'

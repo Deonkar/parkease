@@ -523,6 +523,44 @@ document.
   location, identity documents, ledger), a job enforces it, and a user deletion anonymises
   what it cannot remove instead of failing on a foreign key.
 
+### S-27 — Washer presence is foreground-only
+
+- **Status:** `open`
+- **Found in:** task 14 task-6 (the washer online switch and heartbeat); carried as a
+  `ponytail:` comment in `apps/mobile/src/features/washer/presence.ts`
+- **Surface:** mobile
+
+The washer's heartbeat runs on JS timers, and Android stops those when the app is backgrounded.
+A washer who switches to another app stops beating. They fall out of dispatch
+`WASH_ONLINE_HEARTBEAT_WINDOW_SECONDS` (90s, `packages/contracts/src/washer/dispatch.ts`)
+later, while the switch they left still reads **Online**. The offers screen's empty state tells
+them to keep ParkEase open, but that is copy, not a fix. Valet already solves this with an
+`expo-task-manager` background location task (`apps/mobile/src/features/valet/location/task.ts`).
+
+- **Why deferred:** the fix needs a background task, a foreground-service notification, and
+  the Play background-location declaration that S-05 already tracks for valet. That is a
+  platform change, not screen work, and task 14 was scoped to the screens.
+- **Done means:** washer presence beats from an `expo-task-manager` background task, as valet
+  does, and `startPresence`'s API is unchanged. A test shows a backgrounded washer still posts a
+  heartbeat inside the window.
+
+### S-28 — `active/[jobId]` as a deep-link route
+
+- **Status:** `open`
+- **Found in:** task 14 design spec §5; task 7 deleted the route
+- **Surface:** mobile
+
+Task 14 removed `app/(washer)/active/[jobId].tsx`. `GET /washer/jobs/active` returns the one
+live job a partner can hold, so `active/index.tsx` never needs an id. That stops being true only
+if something outside the app has to open a _specific_ job. For example, a push notification
+("your customer cancelled") would need to land on that job even when it is no longer the live
+one.
+
+- **Why deferred:** nothing targets a job by id today, so the route would have no caller.
+- **Done means:** when push (or any other deep link) needs to target a specific job, an
+  `active/[jobId]` route reads that job by id through an ownership-checked endpoint, and a
+  Maestro or unit test opens it from a link.
+
 ### S-29 — `proof.ts`'s compression constants are now unused
 
 - **Status:** `open`
@@ -677,12 +715,17 @@ from, so the number is the partner's own quote; it is dropped when the menu has 
 `create-wash-order.command.ts:55`, `request-carwash.command.ts:40`, the valet `accept-job` /
 `advance-job` / `cancel-job` commands, and `roles/washer/jobs.controller.ts:136`.
 
-- **Why deferred:** the fix spans the global filter or every command's 404, and the shared
-  client hook used by the driver flows. That is cross-role, far outside one screen's fix round.
+The hook is also dead code, not only a matcher for a code that never arrives (task 14 task-11).
+`useMessageForError.ts` exports `messageForError`, and nothing anywhere in `apps/` or
+`packages/` imports it. Deleting the file is the smallest way to close its half of this row.
+Wiring it into the screens that should use it is the other way.
+
+- **Why deferred:** the fix spans the global filter or every command's 404, plus the shared
+  client hook. That is cross-role, far outside one screen's fix round.
 - **Done means:** shared error matching uses domain codes. Either every 404 the app routes on
   throws a domain error with a stable code, or the filter derives a code from the status when the
-  response has no `error` field (e.g. 404 → `NOT_FOUND`). `useMessageForError` matches only
-  codes the API actually emits, and an HTTP test pins the code for a bare 404.
+  response has no `error` field (e.g. 404 → `NOT_FOUND`). An HTTP test pins the code for a bare 404. `useMessageForError.ts` is either deleted or has callers and matches only codes the API
+  actually emits.
 
 ### S-36 — The step rail advances without its `spring.gentle` motion
 
@@ -849,3 +892,127 @@ collected in v1 (T10-D2).
   write both; readers move to `display_name`; the contract field is renamed; migration 2 drops
   `business_name` and makes `display_name NOT NULL`. A `PATCH /me` for an avatar is its own row
   if still wanted.
+
+### S-46 — `reversedPaise` will mislabel payouts once task 16 debits `owner_payable`
+
+- **Status:** `open`
+- **Found in:** task 14 task-3 / task-9 (earnings summary and screen)
+- **Surface:** api, contracts, mobile
+
+`washerEarningsSummarySchema.reversedPaise` (`packages/contracts/src/washer/job-view.ts`) is
+documented as "what cancellations clawed back". The earnings query counts every debit to the
+partner's `owner_payable` in the period. Today the only such debit is a cancellation reversal.
+Task 16's payouts will also debit `owner_payable`, and from then on a payout counts as
+`reversedPaise`. `EarningsSummary.tsx` would then tell a partner "After ₹X taken back for
+cancelled washes" about money they were paid.
+
+- **Why deferred:** payouts do not exist yet, so the figure is correct today. Splitting it now
+  would mean guessing the payout's ledger shape before task 16 designs it.
+- **Done means:** before task 16 ships, the earnings query separates payout debits from
+  cancellation reversals, for example by `txn` kind or account pair. The contract carries a
+  separate payouts figure (or excludes payouts from `reversedPaise`), and an integration test
+  posts a payout and a cancellation in the same period and checks that each lands in its own
+  figure.
+
+### S-47 — Service prices: the DB CHECK is looser than the contract bound
+
+- **Status:** `open`
+- **Found in:** task 14 task-8 (service menu)
+- **Surface:** database, contracts, mobile
+
+The write contract bounds a service price to ₹10–₹9,999 (`MIN_SERVICE_PRICE_PAISE` /
+`MAX_SERVICE_PRICE_PAISE`, `packages/contracts/src/washer/service-menu.ts`). The database check
+is only `wash_services_price_check CHECK (price_paise > 0)` (`0008_services.sql`), and the read
+schema accepts any positive price. A stored price outside the range can only get there from
+outside the API: a seed, a manual fix, or a pre-bound row. Such a row cannot be toggled off
+from the menu screen, because the toggle re-saves the server's prices through the bounded
+write schema and the save fails validation.
+
+- **Why deferred:** tightening a CHECK on a populated table needs an audit of existing rows
+  first. It also needs a migration reviewed with `postgres-migration-reviewer` (`NOT VALID`,
+  then `VALIDATE`), and task 8 was a mobile screen.
+- **Done means:** existing rows are audited and any out-of-range rows are fixed. Then either a
+  migration adds `CHECK (price_paise BETWEEN 1000 AND 999900)`, reviewed SAFE, or the toggle
+  becomes a toggle-only write that does not re-send prices. A test covers the out-of-range row.
+
+### S-48 — Valet screens keep stale data after a failed refresh with no notice
+
+- **Status:** `open`
+- **Found in:** task 14 task-7 review (ruling T7-I2, `resolveScreenState` returns `ready` for an
+  errored query that still holds data)
+- **Surface:** mobile
+
+`apps/mobile/src/features/shared/screen-state.ts` now keeps a screen on its data when a refetch
+fails. That is the right call, so a failed refresh no longer swaps a live job for an error
+screen. The washer active, earnings, menu and profile screens pair it with a `RefreshNotice`
+that says the latest refresh failed and offers another. Three screens do not: the valet active
+screen (`app/(valet)/active/index.tsx`) and both offers feeds (`app/(valet)/offers.tsx`,
+`app/(washer)/offers.tsx`). On those, a partner looks at data of unknown age with no sign that
+it is stale.
+
+- **Why deferred:** the valet screens were outside task 14's file list. The washer offers feed
+  also polls every 15 seconds, so its window of stale data is short. A notice there is still
+  owed.
+- **Done means:** each of the three screens shows a refresh notice when `isError` is true and
+  data is held. It uses a shared component (moved to `features/shared/` on this second role's
+  use, R-ARCH-07), and a test per screen renders the stale-with-error state.
+
+### S-49 — No endpoint writes a user's avatar
+
+- **Status:** `open`
+- **Found in:** task 14 task-10 (washer registration), ruling T10-D2; S-43 noted it
+- **Surface:** api, contracts, mobile
+
+`users.avatar_url` is read (`apps/api/src/domains/identity/repositories/user.repository.ts`) and
+`cloudinary.service.ts` has an `avatars` folder, but no endpoint writes the column. The gig
+registration's "profile photo" from §14.2 was therefore not built. Every role that shows a
+face has the same gap.
+
+- **Why deferred:** an avatar is a cross-role identity feature: one endpoint, one contract, and
+  every role's profile screen. It does not belong to the washer registration screens.
+- **Done means:** `PATCH /me` (or `PUT /me/avatar`) takes an upload id from the `avatars`
+  folder, checked as S-50 describes, and writes `users.avatar_url`. The gig registration and
+  profile screens collect and show it, and an HTTP test covers the write and its ownership
+  check.
+
+### S-50 — Upload ids are never verified server-side (security)
+
+- **Status:** `open`
+- **Found in:** task 14 task-11 review stack, security lens (the task-1 upload path and the
+  task-7 / task-10 attach endpoints)
+- **Surface:** api (washer, valet, owner)
+
+`attachWashPhotoSchema.photoId`, `submitWasherDocumentsSchema.idDocumentId` /
+`businessPhotoIds` and valet's `proofPhotoId` accept any string that matches the upload-id
+regex. Nothing checks three things: that the upload exists, that it belongs to the caller, and
+that it sits in the right folder. ID proof should be in `documents`, which uses private
+delivery. Two consequences follow:
+
+- A partner can reach `verification_status = 'pending'` with an id they made up.
+- An evidence photo, the before/after pair whose value is that it can't be forged, can point
+  at another user's upload.
+
+The regex blocks URLs. It does not establish ownership.
+
+- **Why deferred:** the fix is a new record of issued upload signatures, and the washer, valet
+  and owner attach paths would all have to check against it. That is a cross-role security
+  change with its own migration, not a fix inside the mobile screens.
+- **Done means:** the API records each signed upload (id, owner, folder) when it issues the
+  signature. Every attach endpoint checks the id against that record, and rejects an unknown
+  id, another user's id, or a wrong-folder id with a 4xx. An HTTP test covers each rejection.
+
+### S-51 — Valet location heartbeat idempotency keys are not UUIDs
+
+- **Status:** `chip`
+- **Found in:** task 14 task-11 review stack (while reading `apps/mobile/src/features/valet/api/valet.ts`)
+- **Surface:** mobile (valet), api
+
+`postFix` in `apps/mobile/src/features/valet/api/valet.ts` sends
+`Idempotency-Key: fix-<recordedAt>`. The server validates that header as a UUID and answers
+`400`, so every valet location heartbeat is dropped, and valets fall out of dispatch while
+their switch reads online. A separate background task has already been raised for it.
+
+- **Why deferred:** it is valet code, outside task 14's file list, and it has its own task.
+- **Done means:** that task lands. `postFix` sends a UUID key (one per fix, stable across that
+  fix's retries), and an HTTP-level test posts a fix through the real idempotency guard and
+  gets a 2xx.
