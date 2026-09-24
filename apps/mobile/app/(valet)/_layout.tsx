@@ -6,6 +6,7 @@ import type { ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/contexts/AuthContext';
+import { landingRouteFor } from '@/lib/landing-route';
 
 type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
 
@@ -37,7 +38,7 @@ export default function ValetLayout() {
 
   if (auth.status !== 'authenticated') return <Redirect href="/" />;
   if (auth.activeRole !== Role.VALET) {
-    return <Redirect href={`/(${auth.activeRole ?? 'auth'})`} />;
+    return <Redirect href={landingRouteFor(auth.activeRole)} />;
   }
 
   return (

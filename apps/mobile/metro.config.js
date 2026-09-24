@@ -10,6 +10,17 @@ const config = getDefaultConfig(projectRoot);
 
 config.watchFolders = [monorepoRoot];
 
+// Watching the whole monorepo means Metro crawls everything under it. `.claude/worktrees` holds
+// full checkouts, each with its own node_modules and its own copies of the @parkease/* packages,
+// so the first start sat on "Starting Metro Bundler" for minutes. None of these are app source.
+const escapeForRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+config.resolver.blockList = [
+  ...[].concat(config.resolver.blockList ?? []),
+  ...['.claude', '.superpowers', 'graphify-out'].map(
+    (dir) => new RegExp(`^${escapeForRegExp(path.resolve(monorepoRoot, dir))}[\\\\/]`),
+  ),
+];
+
 config.resolver.nodeModulesPaths = [
   path.resolve(projectRoot, 'node_modules'),
   path.resolve(monorepoRoot, 'node_modules'),

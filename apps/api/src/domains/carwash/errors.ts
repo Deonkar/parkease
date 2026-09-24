@@ -99,6 +99,25 @@ export class AfterPhotoRequiredError extends CarwashDomainError {
 }
 
 /**
+ * T7-S1. A photo slot that is no longer — or not yet — open.
+ *
+ * `before` is writable from accept until washing starts, `after` only while
+ * washing (`PHOTO_SLOT_OPEN_STATUSES`). Past that, a replacement is an edit to
+ * the evidence, not a retake. Reaching this from the app means the screen was
+ * stale, so the copy points at the fix — the screen refreshes itself — rather
+ * than naming a status the partner never sees.
+ */
+export class PhotoSlotClosedError extends CarwashDomainError {
+  constructor() {
+    super(
+      'PHOTO_SLOT_CLOSED',
+      "This photo can't be changed at this stage of the job.",
+      HttpStatus.CONFLICT,
+    );
+  }
+}
+
+/**
  * The partner does not price this service for this vehicle type.
  *
  * The candidate query already excludes them, so reaching this means the menu

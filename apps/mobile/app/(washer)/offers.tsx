@@ -1,10 +1,489 @@
-import { EmptyState } from '@parkease/ui-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import type { WashJobOffer } from '@parkease/contracts/washer';
+import { colors, fontSize, fontWeight, layout, radius, spacing } from '@parkease/tokens';
+import { EmptyState, ErrorState, Skeleton } from '@parkease/ui-native';
+import { FlashList } from '@shopify/flash-list';
+import { useQueryClient } from '@tanstack/react-query';
+import { router } from 'expo-router';
+import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Alert, Linking, StyleSheet, Text, View } from 'react-native';
 
-export default function WasherOffersScreen() {
+import { useAnnounce } from '@/features/shared/hooks/useAnnounce';
+import { resolveScreenState } from '@/features/shared/screen-state';
+import { acceptOutcomeFor } from '@/features/washer/action-outcomes';
+import { isUnregisteredWasher, loadFailureCopy } from '@/features/washer/api/errors';
+import { OnlineRail } from '@/features/washer/components/OnlineRail';
+import { ReadableColumn } from '@/features/washer/components/ReadableColumn';
+import { RefreshNotice } from '@/features/washer/components/RefreshNotice';
+import { VerificationNotice } from '@/features/washer/components/VerificationNotice';
+import { WasherHeader } from '@/features/washer/components/WasherHeader';
+import { WashOfferCard } from '@/features/washer/components/WashOfferCard';
+import {
+  useAcceptWash,
+  useActiveWash,
+  useServiceMenu,
+  useWasherOffers,
+  useWasherProfile,
+  washerKeys,
+} from '@/features/washer/hooks/useWasherQueries';
+import type { PresenceError } from '@/features/washer/presence';
+import { usePresence } from '@/features/washer/presence-context';
+import {
+  bannerActionRoute,
+  describeWasherVerification,
+  type WasherBannerRoute,
+} from '@/features/washer/verification-copy';
+import { newIntent, type Intent } from '@/lib/api';
+import { assertNever } from '@/lib/assert-never';
+
+const VERIFY_LOCK = 'Verify your documents to accept jobs';
+
+interface GoOnlineCopy {
+  readonly title: string;
+  readonly body: string;
+  /** Only a permission problem is fixable from the app's settings page. */
+  readonly settings: boolean;
+}
+
+const GO_ONLINE_COPY: Readonly<Record<PresenceError, GoOnlineCopy>> = {
+  permission_denied: {
+    title: 'Location needed',
+    body: 'ParkEase needs your location to send you wash jobs nearby.',
+    settings: true,
+  },
+  location_failed: {
+    title: 'No location yet',
+    body: "We couldn't find your location. Check that location is switched on, then try again.",
+    settings: false,
+  },
+  not_verified: {
+    title: 'Not verified yet',
+    body: 'Your documents are still being checked. You can go online once they clear.',
+    settings: false,
+  },
+  not_registered: {
+    title: 'Finish setting up',
+    body: 'Finish setting up your partner profile before going online.',
+    settings: false,
+  },
+  refused: {
+    title: "Couldn't go online",
+    body: "ParkEase didn't accept going online. Check your profile, then try again.",
+    settings: false,
+  },
+  unreachable: {
+    title: "Couldn't go online",
+    body: "Couldn't reach ParkEase. Check your connection and try again.",
+    settings: false,
+  },
+};
+
+/** H7: while one Accept is pending, every other card says why it cannot be pressed. */
+const ANOTHER_ACCEPTING = 'Wait: another job is being accepted';
+
+/** The banner's button, only when its action has somewhere to go (M10). */
+const routeFor = (route: WasherBannerRoute | null): { onAction?: () => void } =>
+  route === null
+    ? {}
+    : {
+        onAction: () => {
+          router.push(route);
+        },
+      };
+
+/** Module-level, so the list never sees a new key function (H5). */
+const offerKey = (item: WashJobOffer) => item.jobId;
+
+const durationKey = (offer: Pick<WashJobOffer, 'serviceName' | 'vehicleType'>) =>
+  `${offer.serviceName}:${offer.vehicleType}`;
+
+function EmptyIcon({ name }: { readonly name: keyof typeof MaterialCommunityIcons.glyphMap }) {
+  return <MaterialCommunityIcons name={name} size={48} color={colors.textTertiary} />;
+}
+
+function OfferSkeletons() {
   return (
-    <EmptyState
-      title="No offers right now"
-      body="New car wash job offers will appear here. Stay online to receive them."
-    />
+    <View style={styles.skeletons} testID="offers-skeleton">
+      <Skeleton width="100%" height={layout.skeleton.tall} borderRadius={radius.lg} />
+      <Skeleton width="100%" height={layout.skeleton.tall} borderRadius={radius.lg} />
+    </View>
   );
 }
+
+function Separator() {
+  return <View style={styles.separator} />;
+}
+
+/**
+ * §6.1 — the washer's offers feed, direction "Bay".
+ *
+ * Presence (the online switch and its heartbeat) is owned by the `(washer)`
+ * layout; this screen reads it and never starts a second one.
+ */
+export default function WasherOffersScreen() {
+  const presence = usePresence();
+  const profile = useWasherProfile();
+  const active = useActiveWash();
+  const offers = useWasherOffers(presence.isOnline);
+  const menu = useServiceMenu();
+  const accept = useAcceptWash();
+  const { mutate: acceptMutate } = accept;
+  const client = useQueryClient();
+
+  // R-FE-05: one intent per offer, minted the first time the partner presses
+  // Accept on it and REUSED if that accept is retried — so a retry after a
+  // timeout replays the first attempt instead of racing a second one. Dropped
+  // once the offer's outcome is settled: won, or taken by somebody else.
+  const intents = useRef(new Map<string, Intent>());
+  const intentFor = useCallback((jobId: string): Intent => {
+    const existing = intents.current.get(jobId);
+    if (existing !== undefined) return existing;
+    const minted = newIntent();
+    intents.current.set(jobId, minted);
+    return minted;
+  }, []);
+
+  // Every failed Accept reads inline, never as an alert: losing the race is an
+  // ordinary outcome — two of every three partners offered a job see it — and
+  // react-native-web's Alert is a no-op. It is pinned to the list it was shown
+  // with and disappears once that list changes (T6-M4). Structural sharing
+  // keeps the reference when a refetch returns the same offers, so the notice
+  // outlives a no-op refetch.
+  const [acceptNotice, setAcceptNotice] = useState<{
+    readonly text: string;
+    readonly shownWith: WashJobOffer[] | undefined;
+  } | null>(null);
+  const visibleNotice =
+    acceptNotice !== null && acceptNotice.shownWith === offers.data ? acceptNotice.text : null;
+  // H4: the sighted cue is a card disappearing; TalkBack hears the words.
+  useAnnounce(visibleNotice);
+
+  // A job that can no longer be accepted leaves the list NOW, not when the
+  // refetch lands — until then it would still be tappable.
+  const removeOffer = useCallback(
+    (jobId: string) =>
+      client.setQueryData<WashJobOffer[]>(washerKeys.offers, (current) =>
+        current?.filter((offer) => offer.jobId !== jobId),
+      ),
+    [client],
+  );
+
+  const items = useMemo(
+    () => (presence.isOnline ? (offers.data ?? []) : []),
+    [presence.isOnline, offers.data],
+  );
+
+  // The duration a partner quoted on their OWN menu row for this service and
+  // vehicle — the row the server priced the earnings from. A lookup, never a
+  // calculation; a missing row drops the chip.
+  const durations = useMemo(
+    () =>
+      new Map((menu.data?.services ?? []).map((row) => [durationKey(row), row.durationMinutes])),
+    [menu.data],
+  );
+
+  const verificationStatus = profile.data?.verificationStatus;
+  const verification = useMemo(
+    () =>
+      verificationStatus === undefined ? null : describeWasherVerification(verificationStatus),
+    [verificationStatus],
+  );
+  // A courtesy, never the control: the server refuses with 403 regardless.
+  const verifyLock = verification !== null && !verification.canAccept ? VERIFY_LOCK : undefined;
+
+  const handleToggle = useCallback(
+    async (next: boolean) => {
+      if (!next) {
+        const stopped = await presence.goOffline();
+        if (!stopped.ok) {
+          // The heartbeat has stopped, so dispatch drops them within the
+          // window regardless; this only says so honestly.
+          Alert.alert(
+            'Offline on this phone',
+            "We couldn't tell ParkEase you went offline, so a job may still reach you for the next minute or so.",
+          );
+        }
+        return;
+      }
+
+      const started = await presence.goOnline();
+      if (started.ok) return;
+      // M8: the rail already says why, from presence state, and announces it.
+      // An Alert adds something only when it can open Settings.
+      const copy = GO_ONLINE_COPY[started.reason];
+      if (!copy.settings) return;
+      Alert.alert(copy.title, copy.body, [
+        { text: 'Not now', style: 'cancel' },
+        { text: 'Enable in Settings', onPress: () => void Linking.openSettings() },
+      ]);
+    },
+    [presence],
+  );
+
+  // H7: a second tap lands before `isPending` has re-rendered, so the guard is
+  // a ref. Read through a function: TypeScript cannot see a callback change it.
+  const acceptInFlight = useRef(false);
+  const isAccepting = () => acceptInFlight.current;
+
+  // Stable for the life of the screen (H5): every dependency is itself stable,
+  // and the list it pins a notice to is read from the cache at the moment of
+  // failure rather than closed over.
+  const handleAccept = useCallback(
+    (jobId: string) => {
+      if (isAccepting()) return;
+      acceptInFlight.current = true;
+      setAcceptNotice(null);
+
+      acceptMutate(
+        { jobId, intent: intentFor(jobId) },
+        {
+          onSuccess: () => {
+            intents.current.delete(jobId);
+            // The won id rides along, so the job opens on "It's yours" (M9).
+            router.push({ pathname: '/(washer)/active', params: { won: jobId } });
+          },
+          onError: (error: unknown) => {
+            // `useAcceptWash` invalidates offers and the active job on settle,
+            // and the profile on a refusal, so nothing here refetches (G3).
+            const outcome = acceptOutcomeFor(error);
+            if (!outcome.keepIntent) intents.current.delete(jobId);
+            const shownWith = outcome.removeCard
+              ? removeOffer(jobId)
+              : client.getQueryData<WashJobOffer[]>(washerKeys.offers);
+            setAcceptNotice({ text: outcome.notice, shownWith });
+          },
+          onSettled: () => {
+            acceptInFlight.current = false;
+          },
+        },
+      );
+    },
+    [acceptMutate, client, intentFor, removeOffer],
+  );
+
+  const acceptingId = accept.isPending ? accept.variables.jobId : null;
+
+  const renderOffer = useCallback(
+    ({ item }: { item: WashJobOffer }) => (
+      <WashOfferCard
+        offer={item}
+        durationMinutes={durations.get(durationKey(item)) ?? null}
+        lockedReason={
+          verifyLock ??
+          (acceptingId !== null && acceptingId !== item.jobId ? ANOTHER_ACCEPTING : undefined)
+        }
+        accepting={acceptingId === item.jobId}
+        onAccept={handleAccept}
+      />
+    ),
+    [durations, verifyLock, acceptingId, handleAccept],
+  );
+
+  const offersBody = (): ReactNode => {
+    // Offers only once we KNOW there is no active job: `active.data` alone is
+    // undefined while pending or errored, which would list offers to a
+    // partner who may already be mid-wash.
+    const activeState = resolveScreenState(active);
+    if (activeState === 'loading') return <OfferSkeletons />;
+    if (activeState === 'error') {
+      return (
+        <ErrorState
+          title="Couldn't check your current job"
+          body={loadFailureCopy(active.error)}
+          onAction={() => void active.refetch()}
+        />
+      );
+    }
+    if (activeState === 'ready') {
+      return (
+        <EmptyState
+          icon={<EmptyIcon name="car-wash" />}
+          title="You're on a job"
+          body="Finish your current job to see new offers."
+          actionLabel="Go to active job"
+          onAction={() => {
+            router.push('/(washer)/active');
+          }}
+        />
+      );
+    }
+
+    if (!presence.isOnline) {
+      return (
+        <EmptyState
+          icon={<EmptyIcon name="map-marker-radius-outline" />}
+          // The rail directly above already says Offline; this says what they
+          // are missing instead of repeating it.
+          title="Nothing to show yet"
+          body="Wash jobs near you appear here as soon as you go online."
+        />
+      );
+    }
+
+    const notice =
+      visibleNotice === null ? null : (
+        // Announced by `useAnnounce(visibleNotice)` above (H4).
+        <View style={styles.notice} testID="offer-taken-notice">
+          <MaterialCommunityIcons name="information-outline" size={18} color={colors.primaryDark} />
+          <Text style={styles.noticeText}>{visibleNotice}</Text>
+        </View>
+      );
+
+    const screen = resolveScreenState(offers);
+    switch (screen) {
+      case 'loading':
+        return <OfferSkeletons />;
+      case 'error':
+        return (
+          <ErrorState
+            title="Couldn't load jobs"
+            body={loadFailureCopy(offers.error)}
+            onAction={() => void offers.refetch()}
+          />
+        );
+      case 'empty':
+        return (
+          <>
+            {notice}
+            <EmptyState
+              icon={<EmptyIcon name="map-marker-radius-outline" />}
+              title="No jobs right now"
+              // Reassurance, and the truth about the foreground-only heartbeat:
+              // they need not watch the screen, but the app must stay open.
+              body="You're online. Keep ParkEase open and we'll notify you when a job comes in nearby."
+            />
+          </>
+        );
+      case 'ready':
+        return (
+          <>
+            {offers.isError ? (
+              // The offers stay on screen (rule 10, ruling T7-I2); this only
+              // says the latest refresh failed, and offers another (J1).
+              <RefreshNotice
+                testID="offers-refresh-notice"
+                retryLabel="Refresh the offers"
+                onRetry={() => void offers.refetch()}
+              />
+            ) : null}
+            {notice}
+            <FlashList
+              data={items}
+              keyExtractor={offerKey}
+              renderItem={renderOffer}
+              extraData={renderOffer}
+              ItemSeparatorComponent={Separator}
+              contentContainerStyle={styles.list}
+              ListHeaderComponent={
+                <Text style={styles.section} accessibilityRole="header">
+                  {`${String(items.length)} ${items.length === 1 ? 'JOB' : 'JOBS'} NEARBY`}
+                </Text>
+              }
+            />
+          </>
+        );
+      default:
+        return assertNever(screen);
+    }
+  };
+
+  const content = (): ReactNode => {
+    // Not registered yet: a first-run state with a next step, never an error.
+    if (profile.isError && isUnregisteredWasher(profile.error)) {
+      return (
+        <EmptyState
+          icon={<EmptyIcon name="account-plus-outline" />}
+          title="Finish setting up your partner profile"
+          body="Tell us about your car wash and add your ID proof to start getting jobs."
+          actionLabel="Set up profile"
+          onAction={() => {
+            router.push('/(washer)/profile');
+          }}
+        />
+      );
+    }
+
+    if (resolveScreenState(profile) === 'loading') {
+      return (
+        <View style={styles.skeletons}>
+          <Skeleton width="100%" height={layout.skeleton.row} borderRadius={radius.lg} />
+          <Skeleton width="100%" height={layout.skeleton.tall} borderRadius={radius.lg} />
+        </View>
+      );
+    }
+
+    if (profile.data === undefined) {
+      return (
+        <ErrorState
+          title="Couldn't load your profile"
+          body={loadFailureCopy(profile.error)}
+          onAction={() => void profile.refetch()}
+        />
+      );
+    }
+
+    return (
+      <>
+        {verification?.banner ? (
+          <VerificationNotice
+            banner={verification.banner}
+            // M10: routed by what the action says; one with nowhere to go
+            // draws no button.
+            {...routeFor(bannerActionRoute(verification.banner.action))}
+          />
+        ) : null}
+
+        <OnlineRail
+          isOnline={presence.isOnline}
+          busy={presence.busy}
+          problem={presence.error}
+          // Going online is refused server-side until verified, so the switch
+          // says so instead of letting the partner find out from an alert.
+          disabledReason={
+            !presence.isOnline && verifyLock !== undefined
+              ? 'You can go online once your documents are approved'
+              : undefined
+          }
+          onToggle={(next) => void handleToggle(next)}
+        />
+
+        <View style={styles.body}>{offersBody()}</View>
+      </>
+    );
+  };
+
+  return (
+    <View style={styles.root}>
+      {/* The tab's own name (M13): the bar says Offers, so the header does. */}
+      <WasherHeader title="Offers" />
+      <ReadableColumn>{content()}</ReadableColumn>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.surfaceSecondary },
+  body: { flex: 1 },
+  skeletons: { padding: spacing.base, gap: spacing.md },
+  list: { paddingHorizontal: spacing.base, paddingBottom: spacing.xl },
+  section: {
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.bold,
+    color: colors.textTertiary,
+    letterSpacing: 0.4,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.md,
+  },
+  separator: { height: spacing.md },
+  notice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginHorizontal: spacing.base,
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.primarySoft,
+  },
+  noticeText: { flex: 1, fontSize: fontSize.sm, color: colors.primaryDark },
+});

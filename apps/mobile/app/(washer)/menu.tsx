@@ -1,10 +1,107 @@
-import { EmptyState } from '@parkease/ui-native';
+import { colors, layout, radius, spacing } from '@parkease/tokens';
+import { ErrorState, Skeleton } from '@parkease/ui-native';
+import type { ReactNode } from 'react';
+import { ScrollView, StyleSheet, View } from 'react-native';
 
-export default function WasherMenuScreen() {
+import { resolveScreenState } from '@/features/shared/screen-state';
+import { loadFailureCopy } from '@/features/washer/api/errors';
+import { ReadableColumn } from '@/features/washer/components/ReadableColumn';
+import { RefreshNotice } from '@/features/washer/components/RefreshNotice';
+import { ServiceRow } from '@/features/washer/components/ServiceRow';
+import { WasherHeader } from '@/features/washer/components/WasherHeader';
+import { useServiceSave } from '@/features/washer/hooks/useServiceSave';
+import { useServiceMenu } from '@/features/washer/hooks/useWasherQueries';
+import { toMenuRows } from '@/features/washer/menu-rows';
+import { assertNever } from '@/lib/assert-never';
+
+function MenuSkeleton() {
   return (
-    <EmptyState
-      title="Your Service Menu"
-      body="Set up your wash packages, pricing, and service area. Your menu editor will appear here."
-    />
+    <View style={styles.body} testID="menu-skeleton">
+      {[0, 1, 2].map((index) => (
+        <Skeleton key={index} width="100%" height={layout.skeleton.card} borderRadius={radius.lg} />
+      ))}
+    </View>
   );
 }
+
+/**
+ * §6.3 — the service menu, direction "Bay".
+ *
+ * Five rows, one per service, each with a car price and a bike price saved
+ * together; the API stores them as two rows the partner never sees. Exactly
+ * five, always, so a `ScrollView` rather than a `FlashList` (R-FE-07 is for
+ * lists of unknown length).
+ *
+ * The wireframe's "you earn 80% after the ParkEase fee" footnote is not here:
+ * it is a rate in `apps/mobile` (R-FE-06), and every offer card already states
+ * the real take-home in rupees.
+ */
+export default function WasherMenuScreen() {
+  const menu = useServiceMenu();
+  const saver = useServiceSave();
+
+  const content = (): ReactNode => {
+    const screen = resolveScreenState(menu);
+    switch (screen) {
+      case 'loading':
+        return <MenuSkeleton />;
+      case 'error':
+        return (
+          <ErrorState
+            title="Couldn't load your menu"
+            body={loadFailureCopy(menu.error)}
+            onAction={() => void menu.refetch()}
+          />
+        );
+      // `toMenuRows` always yields all five services, priced or not, so a loaded
+      // menu is never empty: an unpriced row IS the first-run state.
+      case 'empty':
+      case 'ready':
+        return (
+          <>
+            {menu.isError ? (
+              // The rows stay on screen (ruling T7-I2); this only says the
+              // latest refresh failed, and offers another.
+              <RefreshNotice
+                testID="menu-refresh-notice"
+                retryLabel="Refresh the menu"
+                onRetry={() => void menu.refetch()}
+              />
+            ) : null}
+            <ScrollView
+              contentContainerStyle={styles.body}
+              // A tap on Save with the keyboard up saves, rather than only
+              // dismissing the keyboard and needing a second tap.
+              keyboardShouldPersistTaps="handled"
+            >
+              {toMenuRows(menu.data?.services ?? []).map((row) => (
+                <ServiceRow
+                  // One key per service, never over its values: a save updates
+                  // the row in place, so TalkBack's focus stays on Save (H6).
+                  key={row.serviceName}
+                  row={row}
+                  saving={saver.isSaving(row.serviceName)}
+                  failure={saver.failureFor(row.serviceName)}
+                  onSave={(input) => void saver.save(row.serviceName, input)}
+                />
+              ))}
+            </ScrollView>
+          </>
+        );
+      default:
+        return assertNever(screen);
+    }
+  };
+
+  return (
+    <View style={styles.root}>
+      <WasherHeader title="Menu" subtitle="A car price and a bike price for each wash you offer." />
+      <ReadableColumn>{content()}</ReadableColumn>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.surfaceSecondary },
+  body: { padding: spacing.base, gap: spacing.base },
+});

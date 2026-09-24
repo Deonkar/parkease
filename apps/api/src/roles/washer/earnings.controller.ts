@@ -1,6 +1,6 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Query } from '@nestjs/common';
 import { Role } from '@parkease/contracts/enums';
-import type { WasherEarningsSummary } from '@parkease/contracts/washer';
+import { washerEarningsQuerySchema, type WasherEarningsView } from '@parkease/contracts/washer';
 
 import { WasherEarningsQuery } from '../../domains/carwash/queries/washer-earnings.query.js';
 import { type AuthUser, CurrentUser } from '../../platform/auth/current-user.decorator.js';
@@ -19,7 +19,11 @@ export class WasherEarningsController {
    * cannot drift from the books without turning it red.
    */
   @Get()
-  async summary(@CurrentUser() user: AuthUser): Promise<WasherEarningsSummary> {
-    return this.earnings.forWasher(user.id);
+  async summary(
+    @CurrentUser() user: AuthUser,
+    @Query() query: unknown,
+  ): Promise<WasherEarningsView> {
+    const { period } = washerEarningsQuerySchema.parse(query ?? {});
+    return this.earnings.forWasher(user.id, period);
   }
 }

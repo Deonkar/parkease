@@ -1,0 +1,426 @@
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import type { WasherProfileView } from '@parkease/contracts/washer';
+import {
+  colors,
+  elevation,
+  fontSize,
+  fontWeight,
+  layout,
+  lineHeight,
+  radius,
+  spacing,
+  touchTarget,
+} from '@parkease/tokens';
+import { EmptyState, ErrorState, Skeleton } from '@parkease/ui-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useState, type ReactNode } from 'react';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { useAuth } from '@/contexts/AuthContext';
+import { useAnnounce } from '@/features/shared/hooks/useAnnounce';
+import { loadFailureCopy } from '@/features/washer/api/errors';
+import { FieldError } from '@/features/washer/components/FieldError';
+import { SubmitBlock } from '@/features/washer/components/FormFields';
+import { PhotoField } from '@/features/washer/components/PhotoField';
+import { RefreshNotice } from '@/features/washer/components/RefreshNotice';
+import { VerificationNotice } from '@/features/washer/components/VerificationNotice';
+import { WashCamera } from '@/features/washer/components/WashCamera';
+import { WasherHeader } from '@/features/washer/components/WasherHeader';
+import { useCameraGate } from '@/features/washer/hooks/useCameraGate';
+import { useHeldUploads } from '@/features/washer/hooks/useHeldUploads';
+import { useRegistration } from '@/features/washer/hooks/useRegistration';
+import { useHeldIdUpload, useWasherProfile } from '@/features/washer/hooks/useWasherQueries';
+import { profileScreenState, registrationNotice } from '@/features/washer/profile-state';
+import { describeHours } from '@/features/washer/registration';
+import { describeWasherVerification } from '@/features/washer/verification-copy';
+import { assertNever } from '@/lib/assert-never';
+
+const CAMERA_REASON = 'ParkEase needs the camera to photograph your ID.';
+
+function ProfileSkeleton() {
+  return (
+    <View style={styles.skeleton} testID="profile-skeleton">
+      <Skeleton width="100%" height={layout.skeleton.row} borderRadius={radius.md} />
+      <Skeleton width="100%" height={layout.skeleton.block} borderRadius={radius.lg} />
+      <Skeleton width="100%" height={layout.skeleton.short} borderRadius={radius.lg} />
+    </View>
+  );
+}
+
+function Row({ label, value }: { readonly label: string; readonly value: string }) {
+  return (
+    <View style={styles.row}>
+      <Text style={styles.rowLabel}>{label}</Text>
+      <Text style={styles.rowValue}>{value}</Text>
+    </View>
+  );
+}
+
+/**
+ * The washer's profile (§6.5), and the default entry for one who has not
+ * registered: `404 WASHER_PROFILE_NOT_FOUND` is a set-up state with a next
+ * step, never an error. A registered partner sees where verification stands,
+ * their documents — with an upload for a missing ID — and their business
+ * details, then the account rows every role's profile carries.
+ */
+export default function WasherProfileScreen() {
+  const auth = useAuth();
+  const insets = useSafeAreaInsets();
+  const profile = useWasherProfile();
+  const params = useLocalSearchParams<{ notice?: string }>();
+  const noticeKind = typeof params.notice === 'string' ? params.notice : undefined;
+
+  // At the top, unconditionally: a photo in hand must outlive the screen
+  // dropping into its error state and back.
+  const idPhoto = useHeldUploads('documents', 1);
+  const camera = useCameraGate<'ID'>(CAMERA_REASON);
+  const registration = useRegistration();
+  // An ID registration uploaded whose documents call failed (G9).
+  const heldId = useHeldIdUpload();
+  const [sendFailure, setSendFailure] = useState<string | null>(null);
+
+  // The one line after registration, computed here so it can be announced
+  // when it appears (H4) and drawn by `ready` below.
+  const notice =
+    profile.data === undefined
+      ? null
+      : registrationNotice(noticeKind, profile.data.verificationStatus, profile.data.partnerType);
+  useAnnounce(notice);
+
+  const handleSignOut = () => {
+    Alert.alert('Sign out', 'Are you sure you want to sign out?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sign out', style: 'destructive', onPress: () => void auth.signOut() },
+    ]);
+  };
+
+  // A fresh photo taken here wins; otherwise the one registration uploaded.
+  const idToSend = idPhoto.uploadIds[0] ?? heldId.id;
+
+  const sendId = async () => {
+    const idDocumentId = idPhoto.uploadIds[0] ?? heldId.id;
+    if (idDocumentId === null) return;
+    setSendFailure(null);
+    // One intent per image, replayed if this same image is retried (R-FE-05).
+    const result = await registration.sendDocument({ idDocumentId });
+    if (result.kind === 'sent') {
+      heldId.release();
+      return;
+    }
+    if (result.retake) {
+      // The server refused THIS image (N3): the same upload id is refused the
+      // same way forever, so neither the held nor the fresh one is sent again.
+      // The field falls back to "Take photo", and the copy asks for a new one.
+      heldId.release();
+      const refused = idPhoto.items[0];
+      if (refused !== undefined) idPhoto.remove(refused.key);
+    }
+    setSendFailure(result.message);
+  };
+
+  const idDocument = (view: WasherProfileView): ReactNode => {
+    if (view.idDocumentId !== null) {
+      return (
+        <View style={styles.docRow} testID="id-document-present">
+          <MaterialCommunityIcons name="check-circle-outline" size={20} color={colors.primary} />
+          <Text style={styles.docText}>ID proof added</Text>
+        </View>
+      );
+    }
+    return (
+      <View style={styles.docMissing} testID="id-document-missing">
+        <PhotoField
+          id="idDocument"
+          label="ID proof: not added yet"
+          hint="One clear photo of the side with your photo on it. We verify your identity, not your number."
+          uploads={idPhoto}
+          max={1}
+          wide
+          addLabel="Take photo"
+          onAdd={() => void camera.open('ID')}
+        />
+        {heldId.id !== null && idPhoto.items.length === 0 ? (
+          <Text style={styles.heldNote} testID="id-document-held">
+            Your ID photo from sign-up is uploaded. Send it for review, or take a new one.
+          </Text>
+        ) : null}
+        {idToSend !== null || idPhoto.busy ? (
+          <SubmitBlock
+            label="Send for review"
+            waitingForUploads={idPhoto.busy}
+            submitting={registration.submitting}
+            failure={sendFailure}
+            onPress={() => void sendId()}
+          />
+        ) : sendFailure === null ? null : (
+          <FieldError testID="send-failure" message={sendFailure} />
+        )}
+      </View>
+    );
+  };
+
+  const ready = (view: WasherProfileView): ReactNode => {
+    const { banner } = describeWasherVerification(view.verificationStatus);
+    const isBusiness = view.partnerType === 'business';
+
+    return (
+      <>
+        {notice === null ? null : (
+          <View style={styles.notice} testID="registration-notice">
+            <MaterialCommunityIcons
+              name="information-outline"
+              size={18}
+              color={colors.primaryDark}
+            />
+            <Text style={styles.noticeText}>{notice}</Text>
+          </View>
+        )}
+
+        {profile.isError ? (
+          <RefreshNotice
+            testID="profile-refresh-failed"
+            retryLabel="Refresh your profile"
+            onRetry={() => void profile.refetch()}
+          />
+        ) : null}
+
+        {banner === null ? (
+          <View style={styles.verified}>
+            <MaterialCommunityIcons
+              name="check-decagram-outline"
+              size={20}
+              color={colors.primary}
+            />
+            <Text style={styles.verifiedText}>Verified. You can accept jobs.</Text>
+          </View>
+        ) : (
+          // No action: the documents it would point at are right below.
+          <VerificationNotice banner={banner} />
+        )}
+
+        <View style={styles.card}>
+          <Text style={styles.section} accessibilityRole="header">
+            {isBusiness ? 'YOUR BUSINESS' : 'ABOUT YOU'}
+          </Text>
+          <Row
+            label="Partner type"
+            value={isBusiness ? 'Car wash business' : 'Individual washer'}
+          />
+          <Row
+            label={isBusiness ? 'Business name' : 'Name'}
+            value={view.businessName ?? 'Not added'}
+          />
+          {isBusiness ? (
+            <>
+              <Row label="GSTIN" value={view.gstin ?? 'Not added'} />
+              <Row label="Operating hours" value={describeHours(view.operatingHours)} />
+            </>
+          ) : null}
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.section} accessibilityRole="header">
+            DOCUMENTS
+          </Text>
+          {/* A business is reviewed on its photos (ruling T10-C1) and is never
+              asked for an ID; a gig partner's review material is the ID. */}
+          {isBusiness ? (
+            <View style={styles.docRow}>
+              <MaterialCommunityIcons
+                name={
+                  view.businessPhotoIds.length > 0 ? 'check-circle-outline' : 'image-off-outline'
+                }
+                size={20}
+                color={view.businessPhotoIds.length > 0 ? colors.primary : colors.textTertiary}
+              />
+              <Text style={styles.docText}>
+                {view.businessPhotoIds.length === 0
+                  ? 'No business photos'
+                  : `${String(view.businessPhotoIds.length)} business ${
+                      view.businessPhotoIds.length === 1 ? 'photo' : 'photos'
+                    }`}
+              </Text>
+            </View>
+          ) : (
+            idDocument(view)
+          )}
+        </View>
+      </>
+    );
+  };
+
+  const content = (): ReactNode => {
+    const screen = profileScreenState(profile);
+    switch (screen) {
+      case 'loading':
+        return <ProfileSkeleton />;
+      case 'unregistered':
+        return (
+          <EmptyState
+            icon={
+              <MaterialCommunityIcons
+                name="account-plus-outline"
+                size={48}
+                color={colors.textTertiary}
+              />
+            }
+            title="Set up your partner profile"
+            body="Tell us whether you run a car wash business or wash on your own, and which services you offer."
+            actionLabel="Set up profile"
+            onAction={() => {
+              router.push('/(washer)/profile/register');
+            }}
+          />
+        );
+      case 'error':
+      case 'empty':
+        // `empty` cannot come from this endpoint (a partner has a profile or a
+        // 404); if it ever does, "nothing here" is unknown, so it is an error.
+        return (
+          <ErrorState
+            title="Couldn't load your profile"
+            body={loadFailureCopy(profile.error)}
+            onAction={() => void profile.refetch()}
+          />
+        );
+      case 'ready':
+        return profile.data === undefined ? null : ready(profile.data);
+      default:
+        return assertNever(screen);
+    }
+  };
+
+  return (
+    <View style={styles.root}>
+      {/* The same header as the four tabs, at the same scale (M7); no account
+          button, because this IS the account. */}
+      <WasherHeader title="Profile" account={false} />
+      <ScrollView
+        contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + spacing['2xl'] }]}
+        keyboardShouldPersistTaps="handled"
+      >
+        {content()}
+
+        <View style={styles.account}>
+          <Pressable
+            onPress={() => {
+              router.push('/(shared)/switch-role');
+            }}
+            style={styles.item}
+            accessibilityRole="button"
+            accessibilityLabel="Switch role"
+          >
+            <Text style={styles.itemText}>Switch role</Text>
+            <MaterialCommunityIcons name="chevron-right" size={24} color={colors.textTertiary} />
+          </Pressable>
+
+          <Pressable
+            onPress={() => {
+              router.push('/(shared)/settings');
+            }}
+            style={styles.item}
+            accessibilityRole="button"
+            accessibilityLabel="Settings"
+          >
+            <Text style={styles.itemText}>Settings</Text>
+            <MaterialCommunityIcons name="chevron-right" size={24} color={colors.textTertiary} />
+          </Pressable>
+
+          <Pressable
+            onPress={handleSignOut}
+            style={[styles.item, styles.signOut]}
+            accessibilityRole="button"
+            accessibilityLabel="Sign out"
+          >
+            <Text style={styles.signOutText}>Sign out</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+
+      {/* Outside the state switch, so a refetch cannot tear the camera down mid-shot. */}
+      <WashCamera
+        slot={camera.slot}
+        onCaptured={(_slot, uri) => {
+          setSendFailure(null);
+          void idPhoto.add(uri);
+        }}
+        onClose={camera.close}
+      />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.surfaceSecondary },
+  body: {
+    // M6: a readable column on a tablet or a landscape phone.
+    width: '100%',
+    maxWidth: layout.contentMaxWidth,
+    alignSelf: 'center',
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.base,
+    gap: spacing.base,
+  },
+  skeleton: { gap: spacing.md },
+  notice: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.primarySoft,
+  },
+  noticeText: {
+    flex: 1,
+    fontSize: fontSize.sm,
+    lineHeight: fontSize.sm * lineHeight.normal,
+    color: colors.primaryDark,
+  },
+  verified: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  verifiedText: { fontSize: fontSize.sm, fontWeight: fontWeight.semibold, color: colors.text },
+  card: {
+    gap: spacing.md,
+    padding: spacing.base,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
+    ...elevation.card,
+  },
+  section: {
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.bold,
+    color: colors.textTertiary,
+    letterSpacing: 0.4,
+  },
+  row: { gap: spacing.xs },
+  rowLabel: { fontSize: fontSize.xs, color: colors.textTertiary },
+  rowValue: { fontSize: fontSize.base, color: colors.text },
+  docRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 32 },
+  docText: { flex: 1, fontSize: fontSize.base, color: colors.text },
+  docMissing: { gap: spacing.md },
+  heldNote: { fontSize: fontSize.sm, color: colors.textSecondary },
+  account: { marginTop: spacing.base },
+  item: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.base,
+    paddingHorizontal: spacing.base,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    minHeight: touchTarget,
+  },
+  itemText: {
+    fontSize: fontSize.base,
+    color: colors.text,
+  },
+  signOut: {
+    marginTop: spacing['2xl'],
+    borderBottomWidth: 0,
+    justifyContent: 'center',
+  },
+  signOutText: {
+    fontSize: fontSize.base,
+    color: colors.error,
+    fontWeight: fontWeight.medium,
+  },
+});

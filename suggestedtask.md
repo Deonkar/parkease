@@ -522,3 +522,1065 @@ document.
 - **Done means:** an ADR records the retention period for each class (proof photos, partner
   location, identity documents, ledger), a job enforces it, and a user deletion anonymises
   what it cannot remove instead of failing on a foreign key.
+
+### S-27 — Washer presence is foreground-only
+
+- **Status:** `open`
+- **Found in:** task 14 task-6 (the washer online switch and heartbeat); carried as a
+  `ponytail:` comment in `apps/mobile/src/features/washer/presence.ts`
+- **Surface:** mobile
+
+The washer's heartbeat runs on JS timers, and Android stops those when the app is backgrounded.
+A washer who switches to another app stops beating. They fall out of dispatch
+`WASH_ONLINE_HEARTBEAT_WINDOW_SECONDS` (90s, `packages/contracts/src/washer/dispatch.ts`)
+later, while the switch they left still reads **Online**. The offers screen's empty state tells
+them to keep ParkEase open, but that is copy, not a fix. Valet already solves this with an
+`expo-task-manager` background location task (`apps/mobile/src/features/valet/location/task.ts`).
+
+- **Why deferred:** the fix needs a background task, a foreground-service notification, and
+  the Play background-location declaration that S-05 already tracks for valet. That is a
+  platform change, not screen work, and task 14 was scoped to the screens.
+- **Done means:** washer presence beats from an `expo-task-manager` background task, as valet
+  does, and `startPresence`'s API is unchanged. A test shows a backgrounded washer still posts a
+  heartbeat inside the window.
+
+### S-28 — `active/[jobId]` as a deep-link route
+
+- **Status:** `open`
+- **Found in:** task 14 design spec §5; task 7 deleted the route
+- **Surface:** mobile
+
+Task 14 removed `app/(washer)/active/[jobId].tsx`. `GET /washer/jobs/active` returns the one
+live job a partner can hold, so `active/index.tsx` never needs an id. That stops being true only
+if something outside the app has to open a _specific_ job. For example, a push notification
+("your customer cancelled") would need to land on that job even when it is no longer the live
+one.
+
+- **Why deferred:** nothing targets a job by id today, so the route would have no caller.
+- **Done means:** when push (or any other deep link) needs to target a specific job, an
+  `active/[jobId]` route reads that job by id through an ownership-checked endpoint, and a
+  Maestro or unit test opens it from a link.
+
+### S-29 — `proof.ts`'s compression constants are now unused
+
+- **Status:** `open`
+- **Found in:** task 14, task 1 (the shared signed-upload client)
+- **Surface:** mobile
+
+`apps/mobile/src/features/valet/proof.ts` exports `PROOF_MAX_BYTES`,
+`PROOF_MAX_WIDTH` and `PROOF_QUALITY`, and its `submitProof` orchestration still
+calls `deps.compress(uri, PROOF_MAX_WIDTH, PROOF_QUALITY)`. Task 1 moved the real
+compression into `lib/uploads.ts` (`uploadImage` owns it now, called from
+`uploadProof`) and made `useProofCapture.ts`'s `deps.compress` an identity
+pass-through, specifically to avoid compressing the photo twice. That leaves
+`PROOF_MAX_BYTES` unreferenced anywhere, and `PROOF_MAX_WIDTH` / `PROOF_QUALITY`
+referenced only by `submitProof`'s call to an identity function that ignores
+both arguments.
+
+- **Why deferred:** `proof.ts` was outside task 1's file list (only
+  `valet/api/valet.ts` and `valet/hooks/useProofCapture.ts` were in scope), and
+  a grep found no other consumer of these three constants — but removing them,
+  or restructuring `submitProof`'s compress-then-upload shape now that
+  compression genuinely lives one layer up, is a design call for whichever task
+  owns `proof.ts` next, not a drive-by edit from the task that stopped calling
+  them.
+- **Done means:** either `proof.ts` drops the now-dead constants and simplifies
+  `submitProof` to no longer take a `compress` step, or a comment on
+  `ProofDeps.compress` explains why an identity implementation is expected to
+  stay valid there.
+
+### S-30 — `carwash-http.spec.ts` seeds its space with a `slots` field `SeedSpaceOptions` does not have
+
+- **Status:** `open`
+- **Found in:** task 14 task-3 (earnings period filter and per-job lines)
+- **Surface:** api (test)
+
+`apps/api/test/integration/carwash-http.spec.ts`'s `beforeAll` calls
+`seedSpace(h, { ..., slots: { car: 4 } })`, but `SeedSpaceOptions` in
+`harness.ts` only has `carSlots?: number` and `twoWheelerSlots?: number` — there
+is no `slots` field. `seedSpace` silently ignores the unknown property and
+falls back to its default of one car slot. Vitest transpiles test files without
+a type check, so this compiles and runs without ever erroring; the suite
+happens to pass because none of its tests need more than one live car slot at
+once. Writing `washer-earnings-http.spec.ts` for task-3 needed the same fixture
+and used the correct field name (`carSlots: 4`) rather than copy the mistake.
+
+- **Why deferred:** out of scope for task-3. Task-3 does edit
+  `carwash-http.spec.ts`, but only its earnings assertion — first for the new
+  response shape, then to request `?period=all` so it keeps its lifetime meaning
+  — and not its `beforeAll` fixture. The fix is a one-line rename with no
+  behavioural risk, but it belongs to whoever next touches that spec's fixtures,
+  or a drive-by hygiene pass.
+- **Done means:** `slots: { car: 4 }` becomes `carSlots: 4` in
+  `carwash-http.spec.ts`, and ideally `tsconfig` for `apps/api/test` is checked
+  by `tsc --noEmit` somewhere in CI so an excess-property typo like this one
+  fails loud next time instead of silently seeding one slot.
+
+### S-31 — `GET /washer/earnings?period=all` is unbounded
+
+- **Status:** `open`
+- **Found in:** task 14 task-3 review (earnings period filter and per-job lines)
+- **Surface:** api
+
+`WasherEarningsQuery.forWasher` (`apps/api/src/domains/carwash/queries/washer-earnings.query.ts`)
+returns every completed job as a line for `period=all`, and each line runs two correlated
+subqueries against `ledger_entries` (the `platform_revenue` fee and the `owner_payable` net on
+the job's `txn_id`). There is no limit and no pagination.
+
+- **Why deferred:** fine at current scale — `ledger_entries_txn_id_idx` makes each subquery an
+  index lookup, and no partner has a lifetime job count that makes this measurable. Paginating
+  now would change the response contract (a cursor in `meta`) for a problem nobody has.
+- **Done means:** when a partner's lifetime job count makes `period=all` slow (measure it —
+  `EXPLAIN ANALYZE` on a seeded partner with a realistic history), the lines become cursor
+  paginated by `completed_at, id`, or the two subqueries become one grouped join, and the
+  summary stays a single aggregate.
+
+### S-32 — Nothing requires `completed_at` on a completed wash job
+
+- **Status:** `open`
+- **Found in:** task 14 task-3 review (earnings period filter and per-job lines)
+- **Surface:** database
+
+Migration 0030's `wash_jobs_assignee_presence_check` makes `price_paise` and `txn_id` NOT NULL
+once a job is accepted, but no CHECK ties `completed_at` to `status = 'completed'`. The earnings
+query used to paper over that with a 1970 fallback; it now passes the raw value, so a completed
+row with a null `completed_at` fails the response parse loudly instead — which is the right
+failure, but the database should make the row impossible.
+
+- **Why deferred:** a schema change is a migration with its own review gate
+  (`postgres-migration-reviewer`, R-GIT-07), and task-3 is a read-path change with no migration.
+- **Done means:** a migration adds
+  `CHECK (status <> 'completed' OR completed_at IS NOT NULL)` to `wash_jobs` (as `NOT VALID`
+  then `VALIDATE CONSTRAINT`), reviewed SAFE, with an integration test that a completed row
+  without `completed_at` is refused.
+
+### S-33 — A server-side response parse failure answers `400 VALIDATION_FAILED` (washer surface done)
+
+- **Status:** `open` (the washer surface is done; the rest of the repo remains)
+- **Found in:** task 14 task-3 review (earnings period filter and per-job lines)
+- **Surface:** api
+
+`apps/api/src/platform/http/exception.filter.ts` (`map()`, around line 106) maps ANY `ZodError`
+to `400 VALIDATION_FAILED`. That is right for request validation, and wrong for a query or
+command that parses its own RESPONSE through Zod (R-VAL-01) and finds the server built
+something invalid — that is a server bug and should be a `500`, logged at error with the trace
+id, not blamed on the caller. Task-3's review found exactly this: a negative period net failed
+`washerEarningsViewSchema.parse` and the partner's default earnings screen answered 400.
+
+**Done for the washer surface (task 14 final fix wave).** `parseOutgoing(schema, value, what)` in
+`apps/api/src/platform/http/outgoing-contract.ts` parses an outgoing value and rethrows a failure
+as `500 INTERNAL_ERROR` carrying the `ZodError` as its cause, logged at error with the trace id.
+The earnings view, `washerCard()`, the washer profile view and the service menu (`toMenu`) use it;
+`test/outgoing-contract.spec.ts` and two HTTP tests (a completed job with no posting, a washer
+card with no name) prove the 500. **What remains** is every other role's outgoing parse — valet,
+driver, owner and admin views still call `schema.parse()` on their responses and still answer
+400 on a broken row.
+
+- **Why deferred:** the remaining call sites are other roles' endpoints, outside task 14's files.
+- **Done means:** every response parse in `apps/api/src` goes through `parseOutgoing` (a grep for
+  `ViewSchema.parse(` / `Schema.parse(` on response values finds none), and one HTTP test per role
+  proves a malformed response answers 500 while a malformed request still answers 400.
+
+### S-34 — A wash offer carries no address and no duration, so the card cannot show either
+
+- **Status:** `open`
+- **Found in:** task 14 task-6 (washer offers screen)
+- **Surface:** contracts, api, mobile
+
+Direction "Bay" (spec §2, mockup B1) draws each offer with the space's address and the job's
+duration. `washJobOfferSchema` (`packages/contracts/src/washer/job-offer.ts`) has neither: only
+`spaceLocation` (a point), `distanceM`, `serviceName`, `vehicleType` and `earningsPaise`. The
+card ships without an address line, and takes its duration chip from the partner's OWN menu row
+for that service and vehicle (`useServiceMenu`), which is the row the server priced the earnings
+from, so the number is the partner's own quote; it is dropped when the menu has no row.
+
+- **Why deferred:** adding fields to the offer is a contract + candidate-query change on the
+  server (task 13's surface), not a screen change; task 6 is mobile-only.
+- **Done means:** `washJobOfferSchema` gains `spaceAddress` (and `durationMinutes` snapshotted
+  from the priced menu row), the offers query selects them, `carwash-http.spec.ts` asserts both
+  on `GET /washer/jobs/offers`, and `WashOfferCard` renders the address under the vehicle line
+  and reads duration from the offer instead of the menu lookup in `app/(washer)/offers.tsx`.
+  The active-job header (`app/(washer)/active/index.tsx`, task 7) has the same gap:
+  `WashJobView` carries no address either, so it shows "Your active job" where mockup B2 names
+  the space; the same change should add `spaceAddress` to the job view.
+- **Extended by the task 14 UI audit (M, job identity):** a partner walking up to a car needs
+  to know it is the right one. The active job's header now names the tab ("Active") with
+  "service · vehicle" as its subtitle; it should also carry the space's name, the car's plate
+  and when the car leaves. None of those is on `WashJobView`. Done also means the job view
+  gains `spaceName`, `vehiclePlate` and `bookingEndsAt` (plate masked per the privacy
+  rules), and the active header's subtitle shows them.
+
+### S-35 — Shared client error matching expects a `NOT_FOUND` code the API never sends
+
+- **Status:** `open`
+- **Found in:** task 14 task-6 review (CRITICAL 1, unregistered washer saw an error screen)
+- **Surface:** mobile, api
+
+`apps/api/src/platform/http/exception.filter.ts` (`errorCodeFor`, lines 58-65) builds
+`error.code` from the `error` field of an HttpException's response. A bare
+`new NotFoundException()` in Nest 11 carries no such field, so it answers code `'ERROR'`, never
+`'NOT_FOUND'`. `apps/mobile/src/features/shared/hooks/useMessageForError.ts:26` matches
+`case 'NOT_FOUND'`, which therefore never fires. Task 6 fixed the one place this broke a flow
+(`GET /washer/profile` now throws `WasherProfileNotFoundError`), but bare
+`new NotFoundException()` is still thrown in at least ten commands, including
+`accept-wash.command.ts:48,51`, `advance-wash.command.ts:29`, `cancel-wash.command.ts:33`,
+`create-wash-order.command.ts:55`, `request-carwash.command.ts:40`, the valet `accept-job` /
+`advance-job` / `cancel-job` commands, and `roles/washer/jobs.controller.ts:136`.
+
+The hook is also dead code, not only a matcher for a code that never arrives (task 14 task-11).
+`useMessageForError.ts` exports `messageForError`, and nothing anywhere in `apps/` or
+`packages/` imports it. Deleting the file is the smallest way to close its half of this row.
+Wiring it into the screens that should use it is the other way.
+
+- **Why deferred:** the fix spans the global filter or every command's 404, plus the shared
+  client hook. That is cross-role, far outside one screen's fix round.
+- **Done means:** shared error matching uses domain codes. Either every 404 the app routes on
+  throws a domain error with a stable code, or the filter derives a code from the status when the
+  response has no `error` field (e.g. 404 → `NOT_FOUND`). An HTTP test pins the code for a bare 404. `useMessageForError.ts` is either deleted or has callers and matches only codes the API
+  actually emits.
+
+### S-36 — The step rail advances without its `spring.gentle` motion
+
+- **Status:** `open`
+- **Found in:** task 14 task-7 (washer active-job screen)
+- **Surface:** mobile
+
+Spec §2 gives the evidence pair's slot fill `duration.base` + `easing.decelerate` and the step
+rail's advance `spring.gentle`. The slot fill ships (`EvidencePair.tsx`, asserted by test);
+`StepRail.tsx` changes marker state with no motion. The controller ruling for task 7 allowed
+"the tokens' motion or no animation", and a rail that snaps is honest — but it is not yet what
+the direction specified.
+
+- **Why deferred:** the marker's ring-to-check change needs a Reanimated shared value driven by
+  `withSpring(…, spring.gentle)`, plus a reduced-motion path, and nothing in the unit harness can
+  see it — the only real check is on a device, which is task 11's pass.
+- **Done means:** the current-step marker animates its fill with `spring.gentle` from
+  `@parkease/tokens`, skipped under `useReducedMotion()`, checked on an Android device in the
+  task-11 walkthrough.
+
+### S-37 — Older literal opacities should use the new `opacity` token
+
+- **Status:** `open`
+- **Found in:** task 14 task-7 fix round 1 (minor 8 added `opacity` to `packages/tokens`)
+- **Surface:** ui-native, mobile
+
+`packages/tokens/src/opacity.ts` now defines `opacity.dimmed` (0.5) and `opacity.muted` (0.7),
+and `EvidencePair` uses `opacity.dimmed`. Four literals predate it: `packages/ui-native/src/Button.tsx:69`
+(`0.5`, disabled) and `:76` (`0.7`, disabled label), `apps/mobile/app/(auth)/choose-role.tsx:140`
+(`0.5`) and `apps/mobile/src/features/driver/components/PhotoCarousel.tsx:92` (`0.5`, inactive dot).
+
+- **Why deferred:** three surfaces outside the washer screen, one of them the shared Button
+  every app renders — a visual change that deserves its own look on a device, not a rider on a
+  fix round.
+- **Done means:** the four literals read `opacity.dimmed` / `opacity.muted`, and
+  `grep -rnE "opacity: 0\.[0-9]" apps/mobile packages/ui-native/src` returns nothing.
+
+### S-38 — Two copies of the camera modal and the capture hook
+
+- **Status:** `open`
+- **Found in:** task 14 task-7 (washer active-job screen), fix round 1
+- **Surface:** mobile
+
+`features/washer/components/WashCamera.tsx` copies valet's `ProofCapture` camera modal, and
+`features/washer/hooks/usePhotoSlot.ts` copies the shape of `features/valet/hooks/useProofCapture.ts`
+(held uri, one attach intent per capture, held upload id, retry). R-ARCH-01 forbade the washer
+importing from valet, so they were copied. Fix round 1 then had to change BOTH capture hooks
+together for ruling T7-I1 — which is R-ARCH-07's test for extraction: call sites that must
+change together.
+
+- **Why deferred:** extracting touches the valet active screen, which task 7 does not own, and
+  the two hooks attach through different endpoints and error vocabularies, so the shared seam
+  (`attach(photoId, intent)` injected) needs its own design pass.
+- **Done means:** `features/shared/components/CameraSheet.tsx` and
+  `features/shared/hooks/usePhotoCapture.ts` (attach injected) back both roles; the valet and
+  washer copies are deleted; `proof-upload.test.tsx` and `photo-slot.test.tsx` run against the
+  shared hook.
+- **Grown in task 14 task-10:** the camera-permission flow now has a third copy. The washer
+  registration and profile screens share `features/washer/hooks/useCameraGate.ts` (extracted on
+  its second use), and `WashCamera` is generic over its slot name; the washer active screen still
+  carries its own inline permission code. The shared `CameraSheet` should take over all three.
+
+### S-39 — Framed slots, the dashed cue and the switch off-track sit under the 3:1 non-text floor
+
+- **Status:** `open`
+- **Found in:** task 14 task-8 (service menu editor), design audit; widened in fix round 1
+- **Surface:** mobile, tokens
+
+WCAG 1.4.11 asks 3:1 for the visual information needed to identify a component or its state.
+Measured with the `mobile-app-design` contrast script:
+
+| Boundary                                                                                                                  | Token                                               | Against                      | Ratio  |
+| ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- | ---------------------------- | ------ |
+| Resting price slot (`ServiceRow` `slot`)                                                                                  | `colors.border` `#E2E8F0`                           | white card                   | 1.23:1 |
+| same, against its own fill                                                                                                | `colors.border`                                     | `surfaceSecondary` `#F8FAFC` | 1.18:1 |
+| Dashed "set your prices" cue (`ServiceRow` `slotEmpty`) and the evidence pair's empty frame (`EvidencePair` `frameEmpty`) | `colors.borderStrong` `#CBD5E1`                     | white                        | 1.48:1 |
+| Switch off-track, white thumb on a white card                                                                             | `colors.borderStrong` track, `colors.surface` thumb | white                        | 1.48:1 |
+
+The switch pattern is shared: `ServiceRow`, the washer `OnlineRail` and valet's
+`OnlineStatusBar` (twice) all pass `trackColor.false: colors.borderStrong`. Today the text beside
+each carries identification and state (CAR / BIKE and ₹, "Needed to start", "Offered" /
+"Not offered", "Online" / "Offline"), so nothing is unreadable, but the frames and the off switch
+are faint in sunlight, which is the washer's working condition.
+
+- **Why deferred:** the fix is a token decision (a `borderInput` and a `switchTrackOff` at ≥3:1,
+  or darkening `borderStrong`) that moves every bordered control and every switch in the app,
+  across three roles. The two washer components must change together to keep their rhyme. That
+  wants its own look on a device, not a rider on the menu task.
+- **Done means:** slot boundaries, the dashed cue and the switch off-track each measure ≥3:1
+  against their surface, asserted in `packages/tokens/test/contrast.spec.ts`; `ServiceRow`,
+  `EvidencePair`, `OnlineRail` and `OnlineStatusBar` use the new tokens.
+
+### S-40 — The earnings sparkline needs daily buckets from the API
+
+- **Status:** `open`
+- **Found in:** task 14 design spec §4.3 / §9; written when task-9 built the earnings screen
+- **Surface:** api, contracts, mobile
+
+The task file's §14.6 wireframe draws a five-bar week sparkline (`M T W T F`) under the earnings
+headline. `GET /washer/earnings` returns a period summary and per-job lines, so sizing a bar
+per day would mean grouping lines by day and summing paise in `apps/mobile` — the arithmetic
+R-FE-06 forbids — and the lines count by completion time while the summary counts by posting
+time, so client-summed bars would not even agree with the headline above them.
+
+- **Why deferred:** it is the least load-bearing element on the screen, and the only honest
+  version needs a contract change.
+- **Done means:** the earnings response carries server-computed daily buckets for the period
+  (IST days, `owner_payable` movement by `occurred_at`, the same basis as `summary.netPaise`),
+  parsed by the contract, and the mobile sparkline renders them with no arithmetic beyond
+  scaling bar heights to the largest bucket — with the bars labelled in text (R-FE-12).
+
+### S-41 — `formatDateIST` renders "Sept" and no weekday
+
+- **Status:** `open`
+- **Found in:** task 14 task-9 (earnings screen)
+- **Surface:** mobile
+
+`apps/mobile/src/lib/format.ts` `formatDateIST` asks `toLocaleString('en-IN', { month: 'short' })`,
+which Node's ICU renders as `Sept` for September (`12 Sept 2026`), not `Sep`. Hermes on
+Android may or may not match, depending on its ICU build. The earnings line wanted a weekday
+too ("Fri 12 Sep · 2:22 PM"), which the shared formatter does not produce.
+
+- **Why deferred:** the task ruled "reuse, do not write new date formatting", and the formatter
+  is app-wide (driver bookings, valet, washer) — changing its output is its own change with its
+  own callers to check. `earnings-arithmetic.test.tsx` asserts through the formatter, not a
+  pinned month spelling, so it holds either way.
+- **Done means:** `formatDateIST` uses a fixed month table (`Jan`…`Dec`) so the output is
+  identical on Node and Hermes, an optional weekday variant exists for list rows, and
+  `format.test.ts` covers September.
+
+### S-42 — The ID proof has one side; §14.2 draws a front and a back
+
+- **Status:** `open`
+- **Found in:** task 14 task-10 (washer registration), ruling T10-D1
+- **Surface:** db, contracts, api, admin, mobile
+
+§14.2's gig form draws "Upload front" and "Upload back". `submitWasherDocumentsSchema` has one
+`idDocumentId`, `washer_profiles` one `id_document_id` column, and task 18's admin review is
+single-document, so v1 collects ONE image, labelled for the side with the partner's photo.
+
+- **Why deferred:** a second side is a migration, a contract field, an admin review change and a
+  second capture — four surfaces for a task scoped to the mobile screens.
+- **Done means:** a nullable `id_document_back_id` (or an array) through migration, contract,
+  `POST /washer/profile/documents`, the admin review and the gig form; an admin can see both sides;
+  existing single-image profiles stay valid.
+
+### S-43 — Rename `washer_profiles.business_name` to `display_name` (expand-contract)
+
+- **Status:** `open`
+- **Found in:** task 14 task-10, rulings T10-D2 and T10-C2
+- **Surface:** db, contracts, api, mobile
+
+Ruling T10-C2 made `businessName` required for both partner types: it is the name a partner
+trades under — a business's business name, a gig partner's OWN name — and `washerCard()` reads it
+(`coalesce(business_name, users.name)`) as the name a driver sees. The column and field kept
+their names to avoid a migration inside a mobile task, so a gig partner's personal name now sits
+in a column called `business_name`, which misleads every future reader. Separately, nothing
+writes `users.name` or `users.avatar_url` (no `PATCH /me`), which is why no gig profile photo is
+collected in v1 (T10-D2).
+
+- **Why deferred:** a column rename is an expand-contract migration across db, contracts, api and
+  mobile, reviewed with `postgres-migration-reviewer`; out of scope for the registration screens.
+- **Done means:** migration 1 adds `display_name` and backfills from `business_name`; writers
+  write both; readers move to `display_name`; the contract field is renamed; migration 2 drops
+  `business_name` and makes `display_name NOT NULL`. A `PATCH /me` for an avatar is its own row
+  if still wanted.
+
+### S-46 — `reversedPaise` will mislabel payouts once task 16 debits `owner_payable`
+
+- **Status:** `open`
+- **Found in:** task 14 task-3 / task-9 (earnings summary and screen)
+- **Surface:** api, contracts, mobile
+
+`washerEarningsSummarySchema.reversedPaise` (`packages/contracts/src/washer/job-view.ts`) is
+documented as "what cancellations clawed back". The earnings query counts every debit to the
+partner's `owner_payable` in the period. Today the only such debit is a cancellation reversal.
+Task 16's payouts will also debit `owner_payable`, and from then on a payout counts as
+`reversedPaise`. `EarningsSummary.tsx` would then tell a partner "After ₹X taken back for
+cancelled washes" about money they were paid.
+
+- **Why deferred:** payouts do not exist yet, so the figure is correct today. Splitting it now
+  would mean guessing the payout's ledger shape before task 16 designs it.
+- **Done means:** before task 16 ships, the earnings query separates payout debits from
+  cancellation reversals, for example by `txn` kind or account pair. The contract carries a
+  separate payouts figure (or excludes payouts from `reversedPaise`), and an integration test
+  posts a payout and a cancellation in the same period and checks that each lands in its own
+  figure.
+
+### S-47 — Service prices: the DB CHECK is looser than the contract bound
+
+- **Status:** `open`
+- **Found in:** task 14 task-8 (service menu)
+- **Surface:** database, contracts, mobile
+
+The write contract bounds a service price to ₹10–₹9,999 (`MIN_SERVICE_PRICE_PAISE` /
+`MAX_SERVICE_PRICE_PAISE`, `packages/contracts/src/washer/service-menu.ts`). The database check
+is only `wash_services_price_check CHECK (price_paise > 0)` (`0008_services.sql`), and the read
+schema accepts any positive price. A stored price outside the range can only get there from
+outside the API: a seed, a manual fix, or a pre-bound row. Such a row cannot be toggled off
+from the menu screen, because the toggle re-saves the server's prices through the bounded
+write schema and the save fails validation.
+
+- **Why deferred:** tightening a CHECK on a populated table needs an audit of existing rows
+  first. It also needs a migration reviewed with `postgres-migration-reviewer` (`NOT VALID`,
+  then `VALIDATE`), and task 8 was a mobile screen.
+- **Done means:** existing rows are audited and any out-of-range rows are fixed. Then either a
+  migration adds `CHECK (price_paise BETWEEN 1000 AND 999900)`, reviewed SAFE, or the toggle
+  becomes a toggle-only write that does not re-send prices. A test covers the out-of-range row.
+
+### S-48 — Valet screens keep stale data after a failed refresh with no notice
+
+- **Status:** `open`
+- **Found in:** task 14 task-7 review (ruling T7-I2, `resolveScreenState` returns `ready` for an
+  errored query that still holds data)
+- **Surface:** mobile
+
+`apps/mobile/src/features/shared/screen-state.ts` now keeps a screen on its data when a refetch
+fails. That is the right call, so a failed refresh no longer swaps a live job for an error
+screen. The washer active, earnings, menu and profile screens pair it with a `RefreshNotice`
+that says the latest refresh failed and offers another. Two valet screens do not: the valet
+active screen (`app/(valet)/active/index.tsx`) and the valet offers feed
+(`app/(valet)/offers.tsx`). On those, a valet looks at data of unknown age with no sign that it
+is stale. (The washer offers feed was the third; the task 14 final fix wave, J1, gave it the
+`RefreshNotice`, so this row is valet only.)
+
+- **Why deferred:** the valet screens were outside task 14's file list.
+- **Done means:** both valet screens show a refresh notice when `isError` is true and data is
+  held. It uses a shared component (`RefreshNotice` moved to `features/shared/` on this second
+  role's use, R-ARCH-07), and a test per screen renders the stale-with-error state.
+
+### S-49 — No endpoint writes a user's avatar
+
+- **Status:** `open`
+- **Found in:** task 14 task-10 (washer registration), ruling T10-D2; S-43 noted it
+- **Surface:** api, contracts, mobile
+
+`users.avatar_url` is read (`apps/api/src/domains/identity/repositories/user.repository.ts`) and
+`cloudinary.service.ts` has an `avatars` folder, but no endpoint writes the column. The gig
+registration's "profile photo" from §14.2 was therefore not built. Every role that shows a
+face has the same gap.
+
+- **Why deferred:** an avatar is a cross-role identity feature: one endpoint, one contract, and
+  every role's profile screen. It does not belong to the washer registration screens.
+- **Done means:** `PATCH /me` (or `PUT /me/avatar`) takes an upload id from the `avatars`
+  folder, checked as S-50 describes, and writes `users.avatar_url`. The gig registration and
+  profile screens collect and show it, and an HTTP test covers the write and its ownership
+  check.
+
+### S-50 — Upload ids are never checked for existence or ownership (security)
+
+- **Status:** `open`
+- **Found in:** task 14 task-11 review stack, security lens (the task-1 upload path and the
+  task-7 / task-10 attach endpoints); corrected in the task 14 final fix wave
+- **Surface:** api (washer, valet, owner)
+
+`attachWashPhotoSchema.photoId`, `submitWasherDocumentsSchema.idDocumentId` /
+`businessPhotoIds`, `createWasherProfileSchema.businessPhotoIds` and valet's `proofPhotoId`
+are well-formed upload ids. Nothing checks two things: that the upload exists, and that it
+belongs to the caller. Two consequences follow:
+
+- A partner can reach `verification_status = 'pending'` with an id they made up.
+- An evidence photo, the before/after pair whose value is that it can't be forged, can point
+  at another user's upload in the same folder.
+
+**Corrected.** This row used to say "the regex blocks URLs". That was true only of
+`attachWashPhotoSchema`: the profile fields were `z.string().min(1).max(255)` and took a URL.
+The task 14 final fix wave closed the URL and folder half: every field above now parses through
+`uploadIdIn(folder)` (`packages/contracts/src/shared/upload-signature.ts`), which refuses a URL
+and requires the `parkease/<folder>/` prefix the signer uses (`proofs`, `documents`, `spaces`).
+What remains is existence and ownership, which a schema cannot know.
+
+- **Why deferred:** the fix is a new record of issued upload signatures, and the washer, valet
+  and owner attach paths would all have to check against it. That is a cross-role security
+  change with its own migration, not a fix inside the mobile screens.
+- **Done means:** the API records each signed upload (id, owner, folder) when it issues the
+  signature. Every attach endpoint checks the id against that record, and rejects an unknown
+  id or another user's id with a 4xx. An HTTP test covers each rejection.
+
+### S-51 — Valet location heartbeat idempotency keys are not UUIDs
+
+- **Status:** `chip`
+- **Found in:** task 14 task-11 review stack (while reading `apps/mobile/src/features/valet/api/valet.ts`)
+- **Surface:** mobile (valet), api
+
+`postFix` in `apps/mobile/src/features/valet/api/valet.ts` sends
+`Idempotency-Key: fix-<recordedAt>`. The server validates that header as a UUID and answers
+`400`, so every valet location heartbeat is dropped, and valets fall out of dispatch while
+their switch reads online. A separate background task has already been raised for it.
+
+- **Why deferred:** it is valet code, outside task 14's file list, and it has its own task.
+- **Done means:** that task lands. `postFix` sends a UUID key (one per fix, stable across that
+  fix's retries), and an HTTP-level test posts a fix through the real idempotency guard and
+  gets a 2xx.
+
+### S-52 — The dev-mock preview does not reach washer registration or the gig ID upload
+
+- **Status:** `open`
+- **Found in:** task 14 task-11b (dev-mock fixtures, ruling T11-W1)
+- **Surface:** mobile (washer)
+
+Under a dev-mock session the washer fixtures serve a partner who is already **verified**,
+so the walk-through covers offers, the active job, the menu, earnings and the profile, but
+not `profile/register.tsx` or the gig partner's "send your ID" step. `createProfile` and
+`submitDocuments` in `apps/mobile/src/features/washer/api/washer.ts` still go to the network,
+and `useHeldUploads` / `useCameraGate` (registration photos) still call `uploadImage` and ask
+for a real camera permission, which the browser preview refuses. On web that refusal is
+silent, because react-native-web's `Alert.alert` is a no-op (`learnings.md`).
+
+- **Why deferred:** the brief asked for a verified partner and the job walk; registration
+  needs a second fixture mode (unregistered, then pending) and a way to pick it.
+- **Done means:** a dev-mock session can start unregistered (404 `WASHER_PROFILE_NOT_FOUND`
+  from the store), register as business and as gig, send an ID with the stand-in camera,
+  and land in `pending`; `dev-fixtures.test.ts` walks it; nothing reaches the network.
+
+### S-53 — `tabIcon` and the tab-bar sizing are copied into three role layouts
+
+- **Status:** `open`
+- **Found in:** task 14 task-11c (washer tab icons, ruling T11-W1)
+- **Surface:** mobile (driver, valet, washer)
+
+`apps/mobile/app/(driver)/_layout.tsx`, `(valet)/_layout.tsx` and now `(washer)/_layout.tsx`
+each define the same local `tabIcon(outline, filled)` helper, the same `IconName` type, the
+same `TAB_BAR_HEIGHT = 60` and the same `tabBarStyle` / `tabBarLabelStyle` block (safe-area
+inset added to the height). `(owner)/_layout.tsx` has its own variant without the sizing.
+Three copies that must change together (a tab-bar height or R-FE-12 icon-state change has to
+land in all of them) is the R-ARCH-07 extraction trigger.
+
+- **Why deferred:** the W2 fix was scoped to the washer layout; extracting touches the driver,
+  valet and owner layouts, which is other roles' surface and needs its own design audit.
+- **Done means:** one `tabIcon` and one tab-bar `screenOptions` factory in `features/shared/`
+  (never `utils/`), used by all four role layouts; `tab-icons.test.ts` updated to follow it;
+  each role's bar checked at 375x812 and at desktop width.
+
+### S-54 — An admin-only account lands on choose-role, where every choice fails
+
+- **Status:** `open`
+- **Found in:** task 14 whole-branch spec review (task 11c, role routing)
+- **Surface:** mobile
+
+An account whose only role is `admin` signs in to the mobile app and lands on the choose-role
+screen. Every role offered there is one the account does not hold, so each tap calls
+`POST /me/roles/active`, gets a 403, and the screen says "please try again". Nothing the user
+does from there can work. The admin surface is the web admin panel, not the app.
+
+- **Why deferred:** the task 14 fix wave covers the partner surfaces; an admin-only landing is a
+  new screen in the shared auth flow with its own design gate.
+- **Done means:** an admin-only session lands on a screen that says to use the admin panel and
+  offers sign-out, never on choose-role. A test signs in with `roles: ['admin']` and asserts
+  that screen, and that choose-role is not reachable.
+
+### S-55 — `owner_payable` by partner has no covering index
+
+- **Status:** `open`
+- **Found in:** task 14 final review, database lens M2
+- **Surface:** database
+
+The washer earnings summary (`washer-earnings.query.ts`) and the valet and owner balances all
+ask for `owner_payable` rows by `counterparty_user_id`, bounded by `occurred_at`, and sum
+`amount_paise` by `direction`. No index has that shape. The candidate is
+`ledger_entries (counterparty_user_id, account, occurred_at) INCLUDE (direction, amount_paise)`,
+which would make the summary an index-only scan.
+
+- **Why deferred:** the need is unmeasured. The ledger is small, and an index on the
+  append-only, highest-write table has a write cost that should be paid for a measured read.
+- **Done means:** an `EXPLAIN (ANALYZE, BUFFERS)` of the summary query against a
+  production-sized ledger shows the sequential scan or heap cost. Then a
+  `CREATE INDEX CONCURRENTLY` migration, alone in its file and reviewed SAFE, adds the index,
+  and the plan is re-run to show it used.
+
+### S-56 — `washer_profiles.capabilities` is unchecked, and is a second source of truth
+
+- **Status:** `open`
+- **Found in:** task 14 final review, database lens L4
+- **Surface:** database, api
+
+`washer_profiles.capabilities` is a `text[]`. The contract limits it to the closed catalogue at
+registration (ruling T10-S1), but the database accepts any string. It is also a second answer to
+the question `wash_services.is_active` already answers ("which services does this partner
+offer"). Registration writes both, and a menu toggle updates only `is_active`, so the two
+disagree after the first edit.
+
+- **Why deferred:** choosing which one is the truth is a design decision, and it touches the
+  menu, the profile view and dispatch. A CHECK alone would harden a column that may be dropped.
+- **Done means:** either `capabilities` is dropped (expand-contract) and the profile view derives
+  it from active menu rows, or a CHECK (`capabilities <@ ARRAY[...catalogue]`, NOT VALID then
+  VALIDATE, reviewed SAFE) is added and the menu toggle keeps it in step. A test toggles a
+  service and reads both.
+
+### S-57 — No database check on a business's photo count or a blank `business_name`
+
+- **Status:** `open`
+- **Found in:** task 14 final review, database lens L5
+- **Surface:** database
+
+The contract requires a business to register with 1–10 photos, and every partner to have a
+non-blank `business_name` (rulings T10-C1, T10-C2). `washer_profiles` enforces neither, so a
+console fix or a future write path can leave a business with no photos under review, or a
+partner whose washer card has only whitespace for a name.
+
+- **Why deferred:** rows written before T10-C2 have a NULL `business_name`. The CHECK needs a
+  backfill decision first, and a migration reviewed on its own.
+- **Done means:** existing rows are audited. Then a migration adds
+  `CHECK (partner_type <> 'business' OR cardinality(business_photo_ids) BETWEEN 1 AND 10)` and
+  `CHECK (business_name IS NULL OR btrim(business_name) <> '')`, both NOT VALID then VALIDATE
+  and reviewed SAFE, and a test shows each direct write refused.
+
+### S-58 — The earnings lines have no index and no stable order
+
+- **Status:** `open`
+- **Found in:** task 14 final review, database lens L6
+- **Surface:** database, api
+
+The earnings lines query filters `wash_jobs` by `washer_user_id` and `status = 'completed'` and
+orders by `completed_at DESC`. `wash_jobs_washer_user_id_idx` serves only the equality, so the
+sort covers every job the partner has done. Two jobs completed in the same instant also have no
+tiebreak, so their order can change between two reads of the same page.
+
+- **Why deferred:** a partner has few jobs today, so the cost is unmeasured. The index is a
+  `CONCURRENTLY` migration of its own.
+- **Done means:** a partial index
+  `wash_jobs (washer_user_id, completed_at DESC, id) WHERE status = 'completed'` is added (alone
+  in its file, reviewed SAFE), the query orders by `completed_at DESC, id DESC`, and a test with
+  two equal `completed_at` values asserts a stable order.
+
+### S-59 — ID images are `private`, but transformed renditions can still be public
+
+- **Status:** `open`
+- **Found in:** task 14 final review, security lens M3
+- **Surface:** api, infrastructure (Cloudinary account)
+
+`CloudinaryService` uploads `documents` with `type: 'private'`. Cloudinary's `private` delivery
+protects the original, but a derived rendition (a resize, a crop) is publicly deliverable
+unless Strict Transformations is enabled on the account. An ID image is exactly what must never
+be reachable by a guessable transformation URL. The `authenticated` delivery type closes this
+for every rendition.
+
+- **Why deferred:** the choice between `authenticated` and `private` plus Strict
+  Transformations is an account-level setting and a delivery decision for task 18's admin
+  review screen, which has to render the image.
+- **Done means:** either `documents` uploads use `type: 'authenticated'` and task 18 renders them
+  through signed delivery URLs, or Strict Transformations is recorded as enabled on the account
+  (with the date and who checked). A test pins the upload type for `documents`.
+
+### S-60 — The name a driver sees is chosen by the partner, unreviewed
+
+- **Status:** `open`
+- **Found in:** task 14 final review, security lens L3
+- **Surface:** api, admin
+
+The washer card shows the driver `business_name`, which the partner types at registration
+(ruling T10-C2). Nothing reviews it, so a partner can show drivers an impersonating or abusive
+name ("ParkEase Support", a competitor's brand) from the moment they are verified.
+
+- **Why deferred:** review is task 18's admin surface. Until it exists, verification itself is
+  manual, so no partner reaches a driver without an admin having looked at the account.
+- **Done means:** task 18's verification view shows the display name as part of what is
+  approved. A name change after verification returns the partner to `pending` (or holds the new
+  name until approved), and an HTTP test covers the change.
+
+### S-61 — `washJobViewSchema.availableEvents` is `z.array(z.string())`
+
+- **Status:** `open`
+- **Found in:** task 14 final review, TypeScript lens L7
+- **Surface:** contracts, mobile
+
+`availableEvents` in `packages/contracts/src/washer/job-view.ts` lists the events the partner may
+fire next, but it is typed as plain strings rather than `carwashJobEventSchema`. A typo or a
+renamed event passes the parse and reaches the app, where a `switch` on it falls through to its
+default without a compile error. This is the same shape as S-10's `verificationStatus`.
+
+- **Why deferred:** narrowing it changes the type every consumer reads, and the mobile half
+  belongs to part B of the fix wave.
+- **Done means:** the field is `z.array(carwashJobEventSchema)`, the mobile consumers typecheck
+  against the enum, and a contract test refuses an unknown event.
+
+### S-62 — `grossPaise` means two things in one earnings response
+
+- **Status:** `open`
+- **Found in:** task 14 whole-branch spec review (task 3 / task 9, earnings)
+- **Surface:** contracts, api, mobile, docs
+
+In `GET /washer/earnings`, `summary.grossPaise` is what the ledger credited the partner, net of
+commission. `lines[].grossPaise` is the driver-facing service price. The same name in one
+response means the partner's money in one place and the driver's price in another. The task
+file's Demo also expects `{grossPaise: 39900, commissionPaise: 7980, netPaise: 31920}` for the
+summary, which the contract deliberately does not produce.
+
+- **Why deferred:** a rename is a contract change for both consumers, and the mobile consumer is
+  part B's surface.
+- **Done means:** one of the two fields is renamed (for example `summary.creditedPaise` or
+  `lines[].pricePaise`) in the contract, the API and the app. The task file's Demo is corrected
+  to the shape the endpoint returns, and a contract test pins the new name.
+
+### S-63 — R-FE-11's ≤1MB upload ceiling is asserted nowhere
+
+- **Status:** `open`
+- **Found in:** task 14 whole-branch spec review (preflight ruling R1 removed an unenforced
+  constant)
+- **Surface:** mobile
+
+R-FE-11 says an upload is ≤1MB after compression. Preflight ruling R1 removed the constant that
+claimed to enforce it, because nothing did: `expo-image-manipulator` returns no byte size. So the
+rule is now stated and checked nowhere, and a camera that produces a large file after
+compression would upload it.
+
+- **Why deferred:** a real size probe needs a file-system read of the compressed output, which
+  is a mobile change with its own device testing.
+- **Done means:** either the compressed file's size is read (for example with `expo-file-system`)
+  and an over-limit file is recompressed or refused, with a test, or the ceiling is recorded as a
+  device-test check in `docs/testcases.md` with the device and the measured size.
+
+### S-64 — A stale-lock takeover can run a side effect twice
+
+- **Status:** `open`
+- **Found in:** task 14 final fix wave (C1, choosing `IDEMPOTENCY_IN_FLIGHT_STALE_MS`); widened by
+  the C1 re-review and the server fix wave's guard rails
+- **Surface:** api
+
+`IdempotencyService` treats an unfinished claim older than five minutes as stale and lets a
+retry take it over, and **a takeover runs the handler again**. Two paths make that a second
+side effect — a second payment order, a second booking:
+
+1. **A slow live attempt.** Only safe if no attempt runs longer than the threshold, and nothing in
+   the API guarantees it: Fastify has no `requestTimeout`, the API's database connection has no
+   `statement_timeout`, and the Razorpay client call has no timeout of its own. The five minutes
+   is a judgement, not a derived bound.
+2. **A committed write that was never stored.** The handler commits, then `store` fails. The key
+   has no response to replay, so the retry that takes it over five minutes later re-runs the
+   write. Before C1 the same failure blocked the key for 24 hours — stuck, but safe.
+
+What the guard rails did (server fix wave): the interceptor retries a failed `store` once, so
+path 2 needs two consecutive write failures, and each is logged at warn with the key and trace
+id. `store` and `release` are conditioned on the claim's own `locked_at`, so a zombie attempt
+cannot store its answer over a newer retry's claim or delete it to let a third attempt in, and
+a write that finds its claim gone logs at warn. Rare and loud, not impossible.
+
+- **Why deferred:** the timeouts are cross-cutting settings for every endpoint, each needing its
+  own value argued; closing path 2 changes how every command commits.
+- **Done means:** path 2 closes for good when the stored response is written **inside the
+  handler's own transaction** — the domain write and the idempotency row commit or roll back
+  together, so a committed write can never be left unstored (the `store` write, like the outbox,
+  goes into rule 3's one transaction). Path 1 closes when a Fastify `requestTimeout`, a pool
+  `statement_timeout` and a gateway client timeout are set, each below
+  `IDEMPOTENCY_IN_FLIGHT_STALE_MS`, the constant's comment names them as its bound, and a unit
+  test asserts the ordering.
+
+### S-65 — `switch-exhaustiveness-check` is not on, so exhaustiveness is a convention
+
+- **Status:** `open`
+- **Found in:** task 14 final fix wave, I1 (TypeScript lens)
+- **Surface:** mobile + admin + web + api
+
+I1 ended every `switch` over a union in the washer screens and components in
+`default: return assertNever(x)` (`apps/mobile/src/lib/assert-never.ts`), and
+`features/washer/__tests__/exhaustive-switch.test.ts` pins the files the fix wave named. Every
+other role's `switch` still falls through silently when a union gains a member, and the pin is a
+grep over named files, not a rule.
+
+- **Why deferred:** turning on `@typescript-eslint/switch-exhaustiveness-check` in the shared
+  ESLint config touches driver, owner, valet, admin, web and api code, far outside task 14's
+  file list, and each hit needs a decision rather than a mechanical default.
+- **Done means:** the rule is on in the shared config with
+  `requireDefaultForNonUnion: true`, every hit is fixed with a case or `assertNever`, and the
+  washer grep test is deleted as redundant.
+
+### S-66 — `washerKeys` are bare arrays, so a cache write is not type-checked
+
+- **Status:** `open`
+- **Found in:** task 14 final fix wave, H1/H3 (React lens)
+- **Surface:** mobile
+
+`features/washer/hooks/useWasherQueries.ts` keys the cache with `as const` arrays. So
+`client.setQueryData(washerKeys.active, job)` accepts any value for `job`: nothing ties the key to
+the `WashJobView | null` its query returns. H1 and H3 added more cache writes (the won job, the
+held ID upload) and each is correct only by reading.
+
+- **Why deferred:** moving the keys to `queryOptions()` changes every `useQuery` and
+  `setQueryData` call in the file and the tests that mock them. The fix wave kept to the behaviour
+  it was asked for.
+- **Done means:** each key is a `queryOptions({ queryKey, queryFn })`, every `setQueryData`,
+  `getQueryData` and `invalidateQueries` uses it, and a type test shows a wrong value for a key
+  failing `tsc`.
+
+### S-67 — No test proves presence `stop()` returns without waiting out the GPS timeout
+
+- **Status:** `open`
+- **Found in:** task 14 final fix wave, test-adequacy lens
+- **Surface:** mobile
+
+`presence.test.ts` › "stop() resolves while a beat is stuck on the GPS" advances the fake clock
+by `LOCATE_TIMEOUT_MS * 2` before it awaits `stop()`. So it passes whether `stop()` returns
+straight away or only after the stuck beat times out. The promise the code makes is the first
+one: a partner switching off in a basement goes offline now, not in 15 seconds.
+
+- **Why deferred:** found while reading the suite for I5; the fix wave's brief lists it as a row.
+- **Done means:** a test holds the GPS promise open, calls `stop()`, advances the clock by less
+  than `LOCATE_TIMEOUT_MS` (or not at all), and asserts `stop()` has resolved and the offline
+  PATCH has been sent.
+
+### S-68 — The bare-href guard only sees template literals
+
+- **Status:** `open`
+- **Found in:** task 14 final fix wave, test-adequacy lens
+- **Surface:** mobile
+
+`src/lib/__tests__/landing-route.test.ts` › "no file under app/ or src/ builds a bare
+/(${...}) href" matches `` `/(${`` only. A bare group href written as a string literal
+(`'/(washer)'`) or built by concatenation (`'/(' + role + ')'`) resolves nowhere for a group
+with no `index.tsx` (T11-W1), and the guard does not see it.
+
+- **Why deferred:** widening the pattern means auditing every `href` and `router.*` call across
+  every role for false positives.
+- **Done means:** the guard also catches a string-literal `'/(group)'` and a concatenated one,
+  or `landingRouteFor`'s route type is narrowed so a bare group is a type error, with a test
+  that fails on each form.
+
+### S-69 — Dev-mock preview leftovers (task 11b)
+
+- **Status:** `open`
+- **Found in:** task 11b live walk-through; task 14 final fix wave, L
+- **Surface:** mobile (dev only)
+
+Three dev-only items from the preview, none reachable in a release build:
+
+- After a completion, the fixture earnings summary reads inconsistent with its lines:
+  `recordCompleted` adds the line and bumps `jobsCompleted`, but leaves the summary's money
+  figures as seeded.
+- The fixture data (`features/washer/api/dev-fixtures.ts`) ships in the release bundle.
+  `isWasherDevMock()` makes it unreachable, but Metro bundles every `require()`
+  (learnings.md), so the bytes are there.
+- Refusals as plain `Error`s: **closed by I7.** The store now throws the API's envelope with
+  the server's status and code, so the preview takes the production failure paths.
+
+- **Why deferred:** dev-only, and the first two need a fixture-summary recomputation and a
+  build-time exclusion respectively, neither of which the partner sees.
+- **Done means:** the fixture summary is recomputed from its lines by a helper that is itself
+  dev-only, and the fixtures are excluded from release builds (a `__DEV__`-guarded `require`
+  that Metro strips, or a separate entry), with a bundle check that the fixture file is absent.
+
+### S-70 — The profile screen has no back arrow
+
+- **Status:** `open`
+- **Found in:** task 14 live walk-through (V-series), pending the device pass
+- **Surface:** mobile
+
+The washer profile is reached from the header account icon and is a hidden tab
+(`href: null`), so it draws no back arrow. On Android the system back works; in the browser
+preview there is no way back except the tab bar. H2's `popToTopOnBlur` keeps the stack sane; it
+does not add the arrow.
+
+- **Why deferred:** whether a hidden tab should draw a back arrow is a navigation-design call
+  that the device pass decides (Android back may be enough), and section M owns the header.
+- **Done means:** after the device pass, either the profile draws a back arrow that returns to
+  the tab it came from, or the decision not to is recorded with the device evidence.
+
+### S-71 — The Offers tab has no badge for waiting offers (§14.3)
+
+- **Status:** `open`
+- **Found in:** task 14 whole-branch spec review
+- **Surface:** mobile
+
+§14.3's tab bar shows a count on Offers when jobs are waiting. The washer layout draws four
+plain tabs. A partner on Menu or Earnings has no cue that an offer is expiring.
+
+- **Why deferred:** a badge needs the offers count outside the offers screen (a shared query
+  subscription in the layout) and a design pass for its colour and size (section M territory).
+- **Done means:** the Offers tab shows the number of open offers while online, from the same
+  query the screen uses (no second poll), announced for TalkBack, with a test.
+
+### S-72 — The active job shows no step timestamps (§14.4)
+
+- **Status:** `open`
+- **Found in:** task 14 whole-branch spec review
+- **Surface:** mobile + contracts
+
+The §14.4 wireframe shows a time beside each completed step (accepted 10:02, on the way 10:04).
+`StepRail` shows the steps with no times, because `washJobViewSchema` carries only
+`acceptedAt`, `startedAt` and `completedAt`, not the `en_route` time.
+
+- **Why deferred:** the missing timestamp is a contract and database field, outside mobile.
+- **Done means:** the job view carries a time for each step, `StepRail` shows it beside the
+  step, formatted in IST with `hourCycle: 'h23'` (learnings.md), with a test.
+
+### S-73 — A stale screen re-rendering is proven only at the cache level
+
+- **Status:** `open`
+- **Found in:** task 14 final fix wave, test-adequacy lens (H3)
+- **Surface:** mobile
+
+`washer-queries.test.ts` proves each mutation cancels in-flight fetches, writes the cache and
+invalidates while another write runs. No test renders a screen through that cache and shows the
+screen itself moving from the stale answer to the new one. A screen that read a stale local copy
+would pass.
+
+- **Why deferred:** a screen-level test needs a `QueryClient`, the screen's providers and the
+  router mocked, a harness the washer screens do not have yet.
+- **Done means:** one screen (the active job) is rendered with a real `QueryClient`, a mutation
+  answer is written, and the rendered status changes with no refetch; a second case shows a
+  late refetch cannot overwrite it.
+
+### S-74 — ID-image copies linger in the app cache after upload
+
+- **Status:** `open`
+- **Found in:** task 14 security lens; task 14 final fix wave, L
+- **Surface:** mobile
+
+The camera writes the ID photo to the app's cache directory, and `expo-image-manipulator`
+writes a compressed copy beside it. Neither is deleted after the upload lands, so an image of a
+government ID stays on the device until the OS evicts the cache. The held upload id (G9) is in
+memory only and is cleared on sign-out; the files are not.
+
+- **Why deferred:** pairs with S-26 (erasure of partner personal data) and needs
+  `expo-file-system` deletes with device testing of the cache paths.
+- **Done means:** after an ID upload succeeds (and on sign-out) the original and compressed files
+  are deleted, a test asserts the delete is called with both uris, and S-26 references this row.
+
+### S-75 — The webhook path stores and releases its claim by key alone
+
+- **Status:** `open`
+- **Found in:** task 14 server fix wave (idempotency stale-lock guard rails)
+- **Surface:** api
+
+`IdempotencyService.store` and `release` now take the claim's `claimedAt` and write only while
+that claim still holds the key. `IdempotencyInterceptor` passes it; `WebhookService.handle`
+(`apps/api/src/domains/payment/webhook.service.ts`) does not, so a Razorpay delivery that
+stalls past `IDEMPOTENCY_IN_FLIGHT_STALE_MS` and is taken over by a redelivery can still store
+over, or release, the redelivery's claim. Its store is also not retried: a failed store falls
+into its `catch`, releases the key, and Razorpay's redelivery re-runs `dispatch`.
+
+- **Why deferred:** the fix wave's edit scope was `platform/idempotency/`; the webhook lives in
+  `domains/payment/`, and the optional parameter keeps it on the old behaviour unchanged.
+- **Done means:** `WebhookService` mints a `claimedAt`, passes it to `claim`, `store` and
+  `release`, and logs a `false` from either at warn with the event id; a test in
+  `payment-webhook-http.spec.ts` shows a zombie delivery's store landing on nothing.
+
+### S-76 — A 2xx the app cannot parse is retried twice before "Update the app" shows
+
+- **Status:** `open`
+- **Found in:** task 14 fix wave B1 scoped re-review (section N row)
+- **Surface:** mobile
+
+`apps/mobile/src/lib/query.ts`'s default `retry` stops on a 4xx but retries anything else up
+to twice, and a `ZodError` (a 2xx body this build cannot read) is "anything else". G1 made the
+classifier call that "outdated" and the copy say "Update the app to continue", but every query
+fetches the same unreadable body two more times first, with the skeleton on screen meanwhile.
+
+- **Why deferred:** `lib/query.ts` is every role's query client, older than task 14, and B2's
+  scope was the washer UI audit.
+- **Done means:** the default `retry` returns `false` for a `ZodError` (and for anything the
+  shared classifier calls final), with a test that an unparseable 2xx is fetched once and lands
+  on the error state's "Update the app" copy.
+
+### S-77 — The app has no support surface, so "Contact support" can go nowhere
+
+- **Status:** `open`
+- **Found in:** task 14 UI audit, impeccable P4 (fix wave B2, M10)
+- **Surface:** mobile (washer and valet), product
+
+The washer verification banner offered "Contact support" to a rejected (or unrecognised)
+partner, and its button opened the profile, which has no support row. M10 removed that button:
+the banner keeps its words and draws no action, because a button that leads nowhere is worse
+than none. Valet has the same dead action: `features/valet/profile-status.ts` offers "Contact
+support" and `app/(valet)/offers.tsx` routes every banner action to the valet profile.
+
+- **Why deferred:** a support channel (in-app form, phone line, email, WhatsApp) is a product
+  decision with an operational owner, not a screen fix, and valet was outside B2's scope.
+- **Done means:** a support entry exists (a Profile row at least) with a real destination;
+  `bannerActionRoute` in `features/washer/verification-copy.ts` routes "Contact support" to it
+  and the rejected/unknown banners get their action back; valet routes its banner actions by
+  what they say the same way.
+
+### S-78 — The earnings hero is a period total, not settled money with a payout date
+
+- **Status:** `open`
+- **Found in:** task 14 UI audit (fix wave B2, section M rows)
+- **Surface:** contracts, api, mobile
+
+The washer earnings screen's headline is `summary.netPaise` for the chosen period. A partner's
+real question is "what is coming to me, and when": money that has settled into their payable
+balance, and the date of the next payout. Neither is on `WasherEarningsView`, and the period
+total mixes settled and not-yet-settled jobs.
+
+- **Why deferred:** needs contract fields and a ledger query (payable balance, next payout
+  date from the payout schedule), which is server work and task 16's payout surface.
+- **Done means:** the earnings view carries a settled balance and the next payout date from the
+  server, the hero shows them (no client arithmetic, R-FE-06), and the period total becomes the
+  secondary figure.
+
+### S-79 — Icon sizes, and the shared empty and error states' shapes, are still literals
+
+- **Status:** `open`
+- **Found in:** task 14 fix wave B2 (M1, M3, M13)
+- **Surface:** tokens, ui-native, mobile
+
+B2 moved touch targets, the content width, the tab bar height and skeleton heights into
+`packages/tokens` (`touchTarget`, `layout`). Two groups of sizes are still typed where they are
+used: every `MaterialCommunityIcons size={16|18|20|24|28|48}` across the washer screens and
+components, and in `packages/ui-native` the EmptyState's 120px illustration circle and the
+ErrorState's 56px "!" badge (with its hand-computed radius and line height).
+
+- **Why deferred:** B2's brief allowed new tokens for what section M named; an icon-size scale
+  touches every role's screens and wants one decision on the steps.
+- **Done means:** an `iconSize` scale in `packages/tokens`, the washer surface and ui-native
+  reading it, and a scan test like `touch-targets.test.ts` that fails on a literal icon size.
+- **Extended in task 14 final fix wave (B2):** `WashOfferCard.tsx` line 196 and `WashActionBar.tsx`
+  line 60 both use `minHeight: 52`, which escapes the touch-target scan because 52 is neither 44 nor 48. This is `touchTarget` (48) plus `spacing.xs` (4), and should be `touchTarget + spacing.xs` or
+  a named token.
+
+### S-80 — `IdempotencyService.claim()` returns `proceed` when the row vanished
+
+- **Status:** `open`
+- **Found in:** task 14 final fix wave, server review
+- **Surface:** api
+
+`IdempotencyService.claim` (`apps/api/src/platform/idempotency/idempotency.service.ts` line 103)
+inserts a new claim row and then selects it back. If the row vanishes between the insert and
+select (for example, a reaper job deletes stale claims from multiple threads at once), the
+select returns `undefined`, and later `store` matches no row. This is now logged at warn ("or
+the key is gone"), not silent, but the caller still treats `claim === undefined` as a fresh
+attempt and has two paths to a re-run: a zombie that stored its answer after the key aged past
+the reaper's window, and a legitimate retry whose claim was cleaned up while it was committing.
+
+- **Why deferred:** the fix is either to treat a vanished row as a fresh claim (insert and select
+  again, accept the reaper race), or to answer 409 and let the API retry. Both need the reaper's
+  window time and a replay decision.
+- **Done means:** the claim logic handles a vanished row (either by re-inserting or by returning a
+  409), and a unit test covers the race by mocking `claim()` to return `undefined` after a successful
+  insert.
+
+### S-81 — Empty and error states inside an outer ScrollView are top-aligned, not centred
+
+- **Status:** `open`
+- **Found in:** task 14 final fix wave (M1 inner-scroll fix), design audit
+- **Surface:** mobile
+
+M1 fixed `EmptyState` and `ErrorState` to scroll when short and centre when there is room. But
+the washer profile, owner index, valet earnings and valet profile all render these states
+inside their own `ScrollView`, and a zero flex basis collapses the state to nothing, so the
+fix only takes effect at a size where the outer scroll is already scrolling. The state sits
+top-aligned with no vertical breathing room. The screens pass no centring prop.
+
+- **Why deferred:** the screens are outside task 14's file list. The fix is either a `flex` prop
+  the screens can pass to override the grow-only layout, or dropping the outer `ScrollView` for
+  the empty/error state and using `flex: 1` with the centring.
+- **Done means:** one of those screens shows its empty state both top-aligned (when it overflows)
+  and centred (when there is room), asserted in a test at 375px and at 812px tall.

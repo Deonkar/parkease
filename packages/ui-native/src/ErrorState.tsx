@@ -1,5 +1,5 @@
-import { colors, fontSize, spacing } from '@parkease/tokens';
-import { StyleSheet, Text, View } from 'react-native';
+import { colors, fontSize, fontWeight, lineHeight, spacing } from '@parkease/tokens';
+import { ScrollView, StyleSheet, Text } from 'react-native';
 
 import { Button } from './Button.js';
 
@@ -10,9 +10,20 @@ interface ErrorStateProps {
   readonly onAction?: () => void;
 }
 
+/**
+ * Centred when there is room, scrollable when there is not (task 14 M1). A
+ * centred `flex: 1` view spills over its siblings at a short height: over a
+ * status rail above it, and under a tab bar below it. `flexGrow` lets the
+ * content grow past the viewport and scroll instead.
+ */
 export function ErrorState({ title, body, actionLabel = 'Retry', onAction }: ErrorStateProps) {
   return (
-    <View style={styles.container} accessibilityRole="alert">
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={styles.container}
+      keyboardShouldPersistTaps="handled"
+      accessibilityRole="alert"
+    >
       <Text style={styles.icon}>!</Text>
       <Text style={styles.title}>{title}</Text>
       <Text style={styles.body}>{body}</Text>
@@ -24,20 +35,24 @@ export function ErrorState({ title, body, actionLabel = 'Retry', onAction }: Err
           accessibilityLabel={actionLabel}
         />
       ) : null}
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
+  // Sized by its content, then grown to fill a bounded parent or shrunk to it
+  // (where it scrolls). Not `flex: 1`: inside another scroll view (the
+  // profile renders these in its own) a zero flex basis collapses to nothing.
+  scroll: { flexGrow: 1, flexShrink: 1 },
   container: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: spacing['2xl'],
   },
   icon: {
     fontSize: fontSize['3xl'],
-    fontWeight: '700',
+    fontWeight: fontWeight.bold,
     color: colors.error,
     width: 56,
     height: 56,
@@ -50,7 +65,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: fontSize.lg,
-    fontWeight: '600',
+    fontWeight: fontWeight.semibold,
     color: colors.text,
     textAlign: 'center',
     marginBottom: spacing.sm,
@@ -60,6 +75,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     marginBottom: spacing.xl,
-    lineHeight: fontSize.base * 1.5,
+    lineHeight: fontSize.base * lineHeight.normal,
   },
 });

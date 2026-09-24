@@ -13,6 +13,7 @@ import { z } from 'zod';
 
 import { api, type Intent } from '@/lib/api';
 import { warn } from '@/lib/log';
+import { UploadError, defaultUploadDeps, uploadImage } from '@/lib/uploads';
 
 import type { LocationFix, SendResult } from '../location/queue';
 
@@ -84,25 +85,43 @@ export async function advanceJob(
   return envelope(valetJobViewSchema).parse(response.data).data;
 }
 
-const proofResponseSchema = z.object({ proofPhotoId: z.string() });
+/**
+ * The proof photo, uploaded and then attached.
+ *
+ * This posted `multipart/form-data` to an endpoint that parses
+ * `{ proofPhotoId }` until task 14 — so it had never worked. The upload now
+ * goes to Cloudinary through the shared client and only the resulting id is
+ * sent here, which is what the endpoint has always asked for.
+ *
+ * Only the ATTACH key belongs to the caller (ruling T7-I1). It stands for the
+ * valet's intent — "this photo is the proof" — and is reused across every retry
+ * of that photo (R-FE-05). The sign key is minted fresh inside `uploadImage` on
+ * every attempt, because a replayed signature goes stale.
+ *
+ * `uploadId` is filled once the file is on Cloudinary, so a retry after a
+ * failed attach re-sends the attach alone: the bytes are not uploaded twice,
+ * and the attach body stays identical under the same attach key.
+ */
+export interface HeldProof {
+  readonly attach: Intent;
+  uploadId: string | null;
+}
 
-export async function uploadProof(uri: string, jobId: string, intent: Intent): Promise<string> {
-  const body = new FormData();
-  // React Native's FormData takes this shape for a file part; the cast is the
-  // documented RN idiom, not an assertion on data from outside the process.
-  body.append('file', {
-    uri,
-    name: 'proof.jpg',
-    type: 'image/jpeg',
-  } as unknown as Blob);
+export async function uploadProof(uri: string, jobId: string, held: HeldProof): Promise<string> {
+  if (held.uploadId === null) {
+    const uploaded = await uploadImage(uri, 'proofs', defaultUploadDeps());
+    // The reason travels with the failure, so the screen says why (G4).
+    if (!uploaded.ok) throw new UploadError(uploaded.reason, uploaded.message);
+    held.uploadId = uploaded.uploadId;
+  }
 
-  const response = await api.post<unknown>(`/valet/jobs/${jobId}/proof`, body, {
-    headers: {
-      'Idempotency-Key': intent.idempotencyKey,
-      'Content-Type': 'multipart/form-data',
-    },
-  });
-  return envelope(proofResponseSchema).parse(response.data).data.proofPhotoId;
+  await api.post<unknown>(
+    `/valet/jobs/${jobId}/proof`,
+    { proofPhotoId: held.uploadId },
+    { headers: { 'Idempotency-Key': held.attach.idempotencyKey } },
+  );
+
+  return held.uploadId;
 }
 
 export async function setAvailability(

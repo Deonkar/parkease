@@ -63,4 +63,35 @@ describe('resolveScreenState', () => {
       resolveScreenState({ isPending: false, isFetching: true, isError: false, data: { id: 1 } }),
     ).toBe('ready');
   });
+
+  /**
+   * Ruling T7-I2. A failed REFETCH must not replace what the partner is looking
+   * at: pressing Start Washing with no signal invalidates the job, the refetch
+   * fails too, and the live job used to be swapped for a full-screen error.
+   */
+  it('keeps showing cached data when a background refetch fails', () => {
+    expect(
+      resolveScreenState({ isPending: false, isFetching: false, isError: true, data: { id: 1 } }),
+    ).toBe('ready');
+  });
+
+  it('keeps showing a cached non-empty list when a background refetch fails', () => {
+    expect(
+      resolveScreenState({ isPending: false, isFetching: false, isError: true, data: [{ id: 1 }] }),
+    ).toBe('ready');
+  });
+
+  it('never turns a failed refetch over a cached null into "empty"', () => {
+    // Empty is a fact the server reported. With the latest answer a failure,
+    // the screen cannot assert "no active job".
+    expect(
+      resolveScreenState({ isPending: false, isFetching: false, isError: true, data: null }),
+    ).toBe('error');
+  });
+
+  it('never turns a failed refetch over a cached empty list into "empty"', () => {
+    expect(
+      resolveScreenState({ isPending: false, isFetching: false, isError: true, data: [] }),
+    ).toBe('error');
+  });
 });

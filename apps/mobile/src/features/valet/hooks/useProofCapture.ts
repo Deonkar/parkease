@@ -1,9 +1,8 @@
-import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 import { newIntent } from '@/lib/api';
 
-import { uploadProof } from '../api/valet';
+import { uploadProof, type HeldProof } from '../api/valet';
 import { submitProof, type ProofDeps } from '../proof';
 
 export interface ProofCaptureState {
@@ -22,9 +21,9 @@ export interface ProofCaptureState {
 /**
  * Compress-and-upload for the proof photo, with the image retained on failure.
  *
- * The compression runs before the request, not after a failure: a 4MB original
- * on a 3G connection in a basement car park is the difference between a proof
- * photo and a valet stuck on this screen.
+ * The compression itself now lives in `lib/uploads.ts`, which `uploadProof`
+ * calls — this hook's own `deps.compress` is a pass-through so `submitProof`'s
+ * compress-then-upload shape still holds, without compressing the image twice.
  */
 export function useProofCapture(jobId: string | null): ProofCaptureState {
   const [uri, setUri] = useState<string | null>(null);
@@ -32,26 +31,21 @@ export function useProofCapture(jobId: string | null): ProofCaptureState {
   const [error, setError] = useState<string | null>(null);
   const [proofPhotoId, setProofPhotoId] = useState<string | null>(null);
 
+  // The attach intent, minted once per CAPTURED PHOTO, not per HTTP attempt
+  // (R-FE-05): `attach` mints a fresh one for a new photograph, and `retry`
+  // reuses it so the same attach is replayed rather than a second one raced
+  // against the first. The upload itself re-signs every attempt inside
+  // `lib/uploads.ts` (ruling T7-I1) — a signature has no side effect to
+  // deduplicate, and a replayed one goes stale.
+  const heldRef = useRef<HeldProof | null>(null);
+
   const deps: ProofDeps = {
-    compress: async (source, width, quality) => {
-      // SDK 57's contextual API. `manipulateAsync` still exists but is
-      // deprecated, and eslint's no-deprecated rule fails the build on it.
-      const rendered = await ImageManipulator.manipulate(source).resize({ width }).renderAsync();
-      const result = await rendered.saveAsync({
-        compress: quality,
-        format: SaveFormat.JPEG,
-      });
-      return { uri: result.uri, width: result.width, height: result.height };
-    },
+    compress: (source) => Promise.resolve({ uri: source, width: 0, height: 0 }),
     upload: async (source) => {
       if (jobId === null) throw new Error('no active job to attach a photo to');
-      return uploadProof(
-        source,
-        jobId,
-        // One key per user intent: a retry of THIS photo replays the same
-        // upload rather than creating a second one (R-FE-05).
-        newIntent(),
-      );
+      const held = heldRef.current;
+      if (held === null) throw new Error('no intent minted for this capture');
+      return uploadProof(source, jobId, held);
     },
   };
 
@@ -78,10 +72,20 @@ export function useProofCapture(jobId: string | null): ProofCaptureState {
     [jobId],
   );
 
-  const attach = useCallback(async (source: string) => run(source), [run]);
+  const attach = useCallback(
+    async (source: string) => {
+      // A NEW photograph is a new user intent (R-FE-05) — mint a fresh one,
+      // never reuse whatever a previous capture left behind.
+      heldRef.current = { attach: newIntent(), uploadId: null };
+      await run(source);
+    },
+    [run],
+  );
 
   const retry = useCallback(async () => {
     if (uri === null) return;
+    // Same photo, same attach intent: replay the attach rather than minting
+    // a second one for the second HTTP attempt.
     await run(uri);
   }, [run, uri]);
 
@@ -90,6 +94,7 @@ export function useProofCapture(jobId: string | null): ProofCaptureState {
     setUploading(false);
     setError(null);
     setProofPhotoId(null);
+    heldRef.current = null;
   }, []);
 
   return {

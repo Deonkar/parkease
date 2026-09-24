@@ -10,6 +10,7 @@ import {
   Post,
 } from '@nestjs/common';
 import { Role } from '@parkease/contracts/enums';
+import { uploadIdIn } from '@parkease/contracts/shared';
 import {
   advanceValetJobSchema,
   type ValetJobView,
@@ -119,7 +120,7 @@ export class ValetJobsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() body: unknown,
   ): Promise<ValetJobView> {
-    const input = z.object({ proofPhotoId: z.string().min(1).max(255) }).parse(body);
+    const input = z.object({ proofPhotoId: uploadIdIn('proofs') }).parse(body);
 
     const job = await this.valet.attachProof(id, user.id, input.proofPhotoId);
     if (job === undefined) throw new NotFoundException();

@@ -21,6 +21,10 @@ export {
 } from './notification-preferences.js';
 export { registerPushTokenSchema, type RegisterPushToken } from './push-token.js';
 export {
+  UPLOAD_FOLDER_VALUES,
+  uploadFolderSchema,
+  type UploadFolder,
+  uploadIdIn,
   requestUploadSignatureSchema,
   type RequestUploadSignature,
   uploadSignatureResponseSchema,

@@ -1,6 +1,17 @@
 import { z } from 'zod';
 
+import {
+  CARWASH_SERVICE_NAME_VALUES,
+  carwashServiceNameSchema,
+} from '../enums/carwash-service-name.js';
 import { verificationStatusSchema } from '../enums/verification-status.js';
+import { uploadIdIn } from '../shared/upload-signature.js';
+
+/**
+ * A business's shop-front photos: uploads signed into `spaces`, the folder a
+ * space listing's photos use, at most ten.
+ */
+const businessPhotoIdsSchema = z.array(uploadIdIn('spaces')).max(10);
 
 export const WASHER_PARTNER_TYPE_VALUES = ['business', 'gig'] as const;
 export const washerPartnerTypeSchema = z.enum(WASHER_PARTNER_TYPE_VALUES);
@@ -37,8 +48,12 @@ export type OperatingHours = z.infer<typeof operatingHoursSchema>;
  * One schema with a discriminating field rather than two, because both land in
  * one `washer_profiles` row and take the same assignment path — the difference
  * is what they must supply, not what they become. `superRefine` puts the
- * business-name rule on the field it concerns, so the error names
- * `businessName` rather than "invalid input".
+ * business-photo rule on the field it concerns, so the error names
+ * `businessPhotoIds` rather than "invalid input".
+ *
+ * A business must show at least one photo (ruling T10-C1): its registration is
+ * a complete submission for review, and the photos are what is reviewed. A gig
+ * partner's review material is the ID image sent afterwards.
  *
  * **There is no field for an identity number, deliberately.** security.md §5.3:
  * the Aadhaar number is never collected. A gig partner submits an *image* of an
@@ -49,22 +64,37 @@ export type OperatingHours = z.infer<typeof operatingHoursSchema>;
 export const createWasherProfileSchema = z
   .object({
     partnerType: washerPartnerTypeSchema,
-    businessName: z.string().min(1).max(120).optional(),
+    /**
+     * The name the partner trades under, and what a driver sees on the washer
+     * card: a business's business name, a gig partner's own name. Required for
+     * both (ruling T10-C2) — nothing else captures a display name.
+     */
+    businessName: z.string().trim().min(1).max(120),
     /** Optional for a business, meaningless for a gig partner. */
     gstin: z
       .string()
       .regex(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/, 'not a GSTIN')
       .optional(),
-    businessPhotoIds: z.array(z.string().min(1).max(255)).max(10).default([]),
+    businessPhotoIds: businessPhotoIdsSchema.default([]),
     operatingHours: operatingHoursSchema.optional(),
-    capabilities: z.array(z.string().min(1).max(64)).min(1).max(20),
+    /**
+     * The services this partner offers, from the closed catalogue (ruling
+     * T10-S1). Registration seeds prices for every service and switches on only
+     * these, so this list is what decides which offers they see. A free string
+     * would let a typo silently switch a service off.
+     */
+    capabilities: z
+      .array(carwashServiceNameSchema)
+      .min(1)
+      .max(CARWASH_SERVICE_NAME_VALUES.length)
+      .refine((names) => new Set(names).size === names.length, 'a service listed twice'),
   })
   .superRefine((value, ctx) => {
-    if (value.partnerType === 'business' && value.businessName === undefined) {
+    if (value.partnerType === 'business' && value.businessPhotoIds.length === 0) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ['businessName'],
-        message: 'a business partner needs a business name',
+        path: ['businessPhotoIds'],
+        message: 'Add at least one photo of your business.',
       });
     }
   });
@@ -80,8 +110,14 @@ export type CreateWasherProfile = z.infer<typeof createWasherProfileSchema>;
  * they are replacing.
  */
 export const submitWasherDocumentsSchema = z.object({
-  idDocumentId: z.string().min(1).max(255),
-  businessPhotoIds: z.array(z.string().min(1).max(255)).max(10).optional(),
+  /** An upload signed into `documents`, the folder Cloudinary delivers privately. */
+  idDocumentId: uploadIdIn('documents'),
+  /**
+   * Absent leaves the business's photos as they are. Present replaces them, so
+   * it must hold at least one: `[]` erased every photo and still moved the
+   * business to `pending` — a review of a submission with nothing in it.
+   */
+  businessPhotoIds: businessPhotoIdsSchema.min(1).optional(),
 });
 
 export type SubmitWasherDocuments = z.infer<typeof submitWasherDocumentsSchema>;
@@ -101,6 +137,7 @@ export const washerProfileViewSchema = z.object({
   gstin: z.string().nullable(),
   businessPhotoIds: z.array(z.string()),
   operatingHours: operatingHoursSchema.nullable(),
+  /** Echoes stored data, so it stays readable for rows written before T10-S1. */
   capabilities: z.array(z.string()),
   idDocumentId: z.string().nullable(),
   verificationStatus: verificationStatusSchema,

@@ -10,6 +10,7 @@ import {
 import { CatalogService, type WashServiceRow } from '../../domains/carwash/catalog.service.js';
 import { UpsertWashServiceCommand } from '../../domains/carwash/commands/upsert-service.command.js';
 import { type AuthUser, CurrentUser } from '../../platform/auth/current-user.decorator.js';
+import { parseOutgoing } from '../../platform/http/outgoing-contract.js';
 import { Roles } from '../../platform/rbac/roles.decorator.js';
 
 @Controller('washer/services')
@@ -57,13 +58,18 @@ export class WasherServicesController {
   }
 }
 
+/** A stored menu row that fails the contract is a 500, not the partner's 400 (S-33). */
 const toMenu = (rows: readonly WashServiceRow[]): WashServiceMenu =>
-  washServiceMenuSchema.parse({
-    services: rows.map((row) => ({
-      serviceName: row.serviceName,
-      vehicleType: row.vehicleType,
-      pricePaise: row.pricePaise,
-      durationMinutes: row.durationMinutes,
-      isActive: row.isActive,
-    })),
-  });
+  parseOutgoing(
+    washServiceMenuSchema,
+    {
+      services: rows.map((row) => ({
+        serviceName: row.serviceName,
+        vehicleType: row.vehicleType,
+        pricePaise: row.pricePaise,
+        durationMinutes: row.durationMinutes,
+        isActive: row.isActive,
+      })),
+    },
+    'washer service menu',
+  );

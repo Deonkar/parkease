@@ -8,8 +8,17 @@
  * through to its empty state and told the valet "No active job" — a definite
  * negative asserted from an unknown.
  *
- * The rule this encodes: **empty is a fact the server reported, never the
- * absence of an answer.**
+ * The rules this encodes:
+ *
+ * - **Empty is a fact the server reported, never the absence of an answer.** A
+ *   cached `null` or `[]` behind a failed refetch is therefore an error, not
+ *   empty: the latest answer was a failure, so "nothing here" is unknown.
+ * - **Data on screen stays on screen when a refetch fails** (ruling T7-I2).
+ *   TanStack keeps the last good data and sets `isError`; swapping it for a
+ *   full-screen error hid a live wash job from its partner because a Start
+ *   Washing pressed with no signal invalidated the query and the refetch failed
+ *   too. A screen that wants to say the refresh failed checks `isError` beside
+ *   `ready` and shows a non-blocking notice.
  */
 
 export interface QueryShape<T> {
@@ -25,8 +34,13 @@ export function resolveScreenState<T>(query: QueryShape<T>): ScreenState {
   // `isPending` alone: true until the query has resolved for the first time,
   // and it does not dip during backoff the way `isLoading` does.
   if (query.isPending) return 'loading';
+  if (hasContent(query.data)) return 'ready';
   if (query.isError) return 'error';
-  if (query.data === null || query.data === undefined) return 'empty';
-  if (Array.isArray(query.data) && query.data.length === 0) return 'empty';
-  return 'ready';
+  return 'empty';
+}
+
+/** Something to show: a value, or a list with at least one item in it. */
+function hasContent(data: unknown): boolean {
+  if (data === null || data === undefined) return false;
+  return !Array.isArray(data) || data.length > 0;
 }

@@ -22,9 +22,11 @@ export interface CreateWasherProfileInput extends CreateWasherProfile {
  * verified, online, and permanently invisible, with nothing anywhere saying
  * why. Two statements in one commit is the whole fix.
  *
- * `verification_status` stays at its `unverified` default. Both partner types
- * need an admin to look at their documents before they can go online (§13.10),
- * and that review is task 18's.
+ * Both partner types need an admin to look before they can go online (§13.10),
+ * and that review is task 18's. Where review STARTS differs (ruling T10-C1): a
+ * business registration is a complete submission — name, photos, hours — so it
+ * lands `pending`; a gig partner stays `unverified` until their ID image
+ * arrives through `POST /washer/profile/documents`, which moves them.
  */
 @Injectable()
 export class CreateWasherProfileCommand {
@@ -48,14 +50,15 @@ export class CreateWasherProfileCommand {
       await tx.insert(washerProfiles).values({
         userId: input.userId,
         partnerType: input.partnerType,
-        businessName: input.businessName ?? null,
+        businessName: input.businessName,
         gstin: input.gstin ?? null,
         businessPhotoIds: input.businessPhotoIds,
         operatingHours: input.operatingHours ?? null,
         capabilities: input.capabilities,
+        verificationStatus: input.partnerType === 'business' ? 'pending' : 'unverified',
       });
 
-      await this.catalog.seedMenu(tx, input.userId);
+      await this.catalog.seedMenu(tx, input.userId, input.capabilities);
     });
 
     const profile = await this.carwash.profileFor(input.userId);

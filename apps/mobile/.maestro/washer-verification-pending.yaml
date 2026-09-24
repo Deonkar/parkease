@@ -1,0 +1,49 @@
+# A washer whose documents are still being checked (verification_status =
+# 'pending').
+#
+# Controller ruling T6-R1 replaces the task file's "offers visible, Accept
+# locked": the server refuses to put an unverified washer online
+# (set-availability.command.ts -> 403 WASHER_NOT_VERIFIED), so a pending washer
+# never has offers to see. What the flow checks instead is that the banner says
+# verification is in progress and the online switch is locked, with the reason
+# on screen in words (R-FE-12).
+#
+# NOT YET EXECUTED. Preconditions and how to run: see README.md.
+appId: in.parkease.app
+name: Washer - verification pending, online switch locked
+tags:
+  - washer
+  - e2e
+---
+# No clearState: the pending washer's session is a precondition.
+- launchApp:
+    appId: in.parkease.app
+    permissions:
+      all: allow
+
+# The verification banner, above the rail (describeWasherVerification 'pending').
+- extendedWaitUntil:
+    visible:
+      id: 'verification-notice'
+    timeout: 20000
+- assertVisible: 'Verification in progress'
+- assertVisible: "We're checking your documents. You'll be able to accept jobs once approved."
+- assertVisible: 'View my documents'
+
+# The online switch: offline, disabled, and the reason said in words.
+- assertVisible:
+    id: 'online-rail'
+- assertVisible: 'Offline'
+- assertVisible: 'You can go online once your documents are approved'
+- assertVisible:
+    id: 'online-switch'
+    enabled: false
+
+# Tapping the locked switch changes nothing.
+- tapOn:
+    id: 'online-switch'
+- assertVisible: 'Offline'
+- assertNotVisible: 'Online · taking jobs'
+- assertNotVisible:
+    id: 'wash-offer-card'
+- assertVisible: 'Nothing to show yet'

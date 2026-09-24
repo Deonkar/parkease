@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { valetJobEventSchema } from '../enums/valet-job-event.js';
+import { uploadIdIn } from '../shared/upload-signature.js';
 
 /**
  * A client sends an *event*, never a target status.
@@ -21,7 +22,8 @@ import { valetJobEventSchema } from '../enums/valet-job-event.js';
  */
 export const advanceValetJobSchema = z.object({
   event: valetJobEventSchema.exclude(['cancel', 'no_show', 'offer', 'accept', 'request_return']),
-  proofPhotoId: z.string().min(1).max(255).optional(),
+  /** An upload signed into `proofs` — never a URL, never another folder's id. */
+  proofPhotoId: uploadIdIn('proofs').optional(),
 });
 
 export type AdvanceValetJob = z.infer<typeof advanceValetJobSchema>;

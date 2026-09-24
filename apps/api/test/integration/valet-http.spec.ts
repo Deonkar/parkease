@@ -486,7 +486,7 @@ describe('POST /valet/jobs/:id/status — the machine, over HTTP', () => {
     expect(without.status).toBe(400);
     expect(errorOf(without.body).code).toBe('PROOF_PHOTO_REQUIRED');
 
-    const with_ = await advance(jobId, valetId, 'confirm_parked', 'photo_abc123');
+    const with_ = await advance(jobId, valetId, 'confirm_parked', 'parkease/proofs/photo_abc123');
     expect(with_.status).toBe(200);
     expect(dataOf<{ status: string }>(with_.body).status).toBe('parked');
   });
@@ -705,7 +705,7 @@ describe('POST /driver/valet/requests/:id/return — the second charge', () => {
     await advance(jobId, valetId, 'depart');
     await advance(jobId, valetId, 'arrive');
     await advance(jobId, valetId, 'start_parking');
-    await advance(jobId, valetId, 'confirm_parked', 'photo_abc');
+    await advance(jobId, valetId, 'confirm_parked', 'parkease/proofs/photo_abc');
     return { jobId, valetId };
   }
 
@@ -1073,13 +1073,47 @@ describe('the valet-side reads, positively', () => {
       method: 'POST',
       url: `/api/v1/valet/jobs/${jobId}/proof`,
       headers: key(),
-      payload: { proofPhotoId: 'photo_xyz' },
+      payload: { proofPhotoId: 'parkease/proofs/photo_xyz' },
     });
 
     expect(res.status).toBe(200);
     const job = dataOf<{ status: string; proofPhotoId: string }>(res.body);
-    expect(job.proofPhotoId).toBe('photo_xyz');
+    expect(job.proofPhotoId).toBe('parkease/proofs/photo_xyz');
     expect(job.status).toBe('accepted');
+  });
+
+  /**
+   * Security M2 + L1 (task 14 final fix wave). The proof is an upload id signed
+   * into `proofs`. A URL would point the evidence at any image on the internet,
+   * and an id from `documents` would point it at somebody's licence.
+   */
+  it('refuses a proof id that is a URL or comes from another folder', async () => {
+    const valetId = await seedValet();
+    const bookingId = await seedBooking(h, {
+      spaceId,
+      vehicleType: 'car',
+      slotIndex: 1,
+      slotStatus: 'confirmed',
+    });
+    const jobId = await requestValet(bookingId);
+    await accept(jobId, valetId);
+
+    asUser(valetId, ['valet']);
+    for (const proofPhotoId of [
+      'https://example.com/anything.jpg',
+      'parkease/documents/licence-front',
+    ]) {
+      const res = await http.request({
+        method: 'POST',
+        url: `/api/v1/valet/jobs/${jobId}/proof`,
+        headers: key(),
+        payload: { proofPhotoId },
+      });
+      expect(res.status).toBe(400);
+    }
+
+    const refused = await advance(jobId, valetId, 'confirm_parked', 'parkease/documents/x');
+    expect(refused.status).toBe(400);
   });
 
   it('answers 404 when attaching proof to a job assigned to somebody else', async () => {
@@ -1099,7 +1133,7 @@ describe('the valet-side reads, positively', () => {
       method: 'POST',
       url: `/api/v1/valet/jobs/${jobId}/proof`,
       headers: key(),
-      payload: { proofPhotoId: 'photo_xyz' },
+      payload: { proofPhotoId: 'parkease/proofs/photo_xyz' },
     });
 
     expect(res.status).toBe(404);

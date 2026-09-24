@@ -23,6 +23,25 @@ export type RenderedNode = ReactTestRendererJSON;
  * walking below is shared.
  */
 export function render(element: ReactElement): ReactTestRendererJSON | null {
+  return mount(element).tree();
+}
+
+/**
+ * Renders once and keeps the renderer, for a test that drives the component.
+ *
+ * `render` returns one snapshot, and a snapshot's handler props close over the
+ * state of the render that produced them: calling `onPress` on it after an
+ * `onChangeText` runs the OLD handler against the OLD text. Read `tree()` again
+ * after every `act` to reach the handlers the component is rendering now.
+ */
+export function mount(element: ReactElement): {
+  readonly tree: () => ReactTestRendererJSON | null;
+  /**
+   * Re-renders the SAME component instance with new props, keeping its state:
+   * what a recycling list (FlashList) does when it reuses a cell for another item.
+   */
+  readonly update: (next: ReactElement) => void;
+} {
   // React 19 renders through a concurrent root: without this flag `act` does
   // not flush, and every `toJSON()` comes back null — which reads as "the
   // component rendered nothing" and quietly passes the wrong assertions.
@@ -34,7 +53,14 @@ export function render(element: ReactElement): ReactTestRendererJSON | null {
   });
   // The tree is only committed once `act` returns, so this cannot move inside.
   const committed = renderer as TestRenderer.ReactTestRenderer | null;
-  return committed === null ? null : (committed.toJSON() as ReactTestRendererJSON | null);
+  return {
+    tree: () => (committed === null ? null : (committed.toJSON() as ReactTestRendererJSON | null)),
+    update: (next) => {
+      act(() => {
+        committed?.update(next);
+      });
+    },
+  };
 }
 
 /** Every node in the tree, parents before children. */

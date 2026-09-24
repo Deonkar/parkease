@@ -4,6 +4,25 @@ import { carwashServiceNameSchema } from '../enums/carwash-service-name.js';
 import { vehicleTypeSchema } from '../enums/vehicle-type.js';
 import { paiseSchema } from '../primitives/paise.js';
 
+/** Minimum service price: ₹10 (1,000 paise). */
+export const MIN_SERVICE_PRICE_PAISE = 1_000;
+
+/** Maximum service price: ₹9,999 (999,900 paise). */
+export const MAX_SERVICE_PRICE_PAISE = 999_900;
+
+/** Minimum service duration, in minutes. The mobile editor reads it; never retype it. */
+export const MIN_SERVICE_DURATION_MINUTES = 5;
+
+/** Maximum service duration, in minutes: an eight-hour detail is the longest job. */
+export const MAX_SERVICE_DURATION_MINUTES = 480;
+
+/** Both the read and the write side: a duration outside it is no service at all. */
+const serviceDurationSchema = z
+  .number()
+  .int()
+  .min(MIN_SERVICE_DURATION_MINUTES)
+  .max(MAX_SERVICE_DURATION_MINUTES);
+
 /**
  * A price must be positive, not merely non-negative.
  *
@@ -17,7 +36,19 @@ const servicePriceSchema = paiseSchema.refine((value) => value > 0, {
 });
 
 /**
- * One row of a partner's menu, as they see it.
+ * A service price on writes (UPSERTs). Tightened to the ₹10–₹9,999 range that
+ * this contract enforces and the mobile app checks against. This schema is used
+ * ONLY by `upsertWashServiceSchema`.
+ */
+const boundedServicePriceSchema = paiseSchema.refine(
+  (value) => value >= MIN_SERVICE_PRICE_PAISE && value <= MAX_SERVICE_PRICE_PAISE,
+  {
+    message: 'a price must be between ₹10 and ₹9,999',
+  },
+);
+
+/**
+ * One row of a stored service, as `GET /washer/services` returns it.
  *
  * §13.3: v1 stored one `price` beside a `vehicleType` that could be `car`,
  * `two_wheeler` or `BOTH`. A query for "what does a Premium Wash cost for a
@@ -28,12 +59,16 @@ const servicePriceSchema = paiseSchema.refine((value) => value > 0, {
  * So the UI row carries two prices and the database carries two rows, keyed
  * `UNIQUE (washer_user_id, service_name, vehicle_type)`. That constraint makes
  * `BOTH` unrepresentable rather than merely discouraged.
+ *
+ * The read schema is looser (`> 0`) than the write schema (`₹10–₹9,999`) so that
+ * reading the menu does not throw on any out-of-range row that might exist.
+ * Writes are validated by `upsertWashServiceSchema` with the tighter bounds.
  */
 export const washServiceSchema = z.object({
   serviceName: carwashServiceNameSchema,
   vehicleType: vehicleTypeSchema,
   pricePaise: servicePriceSchema,
-  durationMinutes: z.number().int().min(5).max(480),
+  durationMinutes: serviceDurationSchema,
   isActive: z.boolean(),
 });
 
@@ -50,11 +85,13 @@ export type WashServiceMenu = z.infer<typeof washServiceMenuSchema>;
  * One service, both vehicle-type prices, upserted as two rows in one
  * transaction. The service name is the path parameter, not a body field, so a
  * partner cannot edit one service by naming another.
+ *
+ * Prices are bounded to ₹10–₹9,999 by `boundedServicePriceSchema`.
  */
 export const upsertWashServiceSchema = z.object({
-  carPricePaise: servicePriceSchema,
-  bikePricePaise: servicePriceSchema,
-  durationMinutes: z.number().int().min(5).max(480),
+  carPricePaise: boundedServicePriceSchema,
+  bikePricePaise: boundedServicePriceSchema,
+  durationMinutes: serviceDurationSchema,
   isActive: z.boolean(),
 });
 

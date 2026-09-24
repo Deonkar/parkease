@@ -2,12 +2,15 @@ import { describe, expect, it } from 'vitest';
 
 import { requestCarwashSchema } from '../src/driver/index.js';
 import {
+  MAX_SERVICE_DURATION_MINUTES,
+  MIN_SERVICE_DURATION_MINUTES,
   advanceWashJobSchema,
   attachWashPhotoSchema,
   createWasherProfileSchema,
   upsertWashServiceSchema,
   washerProfileViewSchema,
   washJobOfferSchema,
+  washServiceSchema,
 } from '../src/washer/index.js';
 
 const UUID = '0192f3a1-0000-7000-8000-000000000001';
@@ -51,7 +54,9 @@ describe('attachWashPhotoSchema', () => {
    * any image on the internet.
    */
   it('takes one upload id', () => {
-    expect(attachWashPhotoSchema.safeParse({ photoId: 'wash/before/abc123' }).success).toBe(true);
+    expect(
+      attachWashPhotoSchema.safeParse({ photoId: 'parkease/proofs/before-abc123' }).success,
+    ).toBe(true);
   });
 
   it('refuses a URL and refuses an array', () => {
@@ -101,14 +106,61 @@ describe('upsertWashServiceSchema', () => {
       }).success,
     ).toBe(false);
   });
+
+  it('accepts the minimum price: ₹10 (1,000 paise)', () => {
+    expect(
+      upsertWashServiceSchema.safeParse({
+        carPricePaise: 1000,
+        bikePricePaise: 1000,
+        durationMinutes: 40,
+        isActive: true,
+      }).success,
+    ).toBe(true);
+  });
+
+  it('accepts the maximum price: ₹9,999 (999,900 paise)', () => {
+    expect(
+      upsertWashServiceSchema.safeParse({
+        carPricePaise: 999900,
+        bikePricePaise: 999900,
+        durationMinutes: 40,
+        isActive: true,
+      }).success,
+    ).toBe(true);
+  });
+
+  it('refuses a price below the minimum: 999 paise', () => {
+    expect(
+      upsertWashServiceSchema.safeParse({
+        carPricePaise: 999,
+        bikePricePaise: 17900,
+        durationMinutes: 40,
+        isActive: true,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('refuses a price above the maximum: 999,901 paise', () => {
+    expect(
+      upsertWashServiceSchema.safeParse({
+        carPricePaise: 999901,
+        bikePricePaise: 17900,
+        durationMinutes: 40,
+        isActive: true,
+      }).success,
+    ).toBe(false);
+  });
 });
 
 describe('createWasherProfileSchema', () => {
+  const PHOTO = ['parkease/spaces/shop-front'];
+
   it('requires a business name from a business partner', () => {
     expect(
       createWasherProfileSchema.safeParse({
         partnerType: 'business',
-        capabilities: ['car_wash'],
+        businessPhotoIds: PHOTO,
+        capabilities: ['premium_wash'],
       }).success,
     ).toBe(false);
 
@@ -116,16 +168,58 @@ describe('createWasherProfileSchema', () => {
       createWasherProfileSchema.safeParse({
         partnerType: 'business',
         businessName: 'Shine Co',
-        capabilities: ['car_wash'],
+        businessPhotoIds: PHOTO,
+        capabilities: ['premium_wash'],
       }).success,
     ).toBe(true);
   });
 
-  it('does not require one from a gig partner', () => {
+  /**
+   * Ruling T10-C2. `businessName` is the name a partner trades under — a gig
+   * partner's own name — and it is what a driver sees on the washer card.
+   * Nothing else captures a display name, so a gig partner without one would
+   * be a card that cannot be drawn.
+   */
+  it('requires a trading name from a gig partner too, on businessName', () => {
+    const parsed = createWasherProfileSchema.safeParse({
+      partnerType: 'gig',
+      capabilities: ['premium_wash'],
+    });
+
+    expect(parsed.success).toBe(false);
+    expect(parsed.error?.issues.map((issue) => issue.path)).toEqual([['businessName']]);
+
     expect(
       createWasherProfileSchema.safeParse({
         partnerType: 'gig',
-        capabilities: ['car_wash'],
+        businessName: 'Raju M.',
+        capabilities: ['premium_wash'],
+      }).success,
+    ).toBe(true);
+  });
+
+  /**
+   * Ruling T10-C1. A business registration is a complete submission — its
+   * photos are what an admin reviews — so it must carry at least one.
+   */
+  it('refuses a business with no photo, on businessPhotoIds', () => {
+    const parsed = createWasherProfileSchema.safeParse({
+      partnerType: 'business',
+      businessName: 'Shine Co',
+      capabilities: ['premium_wash'],
+    });
+
+    expect(parsed.success).toBe(false);
+    expect(parsed.error?.issues.map((issue) => issue.path)).toEqual([['businessPhotoIds']]);
+    expect(parsed.error?.issues[0]?.message).toMatch(/photo/i);
+  });
+
+  it('does not ask a gig partner for business photos', () => {
+    expect(
+      createWasherProfileSchema.safeParse({
+        partnerType: 'gig',
+        businessName: 'Raju M.',
+        capabilities: ['premium_wash'],
       }).success,
     ).toBe(true);
   });
@@ -137,7 +231,8 @@ describe('createWasherProfileSchema', () => {
   it('has no field for an identity number', () => {
     const parsed = createWasherProfileSchema.parse({
       partnerType: 'gig',
-      capabilities: ['car_wash'],
+      businessName: 'Raju M.',
+      capabilities: ['premium_wash'],
       aadhaarNumber: '1234 5678 9012',
     });
 
@@ -148,7 +243,8 @@ describe('createWasherProfileSchema', () => {
     const parsed = createWasherProfileSchema.parse({
       partnerType: 'business',
       businessName: 'Shine Co',
-      capabilities: ['car_wash'],
+      businessPhotoIds: PHOTO,
+      capabilities: ['premium_wash'],
       operatingHours: { mon: { open: '09:00', close: '18:00' } },
     });
 
@@ -160,9 +256,60 @@ describe('createWasherProfileSchema', () => {
       createWasherProfileSchema.safeParse({
         partnerType: 'business',
         businessName: 'Shine Co',
-        capabilities: ['car_wash'],
+        businessPhotoIds: PHOTO,
+        capabilities: ['premium_wash'],
         operatingHours: { mon: { open: '9am', close: '18:00' } },
       }).success,
+    ).toBe(false);
+  });
+});
+
+/**
+ * Ruling T10-S1. What a partner ticks decides what they are offered, so the
+ * list is the closed catalogue: a free string would let a typo (or a stale
+ * client's 'car_wash') register a partner who silently offers nothing.
+ */
+describe('createWasherProfileSchema capabilities', () => {
+  const gig = (capabilities: unknown) =>
+    createWasherProfileSchema.safeParse({
+      partnerType: 'gig',
+      businessName: 'Raju M.',
+      capabilities,
+    });
+
+  it('accepts every service in the catalogue', () => {
+    expect(
+      gig(['basic_exterior', 'premium_wash', 'interior_only', 'full_detailing', 'quick_wipe'])
+        .success,
+    ).toBe(true);
+  });
+
+  it('refuses a service outside the catalogue', () => {
+    const parsed = gig(['car_wash']);
+    expect(parsed.success).toBe(false);
+    expect(parsed.error?.issues[0]?.path).toEqual(['capabilities', 0]);
+  });
+
+  it('refuses an empty list: a partner offering nothing is never dispatchable', () => {
+    expect(gig([]).success).toBe(false);
+  });
+
+  it('refuses the same service twice, on the capabilities field', () => {
+    const parsed = gig(['quick_wipe', 'quick_wipe']);
+    expect(parsed.success).toBe(false);
+    expect(parsed.error?.issues[0]?.path).toEqual(['capabilities']);
+  });
+
+  it('refuses more services than the catalogue holds', () => {
+    expect(
+      gig([
+        'basic_exterior',
+        'premium_wash',
+        'interior_only',
+        'full_detailing',
+        'quick_wipe',
+        'quick_wipe',
+      ]).success,
     ).toBe(false);
   });
 });
@@ -229,6 +376,63 @@ describe('washJobOfferSchema', () => {
         expiresAt: '2026-09-22T10:03:00.000Z',
       }).success,
     ).toBe(false);
+  });
+});
+
+describe('service duration bounds (T8-D1)', () => {
+  /**
+   * The mobile editor reads these to say what it accepts, so the numbers live
+   * here once rather than as a 5 and a 480 typed into a screen.
+   */
+  const upsert = (durationMinutes: number) =>
+    upsertWashServiceSchema.safeParse({
+      carPricePaise: 44900,
+      bikePricePaise: 17900,
+      durationMinutes,
+      isActive: true,
+    }).success;
+
+  const read = (durationMinutes: number) =>
+    washServiceSchema.safeParse({
+      serviceName: 'premium_wash',
+      vehicleType: 'car',
+      pricePaise: 44900,
+      durationMinutes,
+      isActive: true,
+    }).success;
+
+  it('names the bounds: 5 to 480 minutes', () => {
+    expect(MIN_SERVICE_DURATION_MINUTES).toBe(5);
+    expect(MAX_SERVICE_DURATION_MINUTES).toBe(480);
+  });
+
+  it.each([
+    ['upsert', upsert],
+    ['read', read],
+  ] as const)('%s accepts 5 and 480, and refuses 4 and 481', (_name, parses) => {
+    expect(parses(5)).toBe(true);
+    expect(parses(480)).toBe(true);
+    expect(parses(4)).toBe(false);
+    expect(parses(481)).toBe(false);
+  });
+});
+
+describe('washServiceSchema (read-side)', () => {
+  /**
+   * The read schema is looser than the write schema: it accepts any price > 0,
+   * including those outside the ₹10–₹9,999 bounds. This prevents the menu
+   * endpoint from throwing if an out-of-range row somehow exists.
+   */
+  it('accepts a stored price of 500 paise (below the write minimum)', () => {
+    expect(
+      washServiceSchema.safeParse({
+        serviceName: 'premium_wash',
+        vehicleType: 'car',
+        pricePaise: 500,
+        durationMinutes: 40,
+        isActive: true,
+      }).success,
+    ).toBe(true);
   });
 });
 

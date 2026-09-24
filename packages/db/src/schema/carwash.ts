@@ -33,6 +33,12 @@ export const washerProfiles = pgTable(
      * what they become.
      */
     partnerType: text('partner_type').notNull(),
+    /**
+     * The partner's trading/display name, for BOTH types (ruling T10-C2): a
+     * business's business name, a gig partner's own name. It is what a driver
+     * sees on the washer card. Nullable in the column only because rows predate
+     * the rule; registration always writes it. S-43 renames it `display_name`.
+     */
     businessName: text('business_name'),
     gstin: text('gstin'),
     /** Upload ids, never URLs. Files go through POST /uploads (R-VAL-01). */
@@ -242,6 +248,15 @@ export const washJobs = pgTable(
       sql`(${t.status} <> 'washing'   OR ${t.beforePhotoId} IS NOT NULL)
           AND (${t.status} <> 'completed' OR (${t.beforePhotoId} IS NOT NULL
                                           AND ${t.afterPhotoId} IS NOT NULL))`,
+    ),
+    /**
+     * Migration 0031. One image cannot be evidence of two moments. The other half
+     * of 0031 — a photo freezing once its moment has passed — is a trigger
+     * (`wash_jobs_evidence_freeze`), because a CHECK cannot see the old row.
+     */
+    check(
+      'wash_jobs_photos_distinct_check',
+      sql`${t.afterPhotoId} IS NULL OR ${t.afterPhotoId} <> ${t.beforePhotoId}`,
     ),
   ],
 );
