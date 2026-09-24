@@ -59,6 +59,11 @@ const GO_ONLINE_COPY: Readonly<Record<PresenceError, GoOnlineCopy>> = {
     body: 'Finish setting up your partner profile before going online.',
     settings: false,
   },
+  refused: {
+    title: "Couldn't go online",
+    body: "ParkEase didn't accept going online. Check your profile, then try again.",
+    settings: false,
+  },
   unreachable: {
     title: "Couldn't go online",
     body: "Couldn't reach ParkEase. Check your connection and try again.",

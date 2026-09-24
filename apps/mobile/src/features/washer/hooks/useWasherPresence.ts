@@ -6,12 +6,11 @@ import { newIntent } from '@/lib/api';
 import { warn } from '@/lib/log';
 
 import { DEV_WASHER_FIX } from '../api/dev-fixtures';
-import { apiErrorCodeOf } from '../api/errors';
 import { setAvailability } from '../api/washer';
 import { isWasherDevMock } from '../dev-mock';
 import {
+  presenceErrorFor as toPresenceError,
   startPresence,
-  type BeatResult,
   type LocateOutcome,
   type PresenceDeps,
   type PresenceError,
@@ -37,23 +36,6 @@ export interface WasherPresence {
   readonly error: PresenceError | null;
   readonly goOnline: () => Promise<PresenceResult>;
   readonly goOffline: () => Promise<PresenceResult>;
-}
-
-/**
- * A beat's failure, in the words a screen can act on. The server's own refusal
- * codes are read out of the rejected PATCH, so an unverified partner is told to
- * wait for approval rather than to check a connection that is fine.
- */
-function toPresenceError(result: Exclude<BeatResult, { ok: true }>): PresenceError {
-  if (result.reason !== 'unreachable') return result.reason;
-  switch (apiErrorCodeOf(result.cause)) {
-    case 'WASHER_NOT_VERIFIED':
-      return 'not_verified';
-    case 'WASHER_PROFILE_NOT_FOUND':
-      return 'not_registered';
-    default:
-      return 'unreachable';
-  }
 }
 
 /** Never prompts: asking is `goOnline`'s job, once, not every 45 seconds. */
@@ -91,6 +73,8 @@ export function useWasherPresence(): WasherPresence {
 
   const handle = useRef<PresenceHandle | null>(null);
   const starting = useRef(false);
+  /** The start in flight, so a `goOffline` pressed during it can wait it out (I6). */
+  const pendingStart = useRef<Promise<PresenceResult> | null>(null);
   const mounted = useRef(true);
   const resumeChecked = useRef(false);
 
@@ -152,11 +136,31 @@ export function useWasherPresence(): WasherPresence {
     [client],
   );
 
-  const goOnline = useCallback(() => start(true), [start]);
+  const goOnline = useCallback(() => {
+    const started = start(true);
+    pendingStart.current = started;
+    const clear = () => {
+      if (pendingStart.current === started) pendingStart.current = null;
+    };
+    started.then(clear, clear);
+    return started;
+  }, [start]);
 
   const goOffline = useCallback(async (): Promise<PresenceResult> => {
+    // I6: offline pressed while going online is still on its way. Returning
+    // now would let the start finish and leave the partner online; instead the
+    // stop waits for it, so offline is always where this ends.
+    const inFlight = pendingStart.current;
+    if (inFlight !== null) {
+      setBusy(true);
+      await inFlight;
+    }
     const current = handle.current;
-    if (current === null) return { ok: true };
+    if (current === null) {
+      // The start failed or was halted: already offline, and nothing is busy.
+      if (inFlight !== null) setBusy(false);
+      return { ok: true };
+    }
     handle.current = null;
     setBusy(true);
 

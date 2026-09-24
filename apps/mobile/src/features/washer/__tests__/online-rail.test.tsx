@@ -106,3 +106,17 @@ describe('the online rail', () => {
     expect(byTestId(tree, 'online-switch')?.props['disabled']).toBe(true);
   });
 });
+
+/** G7: a refused heartbeat has its own words, not "Reconnecting…". */
+describe('a refused heartbeat', () => {
+  it('says the update was refused while online, never that it is reconnecting', () => {
+    const all = text(rail({ problem: 'refused' }));
+    expect(all).toMatch(/refused/i);
+    expect(all).not.toMatch(/Reconnecting/);
+  });
+
+  it('says why a resume was refused while offline', () => {
+    const all = text(rail({ isOnline: false, problem: 'refused' }));
+    expect(all).toMatch(/refused|didn't accept/i);
+  });
+});

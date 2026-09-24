@@ -63,6 +63,11 @@ const ONLINE_PROBLEM: Readonly<
     title: 'Partner profile not found',
     detail: 'Finish setting up your profile to keep getting offers',
   },
+  refused: {
+    icon: 'alert-circle-outline',
+    title: 'Offers paused: update refused',
+    detail: "ParkEase didn't accept your location update. Go offline and back online",
+  },
 };
 
 /** Offline because an automatic resume failed: what stopped it. */
@@ -72,6 +77,7 @@ const RESUME_FAILED: Readonly<Record<PresenceError, string>> = {
   permission_denied: 'Turn on location to go back online',
   not_verified: 'You can go online once your documents are approved',
   not_registered: 'Finish setting up your profile to go online',
+  refused: "ParkEase didn't accept going back online. Try switching on again",
 };
 
 /**

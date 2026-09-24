@@ -2,6 +2,8 @@ import { WASH_ONLINE_HEARTBEAT_WINDOW_SECONDS } from '@parkease/contracts/washer
 
 import { warn } from '@/lib/log';
 
+import { apiErrorCodeOf, classifyFailure, httpStatusOf } from './api/errors';
+
 /**
  * What "online" means for a washer, as orchestration with the GPS and the
  * network injected — the `submitProof` pattern — so fake timers can test it.
@@ -49,19 +51,38 @@ export type BeatResult =
   /** `cause` is the rejected PATCH, so a caller can tell a 403 from a dead network. */
   | { readonly ok: false; readonly reason: 'unreachable'; readonly cause: unknown };
 
-type BeatFailure = Exclude<BeatResult, { readonly ok: true }>;
+export type BeatFailure = Exclude<BeatResult, { readonly ok: true }>;
 
 /**
- * Why presence is not working, in words a screen can act on. `unreachable` is
- * split into the server's own refusals by `useWasherPresence`, which can read
- * the HTTP error; this module cannot.
+ * Why presence is not working, in words a screen can act on. `unreachable`
+ * is split into the server's own refusals by `presenceErrorFor`.
  */
 export type PresenceError =
   | 'permission_denied'
   | 'location_failed'
   | 'not_verified'
   | 'not_registered'
+  /** A 4xx other than 403 that the rail has no specific words for (G7). */
+  | 'refused'
   | 'unreachable';
+
+/**
+ * A beat's failure, in the words a screen can act on. The server's own refusal
+ * codes are read out of the rejected PATCH, so an unverified partner is told to
+ * wait for approval rather than to check a connection that is fine, and any
+ * other definite 4xx (but a 403) is a refusal waiting will not clear (G7).
+ */
+export function presenceErrorFor(result: BeatFailure): PresenceError {
+  if (result.reason !== 'unreachable') return result.reason;
+  const code = apiErrorCodeOf(result.cause);
+  if (code === 'WASHER_NOT_VERIFIED') return 'not_verified';
+  if (code === 'WASHER_PROFILE_NOT_FOUND') return 'not_registered';
+  if (classifyFailure(result.cause) === 'refused' && httpStatusOf(result.cause) !== 403) {
+    warn(`washer.presence: the availability PATCH was refused (${code ?? 'no code'})`);
+    return 'refused';
+  }
+  return 'unreachable';
+}
 
 export interface PresenceDeps {
   /** A fresh foreground fix. Never prompts — asking is the caller's job, once. */
@@ -88,7 +109,10 @@ export type StartResult = { readonly ok: true; readonly handle: PresenceHandle }
  * rejects: a heartbeat that could reject would need a catch at every call
  * site, and the one that was forgotten would be silent.
  */
-async function locateWithin(deps: PresenceDeps): Promise<LocateOutcome | BeatFailure> {
+async function locateWithin(
+  deps: PresenceDeps,
+  asked: { current: Promise<LocateOutcome> | null },
+): Promise<LocateOutcome | BeatFailure> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timedOut = new Promise<'timed_out'>((resolve) => {
     timer = setTimeout(() => {
@@ -96,8 +120,22 @@ async function locateWithin(deps: PresenceDeps): Promise<LocateOutcome | BeatFai
     }, LOCATE_TIMEOUT_MS);
   });
 
+  // I5: a request the GPS has not answered yet is waited on again, never
+  // joined by a second one — a basement that never answers must not pile up
+  // native location requests, one per beat, for the whole shift.
+  let request = asked.current;
+  if (request === null) {
+    const fresh = deps.locate();
+    request = fresh;
+    asked.current = fresh;
+    const clear = () => {
+      if (asked.current === fresh) asked.current = null;
+    };
+    fresh.then(clear, clear);
+  }
+
   try {
-    const located = await Promise.race([deps.locate(), timedOut]);
+    const located = await Promise.race([request, timedOut]);
     if (located === 'timed_out') {
       warn('washer.presence: the GPS did not answer in time');
       return { ok: false, reason: 'location_failed' };
@@ -146,9 +184,11 @@ export async function startPresence(deps: PresenceDeps): Promise<StartResult> {
   let timer: ReturnType<typeof setTimeout> | null = null;
   /** An online PATCH that is on the wire right now. */
   let landing: Promise<BeatResult> | null = null;
+  /** A GPS request that has not answered yet (I5). */
+  const asked: { current: Promise<LocateOutcome> | null } = { current: null };
 
   const runBeat = async (): Promise<BeatResult> => {
-    const located = await locateWithin(deps);
+    const located = await locateWithin(deps, asked);
     if (!located.ok) return located;
 
     // Stopped while the GPS was answering: a late `isOnline: true` must never

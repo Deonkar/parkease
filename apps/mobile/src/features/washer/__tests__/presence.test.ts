@@ -1,9 +1,12 @@
 import { WASH_ONLINE_HEARTBEAT_WINDOW_SECONDS } from '@parkease/contracts/washer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { warn } from '@/lib/log';
+
 import {
   HEARTBEAT_INTERVAL_MS,
   LOCATE_TIMEOUT_MS,
+  presenceErrorFor,
   startPresence,
   type BeatResult,
   type Fix,
@@ -265,13 +268,22 @@ describe('a GPS that never answers', () => {
   });
 
   it('reports a location_failed beat, and the NEXT beat is still scheduled', async () => {
+    // The second fix arrives late — after its beat gave up, before the next
+    // beat starts — so the next beat asks the GPS afresh (I5 only reuses a
+    // request that is STILL pending).
     let locates = 0;
     const h = harness([at(FIRST)]);
     const deps: PresenceDeps = {
       ...h.deps,
       locate: () => {
         locates += 1;
-        if (locates === 2) return never();
+        if (locates === 2) {
+          return new Promise<LocateOutcome>((resolve) => {
+            setTimeout(() => {
+              resolve(at(SECOND));
+            }, LOCATE_TIMEOUT_MS + 1_000);
+          });
+        }
         return Promise.resolve(at(locates === 1 ? FIRST : THIRD));
       },
     };
@@ -365,5 +377,95 @@ describe('the cadence', () => {
 
     await vi.advanceTimersByTimeAsync(1);
     expect(locates).toBe(3);
+  });
+});
+
+/**
+ * I5: a GPS that never answers must not pile up native requests. Each beat
+ * gives up after `LOCATE_TIMEOUT_MS`, but the platform request it started is
+ * still out there; the next beat waits on THAT one rather than adding another.
+ */
+describe('a GPS request still pending', () => {
+  it('is reused by the next beat instead of starting a second one', async () => {
+    let locates = 0;
+    const h = harness([at(FIRST)]);
+    const deps: PresenceDeps = {
+      ...h.deps,
+      locate: () => {
+        locates += 1;
+        return locates === 1 ? Promise.resolve(at(FIRST)) : never();
+      },
+    };
+    await startPresence(deps);
+
+    await vi.advanceTimersByTimeAsync(HEARTBEAT_INTERVAL_MS * 4);
+
+    expect(locates).toBe(2);
+    expect(h.beats.length).toBeGreaterThanOrEqual(3);
+    for (const beat of h.beats) expect(beat).toEqual({ ok: false, reason: 'location_failed' });
+  });
+
+  it('lets a late fix serve the beat that is waiting on it', async () => {
+    let locates = 0;
+    let answerLate: (outcome: LocateOutcome) => void = () => undefined;
+    const h = harness([at(FIRST)]);
+    const deps: PresenceDeps = {
+      ...h.deps,
+      locate: () => {
+        locates += 1;
+        if (locates === 1) return Promise.resolve(at(FIRST));
+        return new Promise<LocateOutcome>((resolve) => {
+          answerLate = resolve;
+        });
+      },
+    };
+    await startPresence(deps);
+    await vi.advanceTimersByTimeAsync(HEARTBEAT_INTERVAL_MS + LOCATE_TIMEOUT_MS);
+    // Beat 2 gave up; beat 3 starts and waits on the SAME request.
+    await vi.advanceTimersByTimeAsync(HEARTBEAT_INTERVAL_MS - LOCATE_TIMEOUT_MS);
+    answerLate(at(SECOND));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(locates).toBe(2);
+    expect(h.sent.at(-1)).toEqual({ isOnline: true, fix: SECOND });
+  });
+});
+
+/**
+ * G7: why a beat failed, in words a partner can act on. A 4xx the server
+ * answered (other than a 403) is a refusal, not "Reconnecting…": waiting will
+ * not clear it.
+ */
+describe('presenceErrorFor', () => {
+  const rejected = (status: number, code: string) =>
+    ({
+      ok: false,
+      reason: 'unreachable',
+      cause: { response: { status, data: { error: { code, message: 'm', traceId: 't' } } } },
+    }) as const;
+
+  it('passes the GPS reasons through', () => {
+    expect(presenceErrorFor({ ok: false, reason: 'location_failed' })).toBe('location_failed');
+    expect(presenceErrorFor({ ok: false, reason: 'permission_denied' })).toBe('permission_denied');
+  });
+
+  it('names the two refusals the rail already explains', () => {
+    expect(presenceErrorFor(rejected(403, 'WASHER_NOT_VERIFIED'))).toBe('not_verified');
+    expect(presenceErrorFor(rejected(404, 'WASHER_PROFILE_NOT_FOUND'))).toBe('not_registered');
+  });
+
+  it('calls any other 4xx but a 403 a refusal, and logs its code', () => {
+    expect(presenceErrorFor(rejected(400, 'VALIDATION_FAILED'))).toBe('refused');
+    expect(presenceErrorFor(rejected(409, 'SOMETHING_NEW'))).toBe('refused');
+    expect(JSON.stringify(vi.mocked(warn).mock.calls)).toContain('SOMETHING_NEW');
+  });
+
+  it('keeps a transport failure, a 5xx, a 429 and an unexplained 403 as unreachable', () => {
+    expect(presenceErrorFor({ ok: false, reason: 'unreachable', cause: new Error('x') })).toBe(
+      'unreachable',
+    );
+    expect(presenceErrorFor(rejected(503, 'DOWN'))).toBe('unreachable');
+    expect(presenceErrorFor(rejected(429, 'SLOW_DOWN'))).toBe('unreachable');
+    expect(presenceErrorFor(rejected(403, 'FORBIDDEN'))).toBe('unreachable');
   });
 });
