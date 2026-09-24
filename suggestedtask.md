@@ -1036,3 +1036,22 @@ silent, because react-native-web's `Alert.alert` is a no-op (`learnings.md`).
 - **Done means:** a dev-mock session can start unregistered (404 `WASHER_PROFILE_NOT_FOUND`
   from the store), register as business and as gig, send an ID with the stand-in camera,
   and land in `pending`; `dev-fixtures.test.ts` walks it; nothing reaches the network.
+
+### S-53 — `tabIcon` and the tab-bar sizing are copied into three role layouts
+
+- **Status:** `open`
+- **Found in:** task 14 task-11c (washer tab icons, ruling T11-W1)
+- **Surface:** mobile (driver, valet, washer)
+
+`apps/mobile/app/(driver)/_layout.tsx`, `(valet)/_layout.tsx` and now `(washer)/_layout.tsx`
+each define the same local `tabIcon(outline, filled)` helper, the same `IconName` type, the
+same `TAB_BAR_HEIGHT = 60` and the same `tabBarStyle` / `tabBarLabelStyle` block (safe-area
+inset added to the height). `(owner)/_layout.tsx` has its own variant without the sizing.
+Three copies that must change together (a tab-bar height or R-FE-12 icon-state change has to
+land in all of them) is the R-ARCH-07 extraction trigger.
+
+- **Why deferred:** the W2 fix was scoped to the washer layout; extracting touches the driver,
+  valet and owner layouts, which is other roles' surface and needs its own design audit.
+- **Done means:** one `tabIcon` and one tab-bar `screenOptions` factory in `features/shared/`
+  (never `utils/`), used by all four role layouts; `tab-icons.test.ts` updated to follow it;
+  each role's bar checked at 375x812 and at desktop width.

@@ -4,13 +4,14 @@ import { colors } from '@parkease/tokens';
 import { Tabs, Redirect } from 'expo-router';
 
 import { useAuth } from '@/contexts/AuthContext';
+import { landingRouteFor } from '@/lib/landing-route';
 
 export default function OwnerLayout() {
   const auth = useAuth();
 
   if (auth.status !== 'authenticated') return <Redirect href="/" />;
   if (auth.activeRole !== Role.OWNER) {
-    return <Redirect href={`/(${auth.activeRole ?? 'auth'})`} />;
+    return <Redirect href={landingRouteFor(auth.activeRole)} />;
   }
 
   return (

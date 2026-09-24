@@ -18,6 +18,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { markOnboarded } from '@/features/shared/hooks/useHasOnboarded';
 import { api } from '@/lib/api';
 import { confirmOtp, requestOtp } from '@/lib/firebase';
+import { landingRouteFor } from '@/lib/landing-route';
 import { secureStorage } from '@/lib/secure-storage';
 import { uuidv7 } from '@/lib/uuid';
 
@@ -77,7 +78,7 @@ export default function VerifyScreen() {
       if (data.data.isNewUser || data.data.activeRole === null) {
         router.replace('/(auth)/choose-role');
       } else {
-        router.replace(`/(${data.data.activeRole})`);
+        router.replace(landingRouteFor(data.data.activeRole));
       }
     } catch {
       const remaining = attempts - 1;

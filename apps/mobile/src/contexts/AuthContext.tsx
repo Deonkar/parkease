@@ -5,6 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { clearOnboarded } from '@/features/shared/hooks/useHasOnboarded';
 import { releaseBackgroundTracking } from '@/features/valet/location/release';
 import { api, registerSessionExpiredHandler } from '@/lib/api';
+import { landingRouteFor } from '@/lib/landing-route';
 import { queryClient } from '@/lib/query';
 import { secureStorage } from '@/lib/secure-storage';
 import { clearSessionScopedStorage } from '@/lib/session-storage';
@@ -87,7 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       queryClient.clear();
       setState({ status: 'authenticated', roles: [role], activeRole: role });
-      router.replace(`/(${role})`);
+      router.replace(landingRouteFor(role));
       return;
     }
 
@@ -104,7 +105,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState((prev) =>
       prev.status === 'authenticated' ? { ...prev, activeRole: data.data.activeRole } : prev,
     );
-    router.replace(`/(${data.data.activeRole})`);
+    router.replace(landingRouteFor(data.data.activeRole));
   }, []);
 
   const setAuthenticated = useCallback((roles: readonly Role[], activeRole: Role | null) => {
