@@ -12,6 +12,8 @@ import {
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, FadeIn, useReducedMotion } from 'react-native-reanimated';
 
+import { useAnnounce } from '@/features/shared/hooks/useAnnounce';
+
 import type { EvidenceSlotState, PhotoSlot } from '../photo-gate';
 
 export interface EvidenceSlotView {
@@ -111,6 +113,9 @@ function EvidenceSlot({ slot, view, fill, onCapture, onRetry }: EvidenceSlotProp
   const name = NAME[slot];
   const lower = name.toLowerCase();
   const { state, uri, writable } = view;
+  const failureText = view.error ?? UPLOAD_FAILED;
+  // H4: said when it appears — a failed send, or the job moving on.
+  useAnnounce(state === 'failed' ? failureText : view.notice);
 
   const photo =
     uri === null ? null : (
@@ -138,7 +143,7 @@ function EvidenceSlot({ slot, view, fill, onCapture, onRetry }: EvidenceSlotProp
         return (
           <View testID={`evidence-${slot}-frame`} style={styles.frame}>
             {photo}
-            <View style={styles.band} accessibilityLiveRegion="polite">
+            <View style={styles.band}>
               <MaterialCommunityIcons
                 name="cloud-upload-outline"
                 size={16}
@@ -253,9 +258,7 @@ function EvidenceSlot({ slot, view, fill, onCapture, onRetry }: EvidenceSlotProp
       )}
       {state === 'failed' ? (
         <>
-          <Text style={styles.failure} accessibilityLiveRegion="polite">
-            {view.error ?? UPLOAD_FAILED}
-          </Text>
+          <Text style={styles.failure}>{failureText}</Text>
           {/* Their own row: two actions do not fit beside the status in a half. */}
           <View style={styles.actions}>
             {retry}

@@ -9,9 +9,10 @@ import {
   type UpsertWashService,
 } from '@parkease/contracts/washer';
 import { colors, elevation, fontSize, fontWeight, radius, spacing } from '@parkease/tokens';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
+import { announce, useAnnounce } from '@/features/shared/hooks/useAnnounce';
 import { formatPaise } from '@/lib/money';
 
 import { SERVICE_LABELS } from '../labels';
@@ -74,9 +75,11 @@ const textOf = (row: MenuRow): Record<Field, string> => ({
  * value it is saving. A never-priced service has nothing to switch on, so the
  * switch waits, and says so, until prices are saved.
  *
- * The screen remounts this row when its server PRICES or duration change (a
- * `key` over them, not over `isActive`), so a successful Save shows what the
- * server now holds, while a failed save or a toggle keeps what was typed.
+ * When the server's PRICES or duration change, the row takes them over in
+ * place — never over `isActive`, so a toggle keeps what was typed (T8-I1). It
+ * used to be remounted by a `key` over those values, which moved TalkBack's
+ * focus off the Save the partner had just pressed (H6); it is now updated
+ * without remounting, and a save that lands is announced as "Saved".
  */
 export function ServiceRow({ row, onSave, saving = false, failure = null }: ServiceRowProps) {
   const name = row.serviceName;
@@ -85,6 +88,27 @@ export function ServiceRow({ row, onSave, saving = false, failure = null }: Serv
 
   const [text, setText] = useState(baseline);
   const [shown, setShown] = useState(NONE_SHOWN);
+  // H6: the server's values this row's text was last taken from. A change is
+  // adopted during render — React's pattern for resetting state from a prop —
+  // so there is no frame showing the old prices, and nothing remounts.
+  const baselineKey = `${baseline.car}:${baseline.bike}:${baseline.duration}`;
+  const [syncedFrom, setSyncedFrom] = useState(baselineKey);
+  if (syncedFrom !== baselineKey) {
+    setSyncedFrom(baselineKey);
+    setText(baseline);
+    setShown(NONE_SHOWN);
+  }
+  /** A save of this row landed and nothing has been typed since. */
+  const [justSaved, setJustSaved] = useState(false);
+  const wasSaving = useRef(saving);
+  useEffect(() => {
+    if (wasSaving.current && !saving && failure === null) {
+      setJustSaved(true);
+      announce('Saved');
+    }
+    wasSaving.current = saving;
+  }, [saving, failure]);
+  useAnnounce(failure);
   const [focused, setFocused] = useState<Field | null>(null);
   /** What the last flip asked for; shown only while a save is in flight. */
   const [pendingActive, setPendingActive] = useState<boolean | null>(null);
@@ -115,6 +139,7 @@ export function ServiceRow({ row, onSave, saving = false, failure = null }: Serv
   const dirty = changed('car') || changed('bike') || changed('duration');
 
   const change = (field: Field, value: string) => {
+    setJustSaved(false);
     setText((current) => ({ ...current, [field]: value }));
     // Correcting a field un-says its error until the partner is done with it.
     setShown((current) => ({ ...current, [field]: false }));
@@ -227,7 +252,8 @@ export function ServiceRow({ row, onSave, saving = false, failure = null }: Serv
         <Switch
           testID={`active-${name}`}
           accessibilityRole="switch"
-          accessibilityLabel={`${label}: ${offered ? 'offered' : 'not offered'}`}
+          // A fixed label (H8): the checked state says whether it is offered.
+          accessibilityLabel={`Offer ${label}`}
           // TalkBack on a disabled switch otherwise hears only "disabled".
           accessibilityHint={unpriced ? UNPRICED_SWITCH : undefined}
           accessibilityState={{ checked: offered, disabled: saving || unpriced, busy: saving }}
@@ -307,13 +333,13 @@ export function ServiceRow({ row, onSave, saving = false, failure = null }: Serv
           ]}
         >
           <Text style={[styles.saveLabel, (!dirty || saving) && styles.saveLabelDisabled]}>
-            {saving ? 'Saving…' : 'Save'}
+            {saving ? 'Saving…' : justSaved && !dirty ? 'Saved' : 'Save'}
           </Text>
         </Pressable>
       </View>
 
       {failure === null ? null : (
-        <View style={styles.failure} testID={`save-error-${name}`} accessibilityLiveRegion="polite">
+        <View style={styles.failure} testID={`save-error-${name}`}>
           <MaterialCommunityIcons name="alert-circle-outline" size={16} color={colors.errorInk} />
           <Text style={styles.failureText}>{failure}</Text>
         </View>

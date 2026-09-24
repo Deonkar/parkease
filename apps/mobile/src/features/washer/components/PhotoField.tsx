@@ -10,6 +10,8 @@ import {
   type ViewStyle,
 } from 'react-native';
 
+import { useAnnounce } from '@/features/shared/hooks/useAnnounce';
+
 import type { HeldUpload, HeldUploads } from '../hooks/useHeldUploads';
 
 import { FieldBlock } from './FormFields';
@@ -92,6 +94,8 @@ interface TileProps {
 }
 
 function Tile({ item, position, size, onRetry, onRemove }: TileProps) {
+  // H4: a photo that did not upload is said when it fails.
+  useAnnounce(item.error);
   const state = item.uploading
     ? 'Uploading…'
     : item.error !== null
@@ -120,7 +124,7 @@ function Tile({ item, position, size, onRetry, onRemove }: TileProps) {
         </Pressable>
       </View>
 
-      <View style={styles.status} accessibilityLiveRegion="polite">
+      <View style={styles.status}>
         <MaterialCommunityIcons
           name={
             item.uploading

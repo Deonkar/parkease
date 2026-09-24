@@ -36,15 +36,12 @@ describe('the service menu screen', () => {
     );
   });
 
-  it('resets a row by remounting it when its server prices or duration change', () => {
-    expect(screen).toContain('key={rowKey(row)}');
-    expect(code).toMatch(/const rowKey[\s\S]{0,200}carPricePaise[\s\S]{0,80}bikePricePaise/);
-  });
-
-  it('does not remount a row for a toggle, which would wipe its drafts (T8-I1)', () => {
-    const rowKey = /const rowKey[\s\S]*?;\r?\n/.exec(code)?.[0] ?? '';
-    expect(rowKey).toContain('durationMinutes');
-    expect(rowKey).not.toContain('isActive');
+  // H6: a save no longer remounts its row (which moved TalkBack's focus off
+  // Save). The row adopts new server values in place: service-row.test.tsx
+  // proves it, and that a toggle still keeps the drafts (T8-I1).
+  it('keys a row by its service alone, never by its values', () => {
+    expect(screen).toContain('key={row.serviceName}');
+    expect(code).not.toContain('rowKey');
   });
 
   it('renders no fee rate: the 80% footnote is a rate in apps/mobile (R-FE-06)', () => {

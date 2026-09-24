@@ -16,6 +16,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/contexts/AuthContext';
+import { useAnnounce } from '@/features/shared/hooks/useAnnounce';
 import { loadFailureCopy } from '@/features/washer/api/errors';
 import { FieldError } from '@/features/washer/components/FieldError';
 import { SubmitBlock } from '@/features/washer/components/FormFields';
@@ -74,6 +75,14 @@ export default function WasherProfileScreen() {
   // An ID registration uploaded whose documents call failed (G9).
   const heldId = useHeldIdUpload();
   const [sendFailure, setSendFailure] = useState<string | null>(null);
+
+  // The one line after registration, computed here so it can be announced
+  // when it appears (H4) and drawn by `ready` below.
+  const notice =
+    profile.data === undefined
+      ? null
+      : registrationNotice(noticeKind, profile.data.verificationStatus, profile.data.partnerType);
+  useAnnounce(notice);
 
   const handleSignOut = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
@@ -138,13 +147,12 @@ export default function WasherProfileScreen() {
 
   const ready = (view: WasherProfileView): ReactNode => {
     const { banner } = describeWasherVerification(view.verificationStatus);
-    const notice = registrationNotice(noticeKind, view.verificationStatus, view.partnerType);
     const isBusiness = view.partnerType === 'business';
 
     return (
       <>
         {notice === null ? null : (
-          <View style={styles.notice} accessibilityLiveRegion="polite" testID="registration-notice">
+          <View style={styles.notice} testID="registration-notice">
             <MaterialCommunityIcons
               name="information-outline"
               size={18}

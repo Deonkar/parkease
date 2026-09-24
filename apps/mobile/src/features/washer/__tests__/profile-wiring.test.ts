@@ -59,7 +59,7 @@ describe('the profile screen', () => {
   it('shows the ID row to a gig partner only; a business sees its photos', () => {
     expect(code(screen)).toMatch(/isBusiness\s*\?[\s\S]{0,1200}:\s*\(?\s*idDocument\(view\)/);
     expect(screen).toContain(
-      'registrationNotice(noticeKind, view.verificationStatus, view.partnerType)',
+      'registrationNotice(noticeKind, profile.data.verificationStatus, profile.data.partnerType)',
     );
   });
 

@@ -5,7 +5,10 @@ import { byTestId, render, style, text } from '../../shared/__tests__/render-nat
 import { OnlineRail, type OnlineRailProps } from '../components/OnlineRail';
 import type { PresenceError } from '../presence';
 
+const announced = vi.hoisted(() => vi.fn());
+
 vi.mock('react-native', () => ({
+  AccessibilityInfo: { announceForAccessibility: announced },
   View: 'View',
   Text: 'Text',
   Switch: 'Switch',
@@ -20,15 +23,17 @@ const rail = (props: Partial<OnlineRailProps> = {}) =>
   render(<OnlineRail isOnline busy={false} onToggle={() => undefined} {...props} />);
 
 describe('the online rail', () => {
-  it('is a real switch whose checked state and label both carry the state', () => {
+  it('is a real switch whose checked state carries the state, under one fixed label (H8)', () => {
     const online = byTestId(rail(), 'online-switch');
     const offline = byTestId(rail({ isOnline: false }), 'online-switch');
 
     expect(online?.props['accessibilityRole']).toBe('switch');
     expect(online?.props['accessibilityState']).toMatchObject({ checked: true });
-    expect(String(online?.props['accessibilityLabel'])).toContain('online');
     expect(offline?.props['accessibilityState']).toMatchObject({ checked: false });
-    expect(String(offline?.props['accessibilityLabel'])).toContain('offline');
+    // TalkBack reads the label AND the checked state: a label that also says
+    // "online" makes it say the value twice.
+    expect(online?.props['accessibilityLabel']).toBe(offline?.props['accessibilityLabel']);
+    expect(String(online?.props['accessibilityLabel'])).not.toMatch(/online|offline/i);
   });
 
   it('says the state in words as well as colour (R-FE-12)', () => {
@@ -118,5 +123,20 @@ describe('a refused heartbeat', () => {
   it('says why a resume was refused while offline', () => {
     const all = text(rail({ isOnline: false, problem: 'refused' }));
     expect(all).toMatch(/refused|didn't accept/i);
+  });
+});
+
+/** H4: a failing heartbeat is announced when it appears, not only drawn. */
+describe('the rail s announcements', () => {
+  it('announces a problem once it appears', () => {
+    announced.mockClear();
+    rail({ problem: 'location_failed' });
+    expect(announced).toHaveBeenCalledWith(expect.stringMatching(/Location not updating/));
+  });
+
+  it('announces nothing while all is well', () => {
+    announced.mockClear();
+    rail();
+    expect(announced).not.toHaveBeenCalled();
   });
 });

@@ -2,6 +2,10 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, fontSize, fontWeight, spacing } from '@parkease/tokens';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { useAnnounce } from '@/features/shared/hooks/useAnnounce';
+
+const MESSAGE = "Couldn't refresh. Showing the last update.";
+
 export interface RefreshNoticeProps {
   readonly testID: string;
   /** What Retry refreshes, for TalkBack: "Refresh the job". */
@@ -18,10 +22,11 @@ export interface RefreshNoticeProps {
  * amber band means on one screen should not have to learn it again.
  */
 export function RefreshNotice({ testID, retryLabel, onRetry }: RefreshNoticeProps) {
+  useAnnounce(MESSAGE);
   return (
-    <View style={styles.root} accessibilityLiveRegion="polite" testID={testID}>
+    <View style={styles.root} testID={testID}>
       <MaterialCommunityIcons name="cloud-off-outline" size={18} color={colors.warning} />
-      <Text style={styles.text}>Couldn't refresh. Showing the last update.</Text>
+      <Text style={styles.text}>{MESSAGE}</Text>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={retryLabel}

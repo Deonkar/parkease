@@ -11,7 +11,10 @@ import { ServiceRow } from '../components/ServiceRow';
 import type { MenuRow } from '../menu-rows';
 
 // react-native ships Flow source the node-environment parser cannot read.
+const announced = vi.hoisted(() => vi.fn());
+
 vi.mock('react-native', () => ({
+  AccessibilityInfo: { announceForAccessibility: announced },
   View: 'View',
   Text: 'Text',
   TextInput: 'TextInput',
@@ -302,11 +305,20 @@ describe('the Active switch (T8-I1)', () => {
   });
 
   it('says its state in words, not only in the track colour', () => {
-    const { node } = setup({ row: row({ isActive: false }) });
+    const { node, readable } = setup({ row: row({ isActive: false }) });
     const toggleNode = node('active-premium_wash');
 
     expect(toggleNode?.props['accessibilityRole']).toBe('switch');
-    expect(toggleNode?.props['accessibilityLabel']).toMatch(/not offered/i);
+    expect(toggleNode?.props['accessibilityState']).toMatchObject({ checked: false });
+    expect(readable()).toContain('Not offered');
+  });
+
+  it('keeps one fixed label, so TalkBack does not say the value twice (H8)', () => {
+    const off = setup({ row: row({ isActive: false }) }).node('active-premium_wash');
+    const on = setup({ row: row({ isActive: true }) }).node('active-premium_wash');
+
+    expect(off?.props['accessibilityLabel']).toBe(on?.props['accessibilityLabel']);
+    expect(String(on?.props['accessibilityLabel'])).not.toMatch(/offered/i);
   });
 
   it('says why it cannot send a stored price the contract no longer accepts', () => {
@@ -375,5 +387,55 @@ describe('while a save is in flight, and after one fails', () => {
     const { node } = setup({ failure: "Couldn't save. Check your connection and try again." });
 
     expect(text(node('save-error-premium_wash') ?? null)).toContain("Couldn't save");
+  });
+});
+
+/** H4 and H6: what a save says, and what it keeps. */
+describe('after a save', () => {
+  it('announces "Saved" when a save lands, and shows it on the button', () => {
+    const { rerender, readable } = setup();
+    announced.mockClear();
+
+    rerender(() => {
+      server.setSaving(true);
+    });
+    rerender(() => {
+      server.setSaving(false);
+    });
+
+    expect(announced).toHaveBeenCalledWith('Saved');
+    expect(readable()).toContain('Saved');
+  });
+
+  it('announces a failure when it appears', () => {
+    announced.mockClear();
+    setup({ failure: "Couldn't save. Check your connection and try again." });
+
+    expect(announced).toHaveBeenCalledWith("Couldn't save. Check your connection and try again.");
+  });
+
+  it('shows the server s new prices without being remounted, so focus is not lost', () => {
+    const { node, type, rerender } = setup();
+    type('price-car-premium_wash', '449');
+
+    rerender(() => {
+      server.setRow(row({ carPricePaise: 44900 }));
+    });
+
+    expect(node('price-car-premium_wash')?.props['value']).toBe('449');
+    rerender(() => {
+      server.setRow(row({ carPricePaise: 45000 }));
+    });
+    expect(node('price-car-premium_wash')?.props['value']).toBe('450');
+  });
+
+  it('announces a price error when it appears under the field', () => {
+    const { type, blur } = setup();
+    announced.mockClear();
+
+    type('price-car-premium_wash', '1');
+    blur('price-car-premium_wash');
+
+    expect(announced).toHaveBeenCalledWith(expect.stringMatching(/Enter a price between/));
   });
 });

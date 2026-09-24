@@ -2,6 +2,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, fontSize, fontWeight, radius, spacing } from '@parkease/tokens';
 import { StyleSheet, Switch, Text, View } from 'react-native';
 
+import { useAnnounce } from '@/features/shared/hooks/useAnnounce';
+
 import type { PresenceError } from '../presence';
 
 export interface OnlineRailProps {
@@ -147,14 +149,14 @@ export function OnlineRail({
 }: OnlineRailProps) {
   const view = present(isOnline, busy, problem, disabledReason);
   const disabled = busy || disabledReason !== undefined;
+  // A failing heartbeat is the one thing here a partner must hear about
+  // without looking at the screen (H4).
+  useAnnounce(problem === null ? null : [view.title, view.detail].filter(Boolean).join('. '));
 
   return (
     <View
       style={[styles.root, { backgroundColor: view.ground, borderColor: view.edge }]}
       testID="online-rail"
-      // A failing heartbeat is the one thing here a partner must hear about
-      // without looking at the screen.
-      accessibilityLiveRegion={problem === null ? 'none' : 'polite'}
     >
       <MaterialCommunityIcons name={view.icon} size={20} color={view.ink} />
 
@@ -167,7 +169,9 @@ export function OnlineRail({
 
       <Switch
         accessibilityRole="switch"
-        accessibilityLabel={`Available for jobs. Currently ${isOnline ? 'online' : 'offline'}.`}
+        // A fixed label (H8): the checked state says on or off, and a label
+        // that said it too made TalkBack read the value twice.
+        accessibilityLabel="Available for jobs"
         // TalkBack on a disabled switch otherwise hears only "disabled".
         accessibilityHint={disabledReason}
         accessibilityState={{ checked: isOnline, disabled, busy }}

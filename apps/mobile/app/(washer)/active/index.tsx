@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useAnnounce } from '@/features/shared/hooks/useAnnounce';
 import { resolveScreenState } from '@/features/shared/screen-state';
 import { advanceOutcomeFor } from '@/features/washer/action-outcomes';
 import { loadFailureCopy } from '@/features/washer/api/errors';
@@ -88,6 +89,9 @@ export default function WasherActiveScreen() {
   const [cameraSlot, setCameraSlot] = useState<PhotoSlot | null>(null);
   /** Why the last status change did not happen, said above the action (G2). */
   const [actionNotice, setActionNotice] = useState<string | null>(null);
+  // H4: every notice on this screen is announced when it appears.
+  useAnnounce(actionNotice);
+  useAnnounce(active.data?.status === 'completed' ? 'Job complete. Nice work.' : null);
 
   // R-FE-05: one intent per status change the partner asks for, reused when
   // that change is retried so a retry after a timeout replays it rather than
@@ -299,7 +303,7 @@ export default function WasherActiveScreen() {
           ) : null}
 
           {job.status === 'completed' ? (
-            <View style={styles.done} accessibilityLiveRegion="polite">
+            <View style={styles.done}>
               <MaterialCommunityIcons
                 name="check-circle-outline"
                 size={20}

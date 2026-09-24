@@ -16,7 +16,10 @@ import {
 } from '../components/EvidencePair';
 
 // react-native ships Flow source the node-environment parser cannot read.
+const announced = vi.hoisted(() => vi.fn());
+
 vi.mock('react-native', () => ({
+  AccessibilityInfo: { announceForAccessibility: announced },
   View: 'View',
   Text: 'Text',
   Image: 'Image',
@@ -293,5 +296,20 @@ describe('a refusal and a closed slot', () => {
 
     expect(byTestId(tree, 'evidence-before-notice')).toBeDefined();
     expect(text(tree)).toContain('The job moved on.');
+  });
+});
+
+/** H4: a failed send is announced when the slot turns failed. */
+describe('the pair s announcements', () => {
+  it('announces the slot s failure copy', () => {
+    announced.mockClear();
+    pair({ before: slot({ state: 'failed', uri: 'file:///a.jpg', error: 'Not sent: refused.' }) });
+    expect(announced).toHaveBeenCalledWith('Not sent: refused.');
+  });
+
+  it('announces the note that the job moved on', () => {
+    announced.mockClear();
+    pair({ before: slot({ state: 'attached', writable: false, notice: 'The job moved on.' }) });
+    expect(announced).toHaveBeenCalledWith('The job moved on.');
   });
 });

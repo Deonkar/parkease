@@ -11,15 +11,7 @@ import { RefreshNotice } from '@/features/washer/components/RefreshNotice';
 import { ServiceRow } from '@/features/washer/components/ServiceRow';
 import { useServiceSave } from '@/features/washer/hooks/useServiceSave';
 import { useServiceMenu } from '@/features/washer/hooks/useWasherQueries';
-import { toMenuRows, type MenuRow } from '@/features/washer/menu-rows';
-
-/**
- * Remounts a row when ITS server prices or duration change, and never for
- * another row's save. Not over `isActive` (T8-I1): a successful toggle must not
- * wipe the drafts the partner has typed but not yet saved.
- */
-const rowKey = (row: MenuRow) =>
-  [row.serviceName, row.carPricePaise, row.bikePricePaise, row.durationMinutes].join(':');
+import { toMenuRows } from '@/features/washer/menu-rows';
 
 function MenuSkeleton() {
   return (
@@ -83,7 +75,9 @@ export default function WasherMenuScreen() {
             >
               {toMenuRows(menu.data?.services ?? []).map((row) => (
                 <ServiceRow
-                  key={rowKey(row)}
+                  // One key per service, never over its values: a save updates
+                  // the row in place, so TalkBack's focus stays on Save (H6).
+                  key={row.serviceName}
                   row={row}
                   saving={saver.isSaving(row.serviceName)}
                   failure={saver.failureFor(row.serviceName)}

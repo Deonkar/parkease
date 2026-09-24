@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Alert, Linking, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useAnnounce } from '@/features/shared/hooks/useAnnounce';
 import { resolveScreenState } from '@/features/shared/screen-state';
 import { acceptOutcomeFor } from '@/features/washer/action-outcomes';
 import { isUnregisteredWasher, loadFailureCopy } from '@/features/washer/api/errors';
@@ -137,6 +138,8 @@ export default function WasherOffersScreen() {
   } | null>(null);
   const visibleNotice =
     acceptNotice !== null && acceptNotice.shownWith === offers.data ? acceptNotice.text : null;
+  // H4: the sighted cue is a card disappearing; TalkBack hears the words.
+  useAnnounce(visibleNotice);
 
   // A job that can no longer be accepted leaves the list NOW, not when the
   // refetch lands — until then it would still be tappable.
@@ -309,9 +312,8 @@ export default function WasherOffersScreen() {
 
     const notice =
       visibleNotice === null ? null : (
-        // A live region, because the sighted cue is a card disappearing; a
-        // screen reader user would otherwise hear silence after Accept.
-        <View accessibilityLiveRegion="polite" style={styles.notice} testID="offer-taken-notice">
+        // Announced by `useAnnounce(visibleNotice)` above (H4).
+        <View style={styles.notice} testID="offer-taken-notice">
           <MaterialCommunityIcons name="information-outline" size={18} color={colors.primaryDark} />
           <Text style={styles.noticeText}>{visibleNotice}</Text>
         </View>

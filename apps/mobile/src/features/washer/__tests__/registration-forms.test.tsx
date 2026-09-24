@@ -13,7 +13,10 @@ import { GigForm } from '../components/GigForm';
 import type { HeldUploads } from '../hooks/useHeldUploads';
 import { SERVICE_LABELS } from '../labels';
 
+const announced = vi.hoisted(() => vi.fn());
+
 vi.mock('react-native', () => ({
+  AccessibilityInfo: { announceForAccessibility: announced },
   View: 'View',
   Text: 'Text',
   TextInput: 'TextInput',
