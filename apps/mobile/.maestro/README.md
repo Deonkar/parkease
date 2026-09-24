@@ -28,6 +28,11 @@ user out, and neither flow scripts the Firebase phone-auth login.
 - The washer's service menu has a row for the service and vehicle type in the request below.
 - A live wash request is waiting within dispatch radius of the device's location. On an
   emulator, set the location with `adb emu geo fix <lng> <lat>`.
+- The flow checks the money **by value**: `EXPECTED_NET` in the flow's `env` (default
+  `₹319.20`) must be the take-home the server prices for the seeded request. The flow
+  asserts it on the offer card and on the earnings line. Seed a different request? Pass its
+  figure:
+  `maestro test -e EXPECTED_NET='₹...' apps/mobile/.maestro/washer-first-job.yaml`.
 - The camera works. The emulator's virtual scene camera is enough.
 
 **`washer-verification-pending.yaml`**

@@ -97,3 +97,13 @@ describe('the active primary action', () => {
     expect(screen).not.toMatch(/invalidates the job on every error/);
   });
 });
+
+/** K2: the arithmetic ban `earnings-wiring.test.ts` holds, held here too (R-FE-06). */
+describe('the active screen s money', () => {
+  const code = screen.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+
+  it('does no arithmetic on a Paise value, and sums nothing', () => {
+    expect(code).not.toMatch(/Paise\s*[-+*/]|[-+*/]\s*[\w.]*Paise\b/);
+    expect(code).not.toMatch(/reduce\(/);
+  });
+});

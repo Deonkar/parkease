@@ -90,3 +90,27 @@ describe('the shutter has a testID, and Maestro uses it', () => {
     expect(flow).not.toMatch(/rightOf:/);
   });
 });
+
+/**
+ * K3: the first-job flow checks the money by VALUE. "line-net is visible"
+ * passes for ₹0.00 and for a figure the app invented; the flow asserts the
+ * seeded request's server-priced take-home, on the offer and on the earnings
+ * line, from one declared value.
+ */
+describe('the first-job flow asserts the earned amount by value', () => {
+  const flow = read('.maestro', 'washer-first-job.yaml');
+
+  it('declares the seeded take-home once, as an overridable env value', () => {
+    expect(flow).toMatch(/env:\r?\n\s+EXPECTED_NET: '₹\d[\d,]*\.\d{2}'/);
+  });
+
+  it('asserts the offer and the earnings line against it', () => {
+    expect(flow).toMatch(/id: 'offer-earnings'\r?\n\s+text: '\$\{EXPECTED_NET\}'/);
+    expect(flow).toMatch(/id: 'line-net'\r?\n\s+text: '\$\{EXPECTED_NET\}'/);
+  });
+
+  it('still says it has not been executed', () => {
+    expect(flow).toContain('NOT YET EXECUTED');
+    expect(read('.maestro', 'README.md')).toContain('Not yet executed');
+  });
+});

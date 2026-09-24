@@ -7,6 +7,12 @@
 #   and src/features/washer/components/*.
 appId: in.parkease.app
 name: Washer - first job, offer to earnings
+# The seeded request's take-home, as the SERVER prices it for this washer
+# (README, "Preconditions"). The app never computes it (R-FE-06); the flow
+# checks the figure the server sent, on the offer and on the earnings line.
+# Override for another seed: maestro test -e EXPECTED_NET='₹...' <flow>
+env:
+  EXPECTED_NET: '₹319.20'
 tags:
   - washer
   - e2e
@@ -53,6 +59,7 @@ tags:
 - assertVisible: 'YOU EARN'
 - assertVisible:
     id: 'offer-earnings'
+    text: '${EXPECTED_NET}'
 - tapOn:
     id: 'offer-accept'
     index: 0
@@ -136,5 +143,7 @@ tags:
 - assertVisible:
     id: 'earnings-line'
 - assertVisible: 'You earned'
+# By value: a visible line-net passes for ₹0.00 or an invented figure.
 - assertVisible:
     id: 'line-net'
+    text: '${EXPECTED_NET}'
