@@ -100,9 +100,20 @@ export default function WasherProfileScreen() {
     if (idDocumentId === null) return;
     setSendFailure(null);
     // One intent per image, replayed if this same image is retried (R-FE-05).
-    const failure = await registration.sendDocument({ idDocumentId });
-    if (failure === null) heldId.release();
-    setSendFailure(failure);
+    const result = await registration.sendDocument({ idDocumentId });
+    if (result.kind === 'sent') {
+      heldId.release();
+      return;
+    }
+    if (result.retake) {
+      // The server refused THIS image (N3): the same upload id is refused the
+      // same way forever, so neither the held nor the fresh one is sent again.
+      // The field falls back to "Take photo", and the copy asks for a new one.
+      heldId.release();
+      const refused = idPhoto.items[0];
+      if (refused !== undefined) idPhoto.remove(refused.key);
+    }
+    setSendFailure(result.message);
   };
 
   const idDocument = (view: WasherProfileView): ReactNode => {

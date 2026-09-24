@@ -9,7 +9,7 @@ import { ZodError } from 'zod';
 
 import { render } from '../../shared/__tests__/render-native';
 import { IN_FLIGHT_COPY, OUTDATED_COPY } from '../api/errors';
-import { useRegistration, type Registration } from '../hooks/useRegistration';
+import { leavesIdUnsent, useRegistration, type Registration } from '../hooks/useRegistration';
 
 /**
  * Submitting a registration (§14.2). A gig partner is TWO calls: the profile,
@@ -179,7 +179,7 @@ describe('already registered, with different details', () => {
     const outcome = await act(() => registration.register(GIG, ID));
 
     expect(mocks.refreshProfile).toHaveBeenCalledTimes(1);
-    expect(outcome).toEqual({ kind: 'already-registered' });
+    expect(outcome).toEqual({ kind: 'already-registered', idNotSent: false });
     // The partner IS registered, so the ID still goes.
     expect(mocks.documents).toHaveBeenCalledTimes(1);
   });
@@ -201,8 +201,33 @@ describe('already registered, with different details', () => {
 
     const outcome = await act(() => registration.register(GIG, ID));
 
-    expect(outcome).toEqual({ kind: 'already-registered' });
+    expect(outcome).toEqual({ kind: 'already-registered', idNotSent: false });
     expect(mocks.warn).toHaveBeenCalled();
+  });
+});
+
+/**
+ * N2: "already registered with different details" whose ID call ALSO failed.
+ * The ID image is on Cloudinary; only its call did not land, so the outcome
+ * says so and the register screen holds the upload for the profile to resend.
+ */
+describe('already registered, and the ID did not send', () => {
+  it('says the ID is still unsent', async () => {
+    mocks.create.mockRejectedValue(EXISTS);
+    mocks.refreshProfile.mockResolvedValue(stored({ businessName: 'Raju' }));
+    mocks.documents.mockRejectedValue(OFFLINE);
+
+    const outcome = await act(() => registration.register(GIG, ID));
+
+    expect(outcome).toEqual({ kind: 'already-registered', idNotSent: true });
+  });
+
+  it('is what decides whether the uploaded ID is held', () => {
+    expect(leavesIdUnsent({ kind: 'document-not-sent' })).toBe(true);
+    expect(leavesIdUnsent({ kind: 'already-registered', idNotSent: true })).toBe(true);
+    expect(leavesIdUnsent({ kind: 'already-registered', idNotSent: false })).toBe(false);
+    expect(leavesIdUnsent({ kind: 'registered' })).toBe(false);
+    expect(leavesIdUnsent({ kind: 'failed', message: 'm' })).toBe(false);
   });
 });
 
@@ -268,8 +293,12 @@ describe('sending the ID from the profile screen', () => {
     const first = await act(() => registration.sendDocument(ID));
     const second = await act(() => registration.sendDocument(ID));
 
-    expect(first).toBe("Couldn't send your ID. Check your connection and try again.");
-    expect(second).toBeNull();
+    expect(first).toEqual({
+      kind: 'failed',
+      message: "Couldn't send your ID. Check your connection and try again.",
+      retake: false,
+    });
+    expect(second).toEqual({ kind: 'sent' });
     expect(keyOf(mocks.documents, 0)).toBe(keyOf(mocks.documents, 1));
   });
 
@@ -280,5 +309,31 @@ describe('sending the ID from the profile screen', () => {
     await act(() => registration.sendDocument({ idDocumentId: 'documents/id-2' }));
 
     expect(keyOf(mocks.documents, 1)).not.toBe(keyOf(mocks.documents, 0));
+  });
+});
+
+/**
+ * N3: an ID the server REFUSED is never sent again. Re-sending the same upload
+ * id is refused the same way forever, so the result asks for a new photo.
+ */
+describe('an ID the server refused', () => {
+  it('asks for a new photo rather than a resend', async () => {
+    mocks.documents.mockRejectedValue(REFUSED);
+
+    const result = await act(() => registration.sendDocument(ID));
+
+    expect(result).toEqual({
+      kind: 'failed',
+      message: "We couldn't accept this photo. Take it again and send it.",
+      retake: true,
+    });
+  });
+
+  it('keeps the photo when the call only failed to arrive', async () => {
+    mocks.documents.mockRejectedValue(OFFLINE);
+
+    const result = await act(() => registration.sendDocument(ID));
+
+    expect(result).toMatchObject({ kind: 'failed', retake: false });
   });
 });

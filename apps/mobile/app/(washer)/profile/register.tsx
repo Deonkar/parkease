@@ -23,7 +23,7 @@ import { PartnerTypePicker } from '@/features/washer/components/PartnerTypePicke
 import { WashCamera } from '@/features/washer/components/WashCamera';
 import { useCameraGate } from '@/features/washer/hooks/useCameraGate';
 import { useHeldUploads } from '@/features/washer/hooks/useHeldUploads';
-import { useRegistration } from '@/features/washer/hooks/useRegistration';
+import { leavesIdUnsent, useRegistration } from '@/features/washer/hooks/useRegistration';
 import { useHeldIdUpload } from '@/features/washer/hooks/useWasherQueries';
 import { assertNever } from '@/lib/assert-never';
 
@@ -82,8 +82,9 @@ export default function WasherRegisterScreen() {
     }
     // The ID image is on Cloudinary; only its call failed. Held, so the
     // profile re-sends the call rather than asking for a second photo (G9).
+    // "Already registered with other details" can leave it unsent too (N2).
     const uploaded = documents?.idDocumentId;
-    if (outcome.kind === 'document-not-sent' && uploaded !== undefined) {
+    if (leavesIdUnsent(outcome) && uploaded !== undefined) {
       heldId.hold(uploaded);
     }
     router.dismissTo({

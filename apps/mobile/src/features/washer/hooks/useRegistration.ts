@@ -2,6 +2,7 @@ import type { CreateWasherProfile, SubmitWasherDocuments } from '@parkease/contr
 import { useCallback, useRef, useState } from 'react';
 
 import { newIntent, type Intent } from '@/lib/api';
+import { assertNever } from '@/lib/assert-never';
 import { warn } from '@/lib/log';
 
 import { apiErrorCodeOf, classifyFailure, failureCopy, settlesIntent } from '../api/errors';
@@ -17,7 +18,11 @@ export type RegistrationOutcome =
    * differ from what this form sent (G6). They are registered, and the profile
    * says "check your details" rather than pretending the edit landed.
    */
-  | { readonly kind: 'already-registered' }
+  | {
+      readonly kind: 'already-registered';
+      /** The ID image uploaded, but its call did not land: hold it (N2). */
+      readonly idNotSent: boolean;
+    }
   /**
    * The profile exists and the ID did not send. The partner is registered, so
    * they go to their profile — which shows the missing ID with its own upload
@@ -27,14 +32,46 @@ export type RegistrationOutcome =
   /** Nothing was registered; the form stays, with this said near its submit. */
   | { readonly kind: 'failed'; readonly message: string };
 
+/**
+ * Whether the ID image is on Cloudinary while its documents call did not land,
+ * so the register screen holds the upload for the profile to resend (G9, N2).
+ */
+export function leavesIdUnsent(outcome: RegistrationOutcome): boolean {
+  switch (outcome.kind) {
+    case 'document-not-sent':
+      return true;
+    case 'already-registered':
+      return outcome.idNotSent;
+    case 'registered':
+    case 'failed':
+      return false;
+    default:
+      return assertNever(outcome);
+  }
+}
+
+/** Sending the ID on its own. */
+export type DocumentSendResult =
+  | { readonly kind: 'sent' }
+  | {
+      readonly kind: 'failed';
+      readonly message: string;
+      /**
+       * The server refused THIS image (N3). Sending the same upload id again is
+       * refused the same way forever, so the photo is dropped and a new one asked
+       * for. False for a call that only failed to arrive: the same image is resent.
+       */
+      readonly retake: boolean;
+    };
+
 export interface Registration {
   /** A gig partner passes their ID image; a business passes `null`. Never rejects. */
   readonly register: (
     profile: CreateWasherProfile,
     documents: SubmitWasherDocuments | null,
   ) => Promise<RegistrationOutcome>;
-  /** The ID image on its own, from the profile screen. `null` once sent, else why not. */
-  readonly sendDocument: (documents: SubmitWasherDocuments) => Promise<string | null>;
+  /** The ID image on its own, from the profile screen. Never rejects. */
+  readonly sendDocument: (documents: SubmitWasherDocuments) => Promise<DocumentSendResult>;
   readonly submitting: boolean;
 }
 
@@ -132,18 +169,22 @@ export function useRegistration(): Registration {
   );
 
   const documentsOnce = useCallback(
-    async (input: SubmitWasherDocuments): Promise<string | null> => {
+    async (input: SubmitWasherDocuments): Promise<DocumentSendResult> => {
       try {
         await submitDocuments({ input, intent: intentFor('documents', input) });
         held.current.delete('documents');
-        return null;
+        return { kind: 'sent' };
       } catch (error) {
         settle('documents', error);
         warn(
           `washer.register: the ID failed (${classifyFailure(error)}, ${apiErrorCodeOf(error) ?? 'no code'})`,
           error,
         );
-        return failureCopy(error, { refused: DOCUMENT_REFUSED, unreachable: DOCUMENT_OFFLINE });
+        return {
+          kind: 'failed',
+          message: failureCopy(error, { refused: DOCUMENT_REFUSED, unreachable: DOCUMENT_OFFLINE }),
+          retake: classifyFailure(error) === 'refused',
+        };
       }
     },
     [submitDocuments, intentFor, settle],
@@ -161,8 +202,9 @@ export function useRegistration(): Registration {
         const sent = id === null ? null : await documentsOnce(id);
         // Details that differ outrank a missing ID: the profile screen shows
         // the missing ID with its own action either way.
-        if (created.differs) return { kind: 'already-registered' };
-        return sent === null ? { kind: 'registered' } : { kind: 'document-not-sent' };
+        const idNotSent = sent !== null && sent.kind === 'failed';
+        if (created.differs) return { kind: 'already-registered', idNotSent };
+        return idNotSent ? { kind: 'document-not-sent' } : { kind: 'registered' };
       } finally {
         setSubmitting(false);
       }
@@ -171,7 +213,7 @@ export function useRegistration(): Registration {
   );
 
   const sendDocument = useCallback(
-    async (id: SubmitWasherDocuments): Promise<string | null> => {
+    async (id: SubmitWasherDocuments): Promise<DocumentSendResult> => {
       setSubmitting(true);
       try {
         return await documentsOnce(id);

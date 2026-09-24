@@ -121,7 +121,9 @@ describe('the ID upload held across screens', () => {
   it('is held by registration when the ID call did not land', () => {
     const register = read('profile', 'register.tsx');
     expect(register).toContain('useHeldIdUpload()');
-    expect(register).toMatch(/outcome\.kind === 'document-not-sent'[\s\S]{0,300}heldId\.hold\(/);
+    // Every outcome that leaves the ID unsent holds it, including "already
+    // registered with different details" whose ID call also failed (N2).
+    expect(register).toMatch(/leavesIdUnsent\(outcome\)[\s\S]{0,200}heldId\.hold\(/);
   });
 
   it('is sent by the profile without a second photograph, and released once sent', () => {
@@ -129,6 +131,12 @@ describe('the ID upload held across screens', () => {
     expect(screen).toContain('useHeldIdUpload()');
     expect(screen).toMatch(/idPhoto\.uploadIds\[0\] \?\? heldId\.id/);
     expect(screen).toMatch(/heldId\.release\(\)/);
+  });
+
+  it('releases an ID the server refused, so it is never re-sent forever (N3)', () => {
+    const screen = code(read('profile', 'index.tsx'));
+    expect(screen).toMatch(/result\.retake[\s\S]{0,400}heldId\.release\(\)/);
+    expect(screen).toMatch(/result\.retake[\s\S]{0,400}idPhoto\.remove\(/);
   });
 });
 
