@@ -2,9 +2,11 @@
  * Warn-level logging for handled failures (R-FAIL-01).
  *
  * The rule is "rethrow, return a typed failure, or handle and log at warn+ with
- * the trace id". On the client there is no trace id — that is a server concern —
- * so a handled failure here logs what it was and what threw, and the caller
- * still returns a typed failure rather than a silent success.
+ * the trace id". The trace id is the server's: its error envelope carries one,
+ * and it is the one field that finds the request in the API's own logs, so it
+ * is allowed through with the envelope's domain code (G8). A failure with no
+ * response logs what it was and what threw, and the caller still returns a
+ * typed failure rather than a silent success.
  *
  * **Errors are summarised through an allow-list, never passed through.**
  * `lib/api.ts` sets `Authorization: Bearer <accessToken>` on every request, and
@@ -30,12 +32,25 @@ export interface SafeErrorSummary {
   readonly message?: string;
   readonly code?: string;
   readonly status?: number;
+  /** The API envelope's `error.code`, e.g. `WASH_JOB_TAKEN`. */
+  readonly apiCode?: string;
+  /** The API envelope's `error.traceId`: what finds this request server-side. */
+  readonly traceId?: string;
   readonly url?: string;
 }
 
 function readString(source: Record<string, unknown>, key: string): string | undefined {
   const value = source[key];
   return typeof value === 'string' ? value : undefined;
+}
+
+/** `data.error`, when `data` is the API's envelope; the only part of a body read. */
+function errorEnvelopeOf(data: unknown): Record<string, unknown> | undefined {
+  if (typeof data !== 'object' || data === null) return undefined;
+  const error = (data as Record<string, unknown>)['error'];
+  return typeof error === 'object' && error !== null
+    ? (error as Record<string, unknown>)
+    : undefined;
 }
 
 /**
@@ -68,12 +83,20 @@ export function summariseError(error: unknown): SafeErrorSummary | string | unde
   if (message !== undefined) summary['message'] = message;
   if (code !== undefined) summary['code'] = code;
 
-  // The HTTP status is the single most useful field for diagnosis, and it is
-  // the only thing read out of `response` — never its config, headers or body.
+  // The HTTP status is the single most useful field for diagnosis. Out of
+  // `response` only it and two named fields of the API's error envelope are
+  // read — never its config, its headers, or anything else in its body.
   const response = source['response'];
   if (typeof response === 'object' && response !== null) {
     const status = (response as Record<string, unknown>)['status'];
     if (typeof status === 'number') summary['status'] = status;
+    const envelope = errorEnvelopeOf((response as Record<string, unknown>)['data']);
+    if (envelope !== undefined) {
+      const apiCode = readString(envelope, 'code');
+      const traceId = readString(envelope, 'traceId');
+      if (apiCode !== undefined) summary['apiCode'] = apiCode;
+      if (traceId !== undefined) summary['traceId'] = traceId;
+    }
   }
 
   // The path, without query string: a query can carry identifiers, and the

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { warn } from '../log';
+import { summariseError, warn } from '../log';
 
 /**
  * A bearer token must never reach a log line.
@@ -97,5 +97,59 @@ describe('warn', () => {
     warn('nothing attached');
 
     expect(spy).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * G8: R-FAIL-01 is "log at warn+ WITH the trace id". The server's envelope
+ * carries the domain code and the trace id that finds the request in the API's
+ * logs; both are allowed through. Nothing else in `response.data` is.
+ */
+describe('the server s code and trace id', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const envelopeError = () => ({
+    name: 'AxiosError',
+    message: 'Request failed with status code 409',
+    config: { url: '/washer/jobs/1/accept', headers: { Authorization: 'Bearer secret-token' } },
+    response: {
+      status: 409,
+      data: {
+        error: {
+          code: 'WASH_JOB_TAKEN',
+          message: 'taken',
+          traceId: '0192f2a1-0000-7000-8000-00000000abcd',
+          detail: { phone: '+919876543210' },
+        },
+      },
+    },
+  });
+
+  it('keeps the API error code and the trace id', () => {
+    const summary = summariseError(envelopeError());
+    expect(summary).toMatchObject({
+      apiCode: 'WASH_JOB_TAKEN',
+      traceId: '0192f2a1-0000-7000-8000-00000000abcd',
+      status: 409,
+    });
+  });
+
+  it('keeps every other redaction: no token, no body fields beyond the two', () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    warn('accept failed', envelopeError());
+    const out = JSON.stringify(spy.mock.calls);
+    expect(out).toContain('0192f2a1-0000-7000-8000-00000000abcd');
+    expect(out).not.toContain('secret-token');
+    expect(out).not.toContain('+919876543210');
+    expect(out).not.toContain('"taken"');
+  });
+
+  it('ignores a code or trace id that is not a string', () => {
+    const summary = summariseError({
+      response: { status: 500, data: { error: { code: 7, traceId: { x: 1 } } } },
+    });
+    expect(summary).toEqual({ status: 500 });
   });
 });
