@@ -12,7 +12,7 @@ import {
 } from '@parkease/tokens';
 import { EmptyState, ErrorState, Skeleton } from '@parkease/ui-native';
 import { useCameraPermissions } from 'expo-camera';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,6 +23,7 @@ import { advanceOutcomeFor } from '@/features/washer/action-outcomes';
 import { loadFailureCopy } from '@/features/washer/api/errors';
 import { ElapsedBar, elapsedMinutesSince } from '@/features/washer/components/ElapsedBar';
 import { EvidencePair, type EvidenceSlotView } from '@/features/washer/components/EvidencePair';
+import { JobEndFooter, JobWonNotice } from '@/features/washer/components/JobMoments';
 import { ReadableColumn } from '@/features/washer/components/ReadableColumn';
 import { RefreshNotice } from '@/features/washer/components/RefreshNotice';
 import { StepRail, currentStepFor } from '@/features/washer/components/StepRail';
@@ -36,6 +37,7 @@ import {
   useAdvanceWash,
   useServiceMenu,
 } from '@/features/washer/hooks/useWasherQueries';
+import { jobEndFor, showsJobWon } from '@/features/washer/job-moments';
 import { SERVICE_LABELS, VEHICLE_LABELS } from '@/features/washer/labels';
 import {
   canWriteSlot,
@@ -86,6 +88,8 @@ export default function WasherActiveScreen() {
   const active = useActiveWash();
   const menu = useServiceMenu();
   const advance = useAdvanceWash();
+  // The job the offers screen has just won, for the "It's yours" moment (M9).
+  const params = useLocalSearchParams<{ won?: string }>();
   const [permission, requestPermission] = useCameraPermissions();
 
   // Unconditionally, before any state is chosen: a capture must outlive the
@@ -259,6 +263,12 @@ export default function WasherActiveScreen() {
     // car, so directions sit beside the primary action, labelled and at the
     // touch target, rather than as a small icon in the header.
     const gettingThere = currentStepFor(job.status) === 0;
+    // M9: a finished job ends with a footer that says what it paid and where
+    // to go next, never a dead end.
+    const end = jobEndFor(job.status);
+    // The running "You earn" figure; a finished job's footer says it instead,
+    // and a cancelled job pays nothing, so the figure would mislead there.
+    const showEarn = job.earningsPaise !== null && end === null;
 
     return (
       <>
@@ -273,6 +283,8 @@ export default function WasherActiveScreen() {
         ) : null}
 
         <ScrollView contentContainerStyle={[styles.body, styles.column]}>
+          {showsJobWon(params.won, job) ? <JobWonNotice /> : null}
+
           <EvidencePair
             before={slotView('before')}
             after={slotView('after')}
@@ -286,10 +298,10 @@ export default function WasherActiveScreen() {
 
           <StepRail status={job.status} />
 
-          {elapsed !== null || job.earningsPaise !== null ? (
+          {elapsed !== null || showEarn ? (
             <View style={styles.card}>
               {elapsed === null ? null : <ElapsedBar {...elapsed} />}
-              {job.earningsPaise === null ? null : (
+              {!showEarn || job.earningsPaise === null ? null : (
                 <View style={[styles.earnRow, elapsed !== null && styles.earnDivided]}>
                   <Text style={styles.earnLabel}>You earn</Text>
                   <Text style={styles.earnValue}>
@@ -299,20 +311,26 @@ export default function WasherActiveScreen() {
               )}
             </View>
           ) : null}
-
-          {job.status === 'completed' ? (
-            <View style={styles.done}>
-              <MaterialCommunityIcons
-                name="check-circle-outline"
-                size={20}
-                color={colors.primaryDark}
-              />
-              <Text style={styles.doneText}>Job complete. Nice work.</Text>
-            </View>
-          ) : null}
         </ScrollView>
 
-        {action === null ? null : (
+        {end === null ? null : (
+          <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
+            <View style={styles.column}>
+              <JobEndFooter
+                end={end}
+                earningsPaise={job.earningsPaise}
+                onEarnings={() => {
+                  router.navigate('/(washer)/earnings');
+                }}
+                onOffers={() => {
+                  router.navigate('/(washer)/offers');
+                }}
+              />
+            </View>
+          </View>
+        )}
+
+        {end !== null || action === null ? null : (
           <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
             <View style={styles.column}>
               {actionNotice === null ? null : (
@@ -460,16 +478,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   earnValue: { fontSize: fontSize.xl, fontWeight: fontWeight.bold, color: colors.text },
-  done: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    padding: spacing.md,
-    borderRadius: radius.md,
-    // Done is cobalt (M5): green means availability only.
-    backgroundColor: colors.primarySoft,
-  },
-  doneText: { flex: 1, fontSize: fontSize.sm, color: colors.primaryDark },
   actionNotice: {
     flexDirection: 'row',
     alignItems: 'center',

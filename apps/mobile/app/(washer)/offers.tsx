@@ -225,7 +225,8 @@ export default function WasherOffersScreen() {
         {
           onSuccess: () => {
             intents.current.delete(jobId);
-            router.push('/(washer)/active');
+            // The won id rides along, so the job opens on "It's yours" (M9).
+            router.push({ pathname: '/(washer)/active', params: { won: jobId } });
           },
           onError: (error: unknown) => {
             // `useAcceptWash` invalidates offers and the active job on settle,

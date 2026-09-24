@@ -126,3 +126,14 @@ describe('a failed go-online on the offers screen', () => {
     );
   });
 });
+
+/** M9: a won accept lands on its job with the "It's yours" moment. */
+describe('a won accept', () => {
+  it('opens the active job with the id it won, so that screen can confirm it', () => {
+    const offers = readFileSync(join(process.cwd(), 'app', '(washer)', 'offers.tsx'), 'utf8');
+
+    expect(offers).toMatch(
+      /router\.push\(\{\s*pathname: '\/\(washer\)\/active',\s*params: \{ won: jobId \}\s*\}\)/,
+    );
+  });
+});

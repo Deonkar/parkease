@@ -131,3 +131,25 @@ describe('navigating to the car', () => {
     expect(source).toMatch(/navigate: \{[^}]*minHeight: touchTarget/);
   });
 });
+
+/** M9: the peaks and the end of a job. */
+describe('the moments of a job', () => {
+  const source = readFileSync(
+    join(process.cwd(), 'app', '(washer)', 'active', 'index.tsx'),
+    'utf8',
+  );
+
+  it('confirms a won job through the one tested rule', () => {
+    expect(source).toContain('useLocalSearchParams<{ won?: string }>()');
+    expect(source).toMatch(/showsJobWon\(params\.won, job\) \? <JobWonNotice \/> : null/);
+  });
+
+  it('ends a finished job with a footer, never a dead end', () => {
+    expect(source).toMatch(/const end = jobEndFor\(job\.status\)/);
+    expect(source).toMatch(/<JobEndFooter[\s\S]{0,300}earningsPaise=\{job\.earningsPaise\}/);
+    expect(source).toMatch(
+      /onEarnings=\{[\s\S]{0,120}router\.navigate\('\/\(washer\)\/earnings'\)/,
+    );
+    expect(source).toMatch(/onOffers=\{[\s\S]{0,120}router\.navigate\('\/\(washer\)\/offers'\)/);
+  });
+});
