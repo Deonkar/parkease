@@ -6,7 +6,7 @@ import type {
   WasherEarningsPeriod,
   WasherProfileView,
 } from '@parkease/contracts/washer';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 
 import type { Intent } from '@/lib/api';
@@ -35,6 +35,43 @@ export const washerKeys = {
   /** An uploaded ID whose documents call has not landed yet (G9). Never fetched. */
   heldIdUpload: ['washer', 'held-id-upload'] as const,
 };
+
+/**
+ * The mutations that write each cached answer, keyed so a writer can ask
+ * whether another write to the same data is still running (H3).
+ */
+const writes = {
+  active: ['washer', 'write', 'active'] as const,
+  menu: ['washer', 'write', 'menu'] as const,
+  profile: ['washer', 'write', 'profile'] as const,
+};
+
+/**
+ * H3: a mutation that writes its answer into the cache races any refetch of
+ * that key. A refetch that started before the write and lands after it puts
+ * the OLDER answer back — which is how a stale profile overwrote an ID just
+ * uploaded. So each writer cancels the key's in-flight fetches before it runs,
+ * and, when another write to the same data is still running (its answer may
+ * be newer than this one), refetches on settle instead of trusting its own.
+ */
+function guardedWrite(
+  client: QueryClient,
+  queryKey: readonly unknown[],
+  mutationKey: readonly unknown[],
+) {
+  return {
+    mutationKey,
+    onMutate: async () => {
+      await client.cancelQueries({ queryKey });
+    },
+    settle: () => {
+      // This mutation is still counted while its own onSettled runs.
+      if (client.isMutating({ mutationKey }) > 1) {
+        void client.invalidateQueries({ queryKey });
+      }
+    },
+  };
+}
 
 export interface HeldIdUpload {
   /** The upload id of an ID image that is on Cloudinary but not yet sent, or `null`. */
@@ -126,9 +163,17 @@ export function useServiceMenu() {
 
 export function useAcceptWash() {
   const client = useQueryClient();
+  const guard = guardedWrite(client, washerKeys.active, writes.active);
   return useMutation({
+    mutationKey: guard.mutationKey,
     mutationFn: ({ jobId, intent }: { jobId: string; intent: Intent }) =>
       acceptOffer(jobId, intent),
+    onMutate: guard.onMutate,
+    onSuccess: (job) => {
+      // H1: the partner who just won lands on the job, never on "No active
+      // job" while a refetch catches up.
+      client.setQueryData(washerKeys.active, job);
+    },
     onSettled: () => {
       // Won or lost the race, both lists are stale.
       void client.invalidateQueries({ queryKey: washerKeys.offers });
@@ -156,7 +201,11 @@ export function useAcceptWash() {
  */
 export function useAdvanceWash() {
   const client = useQueryClient();
+  const guard = guardedWrite(client, washerKeys.active, writes.active);
   return useMutation({
+    mutationKey: guard.mutationKey,
+    onMutate: guard.onMutate,
+    onSettled: guard.settle,
     mutationFn: ({
       jobId,
       event,
@@ -182,7 +231,11 @@ export function useAdvanceWash() {
 
 export function useAttachPhoto() {
   const client = useQueryClient();
+  const guard = guardedWrite(client, washerKeys.active, writes.active);
   return useMutation({
+    mutationKey: guard.mutationKey,
+    onMutate: guard.onMutate,
+    onSettled: guard.settle,
     mutationFn: ({
       jobId,
       slot,
@@ -210,7 +263,13 @@ export function useAttachPhoto() {
 
 export function useUpsertService() {
   const client = useQueryClient();
+  const guard = guardedWrite(client, washerKeys.menu, writes.menu);
   return useMutation({
+    mutationKey: guard.mutationKey,
+    onMutate: guard.onMutate,
+    // Two rows saved at once each answer with the WHOLE menu; the later
+    // answer may not include the earlier row's change, so refetch (H3).
+    onSettled: guard.settle,
     mutationFn: ({
       serviceName,
       input,
@@ -259,7 +318,13 @@ export function useCreateProfile() {
 /** The ID image for review. Moves verification to `pending` on the server. */
 export function useSubmitDocuments() {
   const client = useQueryClient();
+  const guard = guardedWrite(client, washerKeys.profile, writes.profile);
   return useMutation({
+    mutationKey: guard.mutationKey,
+    // A profile refetch that started before the upload landed must not put
+    // the profile back without its ID (H3, task 10 minor).
+    onMutate: guard.onMutate,
+    onSettled: guard.settle,
     mutationFn: ({ input, intent }: { input: SubmitWasherDocuments; intent: Intent }) =>
       submitDocuments(input, intent),
     onSuccess: (profile) => {

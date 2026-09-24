@@ -19,13 +19,19 @@ import {
  */
 
 interface MutationOptions {
+  mutationKey?: readonly unknown[];
+  onMutate?: () => Promise<unknown>;
+  onSuccess?: (data: unknown) => void;
   onError?: (error: unknown) => void;
+  onSettled?: () => void;
 }
 
 const q = vi.hoisted(() => ({
   last: null as MutationOptions | null,
   invalidateQueries: vi.fn(),
   setQueryData: vi.fn(),
+  cancelQueries: vi.fn(() => Promise.resolve()),
+  isMutating: vi.fn(() => 1),
 }));
 
 vi.mock('@tanstack/react-query', () => ({
@@ -37,6 +43,8 @@ vi.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({
     invalidateQueries: q.invalidateQueries,
     setQueryData: q.setQueryData,
+    cancelQueries: q.cancelQueries,
+    isMutating: q.isMutating,
   }),
 }));
 
@@ -74,6 +82,10 @@ const refetchedActive = () =>
 beforeEach(() => {
   q.last = null;
   q.invalidateQueries.mockReset();
+  q.setQueryData.mockReset();
+  q.cancelQueries.mockClear();
+  q.isMutating.mockReset();
+  q.isMutating.mockReturnValue(1);
 });
 
 describe('useAttachPhoto', () => {
@@ -164,5 +176,70 @@ describe('useAcceptWash', () => {
   it('leaves the profile alone after a transport failure', () => {
     failWith(useAcceptWash, offline);
     expect(invalidated(washerKeys.profile)).toBe(false);
+  });
+});
+
+const sameKey = (a: unknown, b: readonly unknown[]) => JSON.stringify(a) === JSON.stringify(b);
+const invalidatedKey = (key: readonly unknown[]) =>
+  q.invalidateQueries.mock.calls.some((call) =>
+    sameKey((call[0] as { queryKey: unknown }).queryKey, key),
+  );
+const cancelledKey = (key: readonly unknown[]) =>
+  q.cancelQueries.mock.calls.some((call) =>
+    sameKey((call as unknown as [{ queryKey: unknown }])[0].queryKey, key),
+  );
+
+/** H1: the partner who just won must never see "No active job". */
+describe('a won accept', () => {
+  it('writes the job it won straight into the active cache', () => {
+    useAcceptWash();
+    const job = { id: 'job-1', status: 'accepted' };
+    q.last?.onSuccess?.(job);
+
+    expect(q.setQueryData).toHaveBeenCalledWith(washerKeys.active, job);
+  });
+});
+
+/**
+ * H3: a cache write that races a refetch. `setQueryData` from a mutation can
+ * be overwritten by an older refetch landing after it — which is how a stale
+ * profile overwrote the ID just uploaded (task 10 minor). Each writer cancels
+ * the key's in-flight fetches first, and when another write to the same data
+ * is still running it invalidates on settle rather than trusting its own.
+ */
+describe.each([
+  ['useAcceptWash', useAcceptWash, washerKeys.active],
+  ['useAdvanceWash', useAdvanceWash, washerKeys.active],
+  ['useAttachPhoto', useAttachPhoto, washerKeys.active],
+  ['useUpsertService', useUpsertService, washerKeys.menu],
+  ['useSubmitDocuments', useSubmitDocuments, washerKeys.profile],
+] as const)('%s and a concurrent refetch', (_name, hook, key) => {
+  it('cancels in-flight fetches of the key it writes, before it writes', async () => {
+    hook();
+    await q.last?.onMutate?.();
+
+    expect(cancelledKey(key)).toBe(true);
+  });
+
+  it('counts only its own kind of write, by mutation key', () => {
+    hook();
+    expect(q.last?.mutationKey).toBeDefined();
+  });
+
+  it('refetches on settle while another write to the same data is still running', () => {
+    hook();
+    q.isMutating.mockReturnValue(2);
+    q.last?.onSettled?.();
+
+    expect(invalidatedKey(key)).toBe(true);
+  });
+
+  it('trusts its own answer when it is the only write running', () => {
+    hook();
+    q.isMutating.mockReturnValue(1);
+    q.last?.onSettled?.();
+
+    // Accept refetches offers and active on every settle regardless (the race).
+    if (hook !== useAcceptWash) expect(invalidatedKey(key)).toBe(false);
   });
 });
