@@ -179,7 +179,7 @@ function EvidenceSlot({ slot, view, fill, onCapture, onRetry }: EvidenceSlotProp
                 <MaterialCommunityIcons
                   name="image-check-outline"
                   size={28}
-                  color={colors.availableInk}
+                  color={colors.primaryDark}
                 />
                 <Text style={styles.attachedBlankText}>Photo attached</Text>
               </View>
@@ -304,7 +304,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   frameFailed: { borderWidth: 2, borderColor: colors.error },
-  frameAttached: { backgroundColor: colors.availableSoft },
+  // Attached is done, and done is cobalt (M5): green is availability only.
+  frameAttached: { backgroundColor: colors.primarySoft },
   owed: {
     fontSize: fontSize.sm,
     fontWeight: fontWeight.semibold,
@@ -333,7 +334,7 @@ const styles = StyleSheet.create({
   attachedBlankText: {
     fontSize: fontSize.sm,
     fontWeight: fontWeight.semibold,
-    color: colors.availableInk,
+    color: colors.primaryDark,
   },
   badge: {
     position: 'absolute',
@@ -344,7 +345,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.available,
+    backgroundColor: colors.primary,
   },
   caption: {
     minHeight: touchTarget,
@@ -359,7 +360,7 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.bold,
     color: colors.textTertiary,
   },
-  statusDone: { color: colors.availableInk },
+  statusDone: { color: colors.primaryDark },
   statusFailed: { color: colors.errorInk },
   link: {
     minHeight: touchTarget,

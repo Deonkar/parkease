@@ -1,4 +1,5 @@
 import type { CarwashJobStatus } from '@parkease/contracts/enums';
+import { colors } from '@parkease/tokens';
 import { describe, expect, it, vi } from 'vitest';
 
 import { byTestId, nodes, render, style, text } from '../../shared/__tests__/render-native';
@@ -66,6 +67,25 @@ describe('the step rail', () => {
 
     expect(text(tree)).toContain('cancelled');
     expect(steps('cancelled')).toHaveLength(0);
+  });
+});
+
+/** M5: a done step is cobalt, filled with a check; green means availability only. */
+describe('the step rail colours', () => {
+  const marker = (status: CarwashJobStatus, index: number) => {
+    const step = byTestId(render(<StepRail status={status} />), `step-${String(index)}`);
+    const first = step?.children?.[0];
+    return typeof first === 'object' ? style(first) : {};
+  };
+
+  it('fills a done step with the primary colour, not availability green', () => {
+    expect(marker('completed', 0)['backgroundColor']).toBe(colors.primary);
+    expect(marker('washing', 0)['backgroundColor']).toBe(colors.primary);
+  });
+
+  it('draws the current step as a ring, so done and current differ by shape', () => {
+    expect(marker('washing', 1)['borderColor']).toBe(colors.primary);
+    expect(marker('washing', 1)['backgroundColor']).toBe(colors.surface);
   });
 });
 

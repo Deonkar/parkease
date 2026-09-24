@@ -118,7 +118,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  markerDone: { borderWidth: 0, backgroundColor: colors.available },
+  // Done is cobalt, filled, with a check (M5): availability green means "free
+  // right now" and nothing else. The current step is a cobalt RING, so the two
+  // differ by shape as well as by fill.
+  markerDone: { borderWidth: 0, backgroundColor: colors.primary },
   markerCurrent: { borderWidth: 4, borderColor: colors.primary },
   label: {
     fontSize: fontSize.xs,
@@ -126,7 +129,7 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
     textAlign: 'center',
   },
-  labelDone: { fontWeight: fontWeight.semibold, color: colors.availableInk },
+  labelDone: { fontWeight: fontWeight.semibold, color: colors.primaryDark },
   labelCurrent: { fontWeight: fontWeight.bold, color: colors.primary },
   cancelled: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   cancelledText: { fontSize: fontSize.sm, color: colors.textSecondary },

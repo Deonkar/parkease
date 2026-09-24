@@ -313,3 +313,17 @@ describe('the pair s announcements', () => {
     expect(announced).toHaveBeenCalledWith('The job moved on.');
   });
 });
+
+/** M5: attached is done, and done is cobalt; green means availability only. */
+describe('the attached slot colours', () => {
+  it('says done in the primary ink, on a primary-soft frame', () => {
+    const tree = pair({ before: slot({ state: 'attached', uri: null }) });
+    const frame = byTestId(tree, 'evidence-before-frame');
+    const status = nodes(tree).find(
+      (node) => node.type === 'Text' && text(node).startsWith('Before · '),
+    );
+
+    expect(frame && style(frame)['backgroundColor']).toBe(colors.primarySoft);
+    expect(status && style(status)['color']).toBe(colors.primaryDark);
+  });
+});

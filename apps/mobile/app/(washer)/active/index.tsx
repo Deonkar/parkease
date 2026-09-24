@@ -326,7 +326,7 @@ export default function WasherActiveScreen() {
               <MaterialCommunityIcons
                 name="check-circle-outline"
                 size={20}
-                color={colors.availableInk}
+                color={colors.primaryDark}
               />
               <Text style={styles.doneText}>Job complete. Nice work.</Text>
             </View>
@@ -461,9 +461,10 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     padding: spacing.md,
     borderRadius: radius.md,
-    backgroundColor: colors.availableSoft,
+    // Done is cobalt (M5): green means availability only.
+    backgroundColor: colors.primarySoft,
   },
-  doneText: { flex: 1, fontSize: fontSize.sm, color: colors.availableInk },
+  doneText: { flex: 1, fontSize: fontSize.sm, color: colors.primaryDark },
   actionNotice: {
     flexDirection: 'row',
     alignItems: 'center',
