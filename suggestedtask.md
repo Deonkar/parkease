@@ -1243,24 +1243,40 @@ compression would upload it.
   and an over-limit file is recompressed or refused, with a test, or the ceiling is recorded as a
   device-test check in `docs/testcases.md` with the device and the measured size.
 
-### S-64 — Nothing bounds how long an API handler may run
+### S-64 — A stale-lock takeover can run a side effect twice
 
 - **Status:** `open`
-- **Found in:** task 14 final fix wave (C1, choosing `IDEMPOTENCY_IN_FLIGHT_STALE_MS`)
+- **Found in:** task 14 final fix wave (C1, choosing `IDEMPOTENCY_IN_FLIGHT_STALE_MS`); widened by
+  the C1 re-review and the server fix wave's guard rails
 - **Surface:** api
 
 `IdempotencyService` treats an unfinished claim older than five minutes as stale and lets a
-retry take it over. That is only safe if no live attempt runs longer. Nothing in the API
-guarantees it: Fastify has no `requestTimeout`, the API's database connection has no
-`statement_timeout`, and the Razorpay client call has no timeout of its own. So the five minutes
-is a judgement rather than a derived bound. A handler that stalls longer than that (a hung
-gateway call) can run twice.
+retry take it over, and **a takeover runs the handler again**. Two paths make that a second
+side effect — a second payment order, a second booking:
 
-- **Why deferred:** request, statement and gateway timeouts are cross-cutting settings for every
-  endpoint, and each needs its own value argued. The fix wave only needed the stuck-key recovery.
-- **Done means:** a Fastify `requestTimeout`, a pool `statement_timeout` and a gateway client
-  timeout are set, each below `IDEMPOTENCY_IN_FLIGHT_STALE_MS`. A comment on the constant names
-  them as the bound it is derived from, and a unit test asserts the ordering.
+1. **A slow live attempt.** Only safe if no attempt runs longer than the threshold, and nothing in
+   the API guarantees it: Fastify has no `requestTimeout`, the API's database connection has no
+   `statement_timeout`, and the Razorpay client call has no timeout of its own. The five minutes
+   is a judgement, not a derived bound.
+2. **A committed write that was never stored.** The handler commits, then `store` fails. The key
+   has no response to replay, so the retry that takes it over five minutes later re-runs the
+   write. Before C1 the same failure blocked the key for 24 hours — stuck, but safe.
+
+What the guard rails did (server fix wave): the interceptor retries a failed `store` once, so
+path 2 needs two consecutive write failures, and each is logged at warn with the key and trace
+id. `store` and `release` are conditioned on the claim's own `locked_at`, so a zombie attempt
+cannot store its answer over a newer retry's claim or delete it to let a third attempt in, and
+a write that finds its claim gone logs at warn. Rare and loud, not impossible.
+
+- **Why deferred:** the timeouts are cross-cutting settings for every endpoint, each needing its
+  own value argued; closing path 2 changes how every command commits.
+- **Done means:** path 2 closes for good when the stored response is written **inside the
+  handler's own transaction** — the domain write and the idempotency row commit or roll back
+  together, so a committed write can never be left unstored (the `store` write, like the outbox,
+  goes into rule 3's one transaction). Path 1 closes when a Fastify `requestTimeout`, a pool
+  `statement_timeout` and a gateway client timeout are set, each below
+  `IDEMPOTENCY_IN_FLIGHT_STALE_MS`, the constant's comment names them as its bound, and a unit
+  test asserts the ordering.
 
 ### S-65 — `switch-exhaustiveness-check` is not on, so exhaustiveness is a convention
 
@@ -1431,3 +1447,22 @@ memory only and is cleared on sign-out; the files are not.
   `expo-file-system` deletes with device testing of the cache paths.
 - **Done means:** after an ID upload succeeds (and on sign-out) the original and compressed files
   are deleted, a test asserts the delete is called with both uris, and S-26 references this row.
+
+### S-75 — The webhook path stores and releases its claim by key alone
+
+- **Status:** `open`
+- **Found in:** task 14 server fix wave (idempotency stale-lock guard rails)
+- **Surface:** api
+
+`IdempotencyService.store` and `release` now take the claim's `claimedAt` and write only while
+that claim still holds the key. `IdempotencyInterceptor` passes it; `WebhookService.handle`
+(`apps/api/src/domains/payment/webhook.service.ts`) does not, so a Razorpay delivery that
+stalls past `IDEMPOTENCY_IN_FLIGHT_STALE_MS` and is taken over by a redelivery can still store
+over, or release, the redelivery's claim. Its store is also not retried: a failed store falls
+into its `catch`, releases the key, and Razorpay's redelivery re-runs `dispatch`.
+
+- **Why deferred:** the fix wave's edit scope was `platform/idempotency/`; the webhook lives in
+  `domains/payment/`, and the optional parameter keeps it on the old behaviour unchanged.
+- **Done means:** `WebhookService` mints a `claimedAt`, passes it to `claim`, `store` and
+  `release`, and logs a `false` from either at warn with the event id; a test in
+  `payment-webhook-http.spec.ts` shows a zombie delivery's store landing on nothing.
