@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { CatalogService, STANDARD_SERVICES } from '../../src/domains/carwash/catalog.service.js';
+import { pgConstraintName, pgSqlState } from '../../src/platform/db/errors.js';
 import { withTransaction } from '../../src/platform/db/transaction.js';
 
 import { type Harness, seedUser, startHarness, stopHarness } from './harness.js';
@@ -60,11 +61,6 @@ describe('seeding a new partner', () => {
   });
 
   /**
-   * Registration and seeding share one transaction, so re-running the seed must
-   * not blow up on a partner who already has a menu — a retried registration is
-   * a normal outcome of an idempotent POST.
-   */
-  /**
    * Ruling T10-S1: what the partner ticked decides what they are offered, and
    * an unticked service is still priced so switching it on later is a toggle.
    */
@@ -82,11 +78,30 @@ describe('seeding a new partner', () => {
     expect(await catalog.findServicePrice(washerId, 'premium_wash', 'car')).toBeUndefined();
   });
 
-  it('is idempotent', async () => {
-    await withTransaction(h.db, (tx) => catalog.seedMenu(tx, washerId, EVERY_SERVICE));
+  /**
+   * Registration and seeding share one transaction, and a retried
+   * registration never reaches the seed a second time: the idempotency layer
+   * replays it, and a different key meets `CreateWasherProfileCommand`'s
+   * existence check (409 WASHER_PROFILE_EXISTS) or, racing it,
+   * `washer_profiles_user_id_key`. So a second seed is not a retry — it is a
+   * bug. It used to be absorbed by a target-less `onConflictDoNothing()`, which
+   * silently kept the first menu's `is_active` flags and contradicted the
+   * capabilities just sent (database L8, task 14 final fix wave). It now fails
+   * loudly, on the menu's unique key.
+   */
+  it('refuses a second seed on the menu key rather than keeping the first menu', async () => {
     await withTransaction(h.db, (tx) => catalog.seedMenu(tx, washerId, EVERY_SERVICE));
 
-    expect(await catalog.menuFor(washerId)).toHaveLength(STANDARD_SERVICES.length * 2);
+    const error = await withTransaction(h.db, (tx) =>
+      catalog.seedMenu(tx, washerId, ['quick_wipe']),
+    ).catch((thrown: unknown) => thrown);
+
+    expect(pgSqlState(error)).toBe('23505');
+    expect(pgConstraintName(error)).toBe('wash_services_menu_key');
+    // The first menu stands untouched: every service still switched on.
+    const rows = await catalog.menuFor(washerId);
+    expect(rows).toHaveLength(STANDARD_SERVICES.length * 2);
+    expect(rows.every((r) => r.isActive)).toBe(true);
   });
 });
 

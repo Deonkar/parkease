@@ -85,10 +85,14 @@ export class CatalogService {
   /**
    * The standard menu, on a brand-new partner.
    *
-   * `onConflictDoNothing` rather than an existence check: registration is an
-   * idempotent POST, so a retried one must not fail on rows it already wrote,
-   * and a check-then-insert would be a race with itself anyway. This runs
-   * inside registration's transaction so a partner never exists without a menu.
+   * A plain INSERT, and a conflict fails loudly on `wash_services_menu_key`.
+   * This runs inside registration's transaction so a partner never exists
+   * without a menu, and a retried registration never gets here twice: the
+   * idempotency layer replays it, and `CreateWasherProfileCommand`'s existence
+   * check (or, racing it, `washer_profiles_user_id_key`) refuses a new key. A
+   * second seed is therefore a bug, and the target-less `onConflictDoNothing()`
+   * that used to absorb it silently kept the first menu's `is_active` flags —
+   * contradicting the capabilities just sent (database L8).
    *
    * Every service is PRICED, and only the ones the partner said they offer are
    * switched on (ruling T10-S1). The menu is what dispatch reads, so an active
@@ -123,7 +127,7 @@ export class CatalogService {
       ];
     });
 
-    await tx.insert(washServices).values(rows).onConflictDoNothing();
+    await tx.insert(washServices).values(rows);
   }
 
   async menuFor(washerUserId: string): Promise<WashServiceRow[]> {
