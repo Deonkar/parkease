@@ -1,9 +1,10 @@
 import { uuidv7 } from '@parkease/db';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { pgConstraintName, pgSqlState } from '../../src/platform/db/errors.js';
 import {
   hashCanonicalBody,
+  IDEMPOTENCY_IN_FLIGHT_STALE_MS,
   IdempotencyService,
 } from '../../src/platform/idempotency/idempotency.service.js';
 
@@ -1002,6 +1003,87 @@ describe('idempotency', () => {
 
     expect(retried.status).toBe(409);
     expect(errorOf(retried.body).code).toBe('REQUEST_IN_FLIGHT');
+  });
+
+  /**
+   * Silent failure H1 (task 14 final fix wave). `store` and `release` ran as
+   * unobserved promises, so one that failed left the key `in_flight` for its
+   * whole 24-hour life — and because REQUEST_IN_FLIGHT tells a client to keep
+   * its key and retry, the client retried into it forever. A claim older than
+   * `IDEMPOTENCY_IN_FLIGHT_STALE_MS` can no longer be a live attempt, so the
+   * retry takes it over and runs.
+   */
+  describe('a stuck in-flight key', () => {
+    const payload = {
+      carPricePaise: 44900,
+      bikePricePaise: 17900,
+      durationMinutes: 45,
+      isActive: true,
+    };
+
+    /** Claims the key exactly as the interceptor would, then ages the claim. */
+    const claimAged = async (washerId: string, key: string, ageMs: number) => {
+      await new IdempotencyService(h.db).claim({
+        key,
+        userId: washerId,
+        endpoint: 'PUT /api/v1/washer/services/:serviceName',
+        requestHash: hashCanonicalBody(payload),
+      });
+      await h.sql`
+        UPDATE idempotency_keys
+        SET locked_at = now() - make_interval(secs => ${ageMs / 1000})
+        WHERE key = ${key}
+      `;
+    };
+
+    const retry = (washerId: string, headers: Record<string, string>) => {
+      asUser(washerId, ['washer']);
+      return http.request({
+        method: 'PUT',
+        url: '/api/v1/washer/services/premium_wash',
+        headers,
+        payload,
+      });
+    };
+
+    it('is taken over once it is older than the stale threshold, and the retry runs', async () => {
+      const washerId = await seedWasher();
+      const headers = key();
+      await claimAged(
+        washerId,
+        headers['idempotency-key'],
+        IDEMPOTENCY_IN_FLIGHT_STALE_MS + 60_000,
+      );
+
+      const res = await retry(washerId, headers);
+
+      expect(res.status).toBe(200);
+      // The takeover's attempt stores its answer, so the next retry replays it.
+      // Polled: the store is detached from the response by design.
+      await vi.waitFor(async () => {
+        const [row] = await h.sql<{ response_status: number | null; locked_at: Date | null }[]>`
+          SELECT response_status, locked_at FROM idempotency_keys
+          WHERE key = ${headers['idempotency-key']}
+        `;
+        expect(row?.response_status).toBe(200);
+        expect(row?.locked_at).toBeNull();
+      });
+    });
+
+    it('still answers REQUEST_IN_FLIGHT just inside the threshold', async () => {
+      const washerId = await seedWasher();
+      const headers = key();
+      await claimAged(
+        washerId,
+        headers['idempotency-key'],
+        IDEMPOTENCY_IN_FLIGHT_STALE_MS - 60_000,
+      );
+
+      const res = await retry(washerId, headers);
+
+      expect(res.status).toBe(409);
+      expect(errorOf(res.body).code).toBe('REQUEST_IN_FLIGHT');
+    });
   });
 });
 

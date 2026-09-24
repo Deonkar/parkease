@@ -8,11 +8,13 @@ import {
   type NestInterceptor,
   UnprocessableEntityException,
 } from '@nestjs/common';
+import { trace } from '@opentelemetry/api';
 import type { FastifyRequest } from 'fastify';
 import { type Observable, catchError, of, tap, throwError } from 'rxjs';
 import { z } from 'zod';
 
 import type { AuthUser } from '../auth/current-user.decorator.js';
+import { logger } from '../observability/logger.js';
 
 import { IdempotencyService, hashCanonicalBody } from './idempotency.service.js';
 
@@ -85,16 +87,39 @@ export class IdempotencyInterceptor implements NestInterceptor {
           message: 'That request is still being processed. Give it a moment.',
         });
 
-      case 'proceed':
+      case 'proceed': {
+        // Captured now, while the request's span is active: the writes below
+        // settle after the handler has returned.
+        const traceId = trace.getActiveSpan()?.spanContext().traceId ?? 'untraced';
+
+        /**
+         * Detached from the response on purpose — the caller's answer must not
+         * wait on, or be changed by, the bookkeeping write. But never
+         * unobserved (silent failure H1): a failed write leaves the key
+         * unfinished, which `claim` recovers once it is older than
+         * `IDEMPOTENCY_IN_FLIGHT_STALE_MS`, and the warning is how anyone finds
+         * out it happened. Logged, not swallowed: the key and the trace id are
+         * both on the line.
+         */
+        const observe = (write: Promise<void>, what: 'store' | 'release') => {
+          write.catch((error: unknown) => {
+            logger.warn(
+              { err: error, key, endpoint, traceId },
+              `idempotency ${what} failed; the key stays in flight until it goes stale`,
+            );
+          });
+        };
+
         return next.handle().pipe(
           tap((payload) => {
-            void this.service.store(key, HttpStatus.OK, payload);
+            observe(this.service.store(key, HttpStatus.OK, payload), 'store');
           }),
           catchError((error: unknown) => {
-            void this.service.release(key);
+            observe(this.service.release(key), 'release');
             return throwError(() => error);
           }),
         );
+      }
     }
   }
 }
