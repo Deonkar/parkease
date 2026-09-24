@@ -23,6 +23,15 @@ interface ClaimInput {
   readonly userId: string | null;
   readonly endpoint: string;
   readonly requestHash: string;
+  /**
+   * This attempt's claim token. A claim that proceeds — fresh or taken over —
+   * writes it to `locked_at`, and `store` and `release` pass it back so their
+   * write lands only on the claim it came from, never on one a newer retry has
+   * taken over since. Minted by the caller rather than returned, so `proceed`
+   * keeps its shape for every existing caller. Defaults to now; a test ages a
+   * claim by passing an older one.
+   */
+  readonly claimedAt?: Date;
 }
 
 const EXPIRY_HOURS = 24;
@@ -41,9 +50,22 @@ const EXPIRY_HOURS = 24;
  * gives up on a request long before this. It is a judgement, not a derived
  * bound — no request, statement or gateway timeout in this API caps a handler
  * yet (suggestedtask.md S-64). Too short and a slow live attempt runs twice;
- * too long and a stuck key blocks its user for that long. Only a claim that
- * still has no stored response is ever taken over, so a finished attempt's
- * replay is never lost.
+ * too long and a stuck key blocks its user for that long.
+ *
+ * A takeover RE-RUNS THE HANDLER, and there are two ways that runs a side
+ * effect twice. A live attempt slower than the threshold is one. The other is
+ * an attempt that committed its domain write and then failed to `store` the
+ * response: the key is left with no response to replay, so the retry that
+ * takes it over runs the write again — a second payment order, a second
+ * booking. Before the takeover existed the same failure blocked the key for
+ * 24 hours instead, which was safe but stuck. What keeps this rare, not
+ * impossible: the interceptor retries a failed `store` once, so only two
+ * consecutive failures leave a committed write unstored, and both are logged
+ * at warn with the key and trace id. What keeps it from compounding: `store`
+ * and `release` are conditioned on the claim that made them, so a zombie
+ * attempt can neither store its answer over a newer retry's claim nor delete
+ * it and let a third attempt in. Only storing the response inside the
+ * handler's own transaction closes it for good (S-64).
  */
 export const IDEMPOTENCY_IN_FLIGHT_STALE_MS = 5 * 60 * 1000;
 
@@ -53,6 +75,7 @@ export class IdempotencyService {
 
   async claim(input: ClaimInput): Promise<ClaimOutcome> {
     const expiresAt = new Date(Date.now() + EXPIRY_HOURS * 60 * 60 * 1000);
+    const claimedAt = input.claimedAt ?? new Date();
 
     const inserted = await this.db
       .insert(idempotencyKeys)
@@ -61,7 +84,7 @@ export class IdempotencyService {
         userId: input.userId,
         endpoint: input.endpoint,
         requestHash: input.requestHash,
-        lockedAt: new Date(),
+        lockedAt: claimedAt,
         expiresAt,
       })
       .onConflictDoNothing({ target: idempotencyKeys.key })
@@ -103,7 +126,7 @@ export class IdempotencyService {
       };
     }
 
-    return (await this.takeOverIfStale(input.key))
+    return (await this.takeOverIfStale(input.key, claimedAt))
       ? { outcome: 'proceed' }
       : { outcome: 'in_flight' };
   }
@@ -118,14 +141,17 @@ export class IdempotencyService {
    * finished between our read and this write is replayed, never re-run. A NULL
    * `locked_at` with no response is not a state any path writes, but it is not a
    * live attempt either, so it is taken over rather than left to block.
+   *
+   * The new `locked_at` is the retry's own claim token, which is what stops the
+   * attempt it replaced from storing over it or releasing it (see `store`).
    */
-  private async takeOverIfStale(key: string): Promise<boolean> {
+  private async takeOverIfStale(key: string, claimedAt: Date): Promise<boolean> {
     const now = new Date();
     const staleBefore = new Date(now.getTime() - IDEMPOTENCY_IN_FLIGHT_STALE_MS);
 
     const taken = await this.db
       .update(idempotencyKeys)
-      .set({ lockedAt: now, updatedAt: now })
+      .set({ lockedAt: claimedAt, updatedAt: now })
       .where(
         and(
           eq(idempotencyKeys.key, key),
@@ -138,8 +164,22 @@ export class IdempotencyService {
     return taken.length > 0;
   }
 
-  async store(key: string, status: number, body: unknown): Promise<void> {
-    await this.db
+  /**
+   * Saves the response for replay and finishes the claim.
+   *
+   * With `claimedAt`, the write lands only while the key is still held by that
+   * claim, and resolves `false` when it is not — a newer retry took the key
+   * over after this attempt went stale, and that retry's answer is the one to
+   * keep. Without it the key alone decides; that is the webhook path, which
+   * does not pass its claim yet (S-75).
+   *
+   * One edge: if a first attempt's UPDATE commits but its acknowledgement is
+   * lost, a retry of this same store finds `locked_at` already cleared and
+   * resolves `false` although the response is saved. The warning it causes is
+   * a false alarm; nothing is lost or re-run.
+   */
+  async store(key: string, status: number, body: unknown, claimedAt?: Date): Promise<boolean> {
+    const stored = await this.db
       .update(idempotencyKeys)
       .set({
         responseStatus: status,
@@ -147,11 +187,24 @@ export class IdempotencyService {
         lockedAt: null,
         updatedAt: new Date(),
       })
-      .where(eq(idempotencyKeys.key, key));
+      .where(heldBy(key, claimedAt))
+      .returning({ key: idempotencyKeys.key });
+
+    return stored.length > 0;
   }
 
-  async release(key: string): Promise<void> {
-    await this.db.delete(idempotencyKeys).where(eq(idempotencyKeys.key, key));
+  /**
+   * Deletes the key so a retry can run again. Conditioned on `claimedAt` like
+   * `store`, and for the same reason: a zombie that deleted a newer retry's
+   * claim would let a third attempt claim the key fresh and run alongside it.
+   */
+  async release(key: string, claimedAt?: Date): Promise<boolean> {
+    const released = await this.db
+      .delete(idempotencyKeys)
+      .where(heldBy(key, claimedAt))
+      .returning({ key: idempotencyKeys.key });
+
+    return released.length > 0;
   }
 
   async prune(): Promise<number> {
@@ -161,6 +214,13 @@ export class IdempotencyService {
       .returning({ key: idempotencyKeys.key });
     return deleted.length;
   }
+}
+
+/** The key, and — when the caller carries one — the claim that must still hold it. */
+function heldBy(key: string, claimedAt: Date | undefined) {
+  return claimedAt
+    ? and(eq(idempotencyKeys.key, key), eq(idempotencyKeys.lockedAt, claimedAt))
+    : eq(idempotencyKeys.key, key);
 }
 
 export function hashCanonicalBody(body: unknown): string {
