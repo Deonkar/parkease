@@ -34,6 +34,7 @@ import {
   type PhotoSlot,
 } from '@/features/washer/photo-gate';
 import { newIntent, type Intent } from '@/lib/api';
+import { assertNever } from '@/lib/assert-never';
 import { warn } from '@/lib/log';
 import { formatPaise } from '@/lib/money';
 
@@ -351,7 +352,8 @@ export default function WasherActiveScreen() {
   };
 
   const content = (): ReactNode => {
-    switch (resolveScreenState(active)) {
+    const screen = resolveScreenState(active);
+    switch (screen) {
       case 'loading':
         return (
           <View style={{ paddingTop: insets.top }}>
@@ -380,6 +382,8 @@ export default function WasherActiveScreen() {
         );
       case 'ready':
         return active.data ? ready(active.data) : null;
+      default:
+        return assertNever(screen);
     }
   };
 

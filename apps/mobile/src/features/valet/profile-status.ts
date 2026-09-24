@@ -42,7 +42,7 @@ export interface VerificationView {
  * person behind someone's steering wheel. Unknown means not permitted.
  */
 export function describeVerification(status: string): VerificationView {
-  const canAccept = canAcceptWork(status);
+  const canAccept = canAcceptWork(verificationStateFor(status));
 
   switch (verificationStateFor(status)) {
     case 'verified':
@@ -148,6 +148,6 @@ export type DocumentState = 'verified' | 'pending' | 'failed' | 'missing';
  */
 export function documentStateFor(verificationStatus: string, hasDocument: boolean): DocumentState {
   if (!hasDocument) return 'missing';
-  if (canAcceptWork(verificationStatus)) return 'verified';
+  if (canAcceptWork(verificationStateFor(verificationStatus))) return 'verified';
   return verificationStatus === 'rejected' ? 'failed' : 'pending';
 }

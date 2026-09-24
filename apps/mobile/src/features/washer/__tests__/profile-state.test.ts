@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { VERIFICATION_STATUS_VALUES, type VerificationStatus } from '@parkease/contracts/enums';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 
 import { profileScreenState, registrationNotice } from '../profile-state';
 
@@ -61,7 +62,7 @@ describe('registrationNotice', () => {
   });
 
   it('never asks a business for an ID photo, whatever the status', () => {
-    for (const status of ['pending', 'unverified', 'rejected', 'verified']) {
+    for (const status of VERIFICATION_STATUS_VALUES) {
       for (const kind of ['registered', 'document-not-sent']) {
         expect(registrationNotice(kind, status, 'business') ?? '').not.toMatch(/\bID\b/);
       }
@@ -104,5 +105,11 @@ describe('registrationNotice for an earlier registration', () => {
         expect(notice).toMatch(/check your details/i);
       }
     }
+  });
+});
+
+describe('registrationNotice s status', () => {
+  it('is the contract s VerificationStatus, not a string (I2)', () => {
+    expectTypeOf(registrationNotice).parameter(1).toEqualTypeOf<VerificationStatus>();
   });
 });

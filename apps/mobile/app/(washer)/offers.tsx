@@ -30,6 +30,7 @@ import type { PresenceError } from '@/features/washer/presence';
 import { usePresence } from '@/features/washer/presence-context';
 import { describeWasherVerification } from '@/features/washer/verification-copy';
 import { newIntent, type Intent } from '@/lib/api';
+import { assertNever } from '@/lib/assert-never';
 
 const VERIFY_LOCK = 'Verify your documents to accept jobs';
 
@@ -317,7 +318,8 @@ export default function WasherOffersScreen() {
         </View>
       );
 
-    switch (resolveScreenState(offers)) {
+    const screen = resolveScreenState(offers);
+    switch (screen) {
       case 'loading':
         return <OfferSkeletons />;
       case 'error':
@@ -369,6 +371,8 @@ export default function WasherOffersScreen() {
             />
           </>
         );
+      default:
+        return assertNever(screen);
     }
   };
 

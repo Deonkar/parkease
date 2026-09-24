@@ -12,6 +12,7 @@ import { ServiceRow } from '@/features/washer/components/ServiceRow';
 import { useServiceSave } from '@/features/washer/hooks/useServiceSave';
 import { useServiceMenu } from '@/features/washer/hooks/useWasherQueries';
 import { toMenuRows } from '@/features/washer/menu-rows';
+import { assertNever } from '@/lib/assert-never';
 
 function MenuSkeleton() {
   return (
@@ -41,7 +42,8 @@ export default function WasherMenuScreen() {
   const saver = useServiceSave();
 
   const content = (): ReactNode => {
-    switch (resolveScreenState(menu)) {
+    const screen = resolveScreenState(menu);
+    switch (screen) {
       case 'loading':
         return <MenuSkeleton />;
       case 'error':
@@ -87,6 +89,8 @@ export default function WasherMenuScreen() {
             </ScrollView>
           </>
         );
+      default:
+        return assertNever(screen);
     }
   };
 

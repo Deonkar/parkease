@@ -13,6 +13,7 @@ import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, FadeIn, useReducedMotion } from 'react-native-reanimated';
 
 import { useAnnounce } from '@/features/shared/hooks/useAnnounce';
+import { assertNever } from '@/lib/assert-never';
 
 import type { EvidenceSlotState, PhotoSlot } from '../photo-gate';
 
@@ -187,6 +188,8 @@ function EvidenceSlot({ slot, view, fill, onCapture, onRetry }: EvidenceSlotProp
             </View>
           </View>
         );
+      default:
+        return assertNever(state);
     }
   })();
 

@@ -15,6 +15,7 @@ import { PeriodTabs } from '@/features/washer/components/PeriodTabs';
 import { RefreshNotice } from '@/features/washer/components/RefreshNotice';
 import { useWasherEarnings } from '@/features/washer/hooks/useWasherQueries';
 import { PERIOD_LABELS } from '@/features/washer/labels';
+import { assertNever } from '@/lib/assert-never';
 
 function EarningsSkeleton() {
   return (
@@ -79,7 +80,8 @@ export default function WasherEarningsScreen() {
   };
 
   const content = (): ReactNode => {
-    switch (resolveScreenState(earnings)) {
+    const screen = resolveScreenState(earnings);
+    switch (screen) {
       case 'loading':
         return <EarningsSkeleton />;
       case 'error':
@@ -130,6 +132,8 @@ export default function WasherEarningsScreen() {
           </>
         );
       }
+      default:
+        return assertNever(screen);
     }
   };
 

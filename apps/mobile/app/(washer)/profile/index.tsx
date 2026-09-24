@@ -31,6 +31,7 @@ import { useHeldIdUpload, useWasherProfile } from '@/features/washer/hooks/useWa
 import { profileScreenState, registrationNotice } from '@/features/washer/profile-state';
 import { describeHours } from '@/features/washer/registration';
 import { describeWasherVerification } from '@/features/washer/verification-copy';
+import { assertNever } from '@/lib/assert-never';
 
 const CAMERA_REASON = 'ParkEase needs the camera to photograph your ID.';
 
@@ -236,7 +237,8 @@ export default function WasherProfileScreen() {
   };
 
   const content = (): ReactNode => {
-    switch (profileScreenState(profile)) {
+    const screen = profileScreenState(profile);
+    switch (screen) {
       case 'loading':
         return <ProfileSkeleton />;
       case 'unregistered':
@@ -270,6 +272,8 @@ export default function WasherProfileScreen() {
         );
       case 'ready':
         return profile.data === undefined ? null : ready(profile.data);
+      default:
+        return assertNever(screen);
     }
   };
 

@@ -1,6 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import type { VerificationStatus } from '@parkease/contracts/enums';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 
 import { describeWasherVerification } from '../verification-copy';
+
+/**
+ * A status the contract cannot produce today — the drift the fail-closed
+ * branch exists for. Cast in-process on purpose: it simulates a server that
+ * moved ahead of this build.
+ */
+const drifted = (raw: string) => raw as VerificationStatus;
 
 /**
  * The washer's copy over the shared fail-closed mapping.
@@ -23,7 +31,7 @@ describe('describeWasherVerification', () => {
   });
 
   it('fails closed on a status it does not recognise', () => {
-    const view = describeWasherVerification('some_future_status');
+    const view = describeWasherVerification(drifted('some_future_status'));
 
     expect(view.canAccept).toBe(false);
     // Failing closed is only useful if the washer is told why they are blocked.
@@ -31,7 +39,7 @@ describe('describeWasherVerification', () => {
   });
 
   it('fails closed on an empty status', () => {
-    expect(describeWasherVerification('').canAccept).toBe(false);
+    expect(describeWasherVerification(drifted('')).canAccept).toBe(false);
   });
 
   it('asks an unverified washer for ID proof, never a driving licence', () => {
@@ -47,5 +55,21 @@ describe('describeWasherVerification', () => {
 
     expect(banner?.tone).toBe('error');
     expect(banner?.action).toBe('Contact support');
+  });
+});
+
+/** I2 and J2. */
+describe('the washer verification types and copy', () => {
+  it('takes the contract s VerificationStatus, not a string', () => {
+    expectTypeOf(describeWasherVerification).parameter(0).toEqualTypeOf<VerificationStatus>();
+  });
+
+  it('asks an unverified partner for the ID photo only, never "photos" (J2)', () => {
+    // Only a gig partner can be `unverified`: a business registers with its
+    // photos and lands `pending`. So the banner asks for the one ID photo.
+    const body = describeWasherVerification('unverified').banner?.body ?? '';
+
+    expect(body).toMatch(/ID/);
+    expect(body).not.toMatch(/photos/i);
   });
 });

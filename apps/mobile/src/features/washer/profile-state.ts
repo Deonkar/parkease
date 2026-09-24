@@ -1,3 +1,4 @@
+import type { VerificationStatus } from '@parkease/contracts/enums';
 import type { WasherPartnerType } from '@parkease/contracts/washer';
 
 import {
@@ -42,7 +43,7 @@ export type RegistrationNoticeKind = 'registered' | 'document-not-sent' | 'alrea
  */
 export function registrationNotice(
   kind: string | undefined,
-  status: string,
+  status: VerificationStatus,
   partnerType: WasherPartnerType,
 ): string | null {
   if (kind !== 'registered' && kind !== 'document-not-sent' && kind !== 'already-registered') {

@@ -25,6 +25,7 @@ import { useCameraGate } from '@/features/washer/hooks/useCameraGate';
 import { useHeldUploads } from '@/features/washer/hooks/useHeldUploads';
 import { useRegistration } from '@/features/washer/hooks/useRegistration';
 import { useHeldIdUpload } from '@/features/washer/hooks/useWasherQueries';
+import { assertNever } from '@/lib/assert-never';
 
 /** What the camera is photographing here, named in its shutter label. */
 type RegistrationPhoto = 'business' | 'ID';
@@ -115,6 +116,8 @@ export default function WasherRegisterScreen() {
             onSubmit={({ profile, documents }) => void submit(profile, documents)}
           />
         );
+      default:
+        return assertNever(type);
     }
   };
 

@@ -1,8 +1,11 @@
+import type { VerificationStatus } from '@parkease/contracts/enums';
+
 import {
   canAcceptWork,
   verificationStateFor,
   type VerificationBanner,
 } from '@/features/shared/verification';
+import { assertNever } from '@/lib/assert-never';
 
 export interface WasherVerificationView {
   readonly canAccept: boolean;
@@ -16,10 +19,13 @@ export interface WasherVerificationView {
  * can see three jobs and the money within reach has a reason to finish their
  * document upload. An empty locked screen gives them nothing to come back for.
  */
-export function describeWasherVerification(status: string): WasherVerificationView {
-  const canAccept = canAcceptWork(status);
+export function describeWasherVerification(status: VerificationStatus): WasherVerificationView {
+  // Parsed again rather than trusted: a server ahead of this build can still
+  // send a status the contract here does not list, and that must fail closed.
+  const state = verificationStateFor(status);
+  const canAccept = canAcceptWork(state);
 
-  switch (verificationStateFor(status)) {
+  switch (state) {
     case 'verified':
       return { canAccept, banner: null };
 
@@ -40,8 +46,10 @@ export function describeWasherVerification(status: string): WasherVerificationVi
         banner: {
           tone: 'info',
           title: 'Finish setting up your account',
-          body: 'Add your ID proof and photos so we can verify you and send you jobs.',
-          action: 'Upload documents',
+          // Only a gig partner can be `unverified` — a business lands
+          // `pending` with its photos — so this asks for the ID photo alone (J2).
+          body: 'Add a photo of your ID proof so we can verify you and send you jobs.',
+          action: 'Add ID photo',
         },
       };
 
@@ -56,7 +64,7 @@ export function describeWasherVerification(status: string): WasherVerificationVi
         },
       };
 
-    default:
+    case 'unknown':
       return {
         canAccept,
         banner: {
@@ -66,5 +74,8 @@ export function describeWasherVerification(status: string): WasherVerificationVi
           action: 'Contact support',
         },
       };
+
+    default:
+      return assertNever(state);
   }
 }
