@@ -1,6 +1,14 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { WashJobView } from '@parkease/contracts/washer';
-import { colors, elevation, fontSize, fontWeight, radius, spacing } from '@parkease/tokens';
+import {
+  colors,
+  elevation,
+  fontSize,
+  fontWeight,
+  radius,
+  spacing,
+  touchTarget,
+} from '@parkease/tokens';
 import { EmptyState, ErrorState, Skeleton } from '@parkease/ui-native';
 import { useCameraPermissions } from 'expo-camera';
 import { router } from 'expo-router';
@@ -419,8 +427,8 @@ const styles = StyleSheet.create({
   title: { fontSize: fontSize.lg, fontWeight: fontWeight.bold, color: colors.text },
   subtitle: { fontSize: fontSize.sm, color: colors.textTertiary },
   navigate: {
-    width: 44,
-    height: 44,
+    width: touchTarget,
+    height: touchTarget,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radius.md,

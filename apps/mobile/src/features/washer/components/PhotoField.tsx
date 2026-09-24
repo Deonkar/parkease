@@ -1,5 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { colors, fontSize, fontWeight, radius, spacing } from '@parkease/tokens';
+import { colors, fontSize, fontWeight, radius, spacing, touchTarget } from '@parkease/tokens';
 import {
   Image,
   Pressable,
@@ -181,7 +181,7 @@ const styles = StyleSheet.create({
   status: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs },
   statusText: { flex: 1, fontSize: fontSize.xs, color: colors.textTertiary },
   statusFailed: { color: colors.errorInk },
-  retry: { minHeight: 44, justifyContent: 'center' },
+  retry: { minHeight: touchTarget, justifyContent: 'center' },
   retryLabel: { fontSize: fontSize.sm, fontWeight: fontWeight.bold, color: colors.primary },
   add: {
     alignItems: 'center',

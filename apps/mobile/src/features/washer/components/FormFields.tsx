@@ -1,6 +1,14 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { CARWASH_SERVICE_NAME_VALUES, type CarwashServiceName } from '@parkease/contracts/enums';
-import { colors, fontSize, fontWeight, lineHeight, radius, spacing } from '@parkease/tokens';
+import {
+  colors,
+  fontSize,
+  fontWeight,
+  lineHeight,
+  radius,
+  spacing,
+  touchTarget,
+} from '@parkease/tokens';
 import { useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native';
 
@@ -17,9 +25,6 @@ import { FieldError } from './FieldError';
  * block carries `field-<id>`, the control `<id>-control`, the error
  * `<id>-error`, which is how the tests prove where an error lands.
  */
-
-/** Material's minimum touch target. */
-const MIN_TARGET = 48;
 
 export interface FieldBlockProps {
   readonly id: string;
@@ -207,7 +212,7 @@ const styles = StyleSheet.create({
     color: colors.textTertiary,
   },
   input: {
-    minHeight: MIN_TARGET,
+    minHeight: touchTarget,
     paddingHorizontal: spacing.md,
     borderRadius: radius.md,
     borderWidth: 1,
@@ -229,7 +234,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    minHeight: MIN_TARGET,
+    minHeight: touchTarget,
     paddingHorizontal: spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
@@ -238,7 +243,7 @@ const styles = StyleSheet.create({
   checkLabelOn: { color: colors.text, fontWeight: fontWeight.medium },
   submitBlock: { gap: spacing.sm },
   submit: {
-    minHeight: MIN_TARGET,
+    minHeight: touchTarget,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radius.md,

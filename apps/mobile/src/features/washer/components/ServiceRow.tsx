@@ -8,7 +8,15 @@ import {
   upsertWashServiceSchema,
   type UpsertWashService,
 } from '@parkease/contracts/washer';
-import { colors, elevation, fontSize, fontWeight, radius, spacing } from '@parkease/tokens';
+import {
+  colors,
+  elevation,
+  fontSize,
+  fontWeight,
+  radius,
+  spacing,
+  touchTarget,
+} from '@parkease/tokens';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
@@ -356,7 +364,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     ...elevation.card,
   },
-  head: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 44 },
+  head: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: touchTarget },
   headText: { flex: 1, gap: spacing.xs },
   name: { fontSize: fontSize.lg, fontWeight: fontWeight.bold, color: colors.text },
   state: { fontSize: fontSize.sm, color: colors.textTertiary },
@@ -394,7 +402,7 @@ const styles = StyleSheet.create({
   rupee: { fontSize: fontSize.xl, fontWeight: fontWeight.bold, color: colors.textSecondary },
   priceInput: {
     flex: 1,
-    minHeight: 44,
+    minHeight: touchTarget,
     paddingVertical: 0,
     fontSize: fontSize['2xl'],
     fontWeight: fontWeight.bold,
@@ -407,7 +415,7 @@ const styles = StyleSheet.create({
   durationLabel: { fontSize: fontSize.sm, color: colors.textSecondary },
   durationInput: {
     minWidth: spacing['3xl'] + spacing.base,
-    minHeight: 44,
+    minHeight: touchTarget,
     paddingVertical: 0,
     paddingHorizontal: spacing.sm,
     borderRadius: radius.md,
@@ -421,7 +429,7 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   save: {
-    minHeight: 44,
+    minHeight: touchTarget,
     minWidth: spacing['3xl'] * 2,
     alignItems: 'center',
     justifyContent: 'center',

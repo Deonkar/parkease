@@ -1,5 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { colors, fontSize, fontWeight, spacing } from '@parkease/tokens';
+import { colors, fontSize, fontWeight, spacing, touchTarget } from '@parkease/tokens';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useAnnounce } from '@/features/shared/hooks/useAnnounce';
@@ -51,6 +51,6 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   text: { flex: 1, fontSize: fontSize.sm, color: colors.warning },
-  action: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.md },
+  action: { minHeight: touchTarget, justifyContent: 'center', paddingHorizontal: spacing.md },
   actionLabel: { fontSize: fontSize.sm, fontWeight: fontWeight.bold, color: colors.primary },
 });

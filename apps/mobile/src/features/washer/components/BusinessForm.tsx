@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { CarwashServiceName } from '@parkease/contracts/enums';
 import type { CreateWasherProfile } from '@parkease/contracts/washer';
-import { colors, fontSize, fontWeight, radius, spacing } from '@parkease/tokens';
+import { colors, fontSize, fontWeight, radius, spacing, touchTarget } from '@parkease/tokens';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -255,7 +255,7 @@ const styles = StyleSheet.create({
     borderColor: colors.borderStrong,
     backgroundColor: colors.surface,
   },
-  step: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
+  step: { width: touchTarget, height: touchTarget, alignItems: 'center', justifyContent: 'center' },
   time: {
     flex: 1,
     textAlign: 'center',

@@ -1,5 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { colors, spacing } from '@parkease/tokens';
+import { colors, spacing, touchTarget } from '@parkease/tokens';
 import { router } from 'expo-router';
 import { Pressable, StyleSheet } from 'react-native';
 
@@ -26,5 +26,5 @@ export function ProfileGear() {
 }
 
 const styles = StyleSheet.create({
-  root: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
+  root: { width: touchTarget, height: touchTarget, alignItems: 'center', justifyContent: 'center' },
 });

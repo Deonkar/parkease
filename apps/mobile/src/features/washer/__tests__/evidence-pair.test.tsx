@@ -1,4 +1,4 @@
-import { colors, duration, easing, opacity } from '@parkease/tokens';
+import { colors, duration, easing, opacity, touchTarget } from '@parkease/tokens';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -247,7 +247,7 @@ describe('the pair as a layout', () => {
     }
   });
 
-  it('gives every button a 44dp target and a label naming its slot', () => {
+  it('gives every button a 48dp target (M3) and a label naming its slot', () => {
     const tree = pair({
       before: slot({ state: 'failed', uri: 'file:///a.jpg' }),
       after: slot({ state: 'attached', uri: null, writable: true }),
@@ -256,7 +256,7 @@ describe('the pair as a layout', () => {
 
     expect(all.length).toBeGreaterThanOrEqual(2);
     for (const button of all) {
-      expect(Number(style(button)['minHeight'])).toBeGreaterThanOrEqual(44);
+      expect(Number(style(button)['minHeight'])).toBeGreaterThanOrEqual(touchTarget);
       expect(String(button.props['accessibilityLabel'])).toMatch(/before|after/i);
     }
   });

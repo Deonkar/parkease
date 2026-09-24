@@ -1,5 +1,13 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { colors, fontSize, fontWeight, lineHeight, radius, spacing } from '@parkease/tokens';
+import {
+  colors,
+  fontSize,
+  fontWeight,
+  lineHeight,
+  radius,
+  spacing,
+  touchTarget,
+} from '@parkease/tokens';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { VerificationBanner } from '@/features/shared/verification';
@@ -75,6 +83,6 @@ const styles = StyleSheet.create({
   copy: { flex: 1, gap: spacing.xs },
   title: { fontSize: fontSize.sm, fontWeight: fontWeight.bold },
   body: { fontSize: fontSize.xs, lineHeight: fontSize.xs * lineHeight.normal },
-  action: { minHeight: 48, justifyContent: 'center' },
+  action: { minHeight: touchTarget, justifyContent: 'center' },
   actionLabel: { fontSize: fontSize.sm, fontWeight: fontWeight.bold },
 });

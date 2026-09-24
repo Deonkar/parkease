@@ -8,6 +8,7 @@ import {
   opacity,
   radius,
   spacing,
+  touchTarget,
 } from '@parkease/tokens';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, FadeIn, useReducedMotion } from 'react-native-reanimated';
@@ -284,7 +285,7 @@ const styles = StyleSheet.create({
   },
   row: { flexDirection: 'row', gap: spacing.md },
   half: { flexGrow: 1, flexBasis: 0 },
-  framePress: { minHeight: 44, borderRadius: radius.lg },
+  framePress: { minHeight: touchTarget, borderRadius: radius.lg },
   frame: {
     // A photo's own proportions, so the frame never crops the evidence away.
     aspectRatio: 4 / 3,
@@ -346,7 +347,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.available,
   },
   caption: {
-    minHeight: 44,
+    minHeight: touchTarget,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -360,7 +361,13 @@ const styles = StyleSheet.create({
   },
   statusDone: { color: colors.availableInk },
   statusFailed: { color: colors.errorInk },
-  link: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.sm },
+  link: {
+    minHeight: touchTarget,
+    minWidth: touchTarget,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
+  },
   linkLabel: { fontSize: fontSize.sm, fontWeight: fontWeight.semibold, color: colors.primary },
   failure: { fontSize: fontSize.xs, color: colors.errorInk },
   note: { fontSize: fontSize.xs, color: colors.textSecondary },

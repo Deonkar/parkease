@@ -8,6 +8,7 @@ import {
   lineHeight,
   radius,
   spacing,
+  touchTarget,
 } from '@parkease/tokens';
 import { EmptyState, ErrorState, Skeleton } from '@parkease/ui-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -398,7 +399,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.base,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-    minHeight: 48,
+    minHeight: touchTarget,
   },
   itemText: {
     fontSize: fontSize.base,

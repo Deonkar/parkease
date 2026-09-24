@@ -2,7 +2,7 @@ import {
   WASHER_EARNINGS_PERIOD_VALUES,
   type WasherEarningsPeriod,
 } from '@parkease/contracts/washer';
-import { colors, fontSize, fontWeight, spacing } from '@parkease/tokens';
+import { colors, fontSize, fontWeight, spacing, touchTarget } from '@parkease/tokens';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { PERIOD_LABELS } from '../labels';
@@ -51,15 +51,13 @@ export function PeriodTabs({ value, onChange }: PeriodTabsProps) {
   );
 }
 
-/** Material's minimum tab height; the indicator sits inside it, not below. */
-const TAB_HEIGHT = 48;
 const INDICATOR_HEIGHT = 3;
 
 const styles = StyleSheet.create({
   root: { flexDirection: 'row' },
   tab: {
     flex: 1,
-    minHeight: TAB_HEIGHT,
+    minHeight: touchTarget,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.xs,

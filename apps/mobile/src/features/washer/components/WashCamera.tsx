@@ -1,4 +1,4 @@
-import { colors, fontSize, radius, spacing } from '@parkease/tokens';
+import { colors, fontSize, radius, spacing, touchTarget } from '@parkease/tokens';
 import { CameraView } from 'expo-camera';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -132,7 +132,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xl,
     backgroundColor: colors.text,
   },
-  side: { minWidth: 72, minHeight: 48, justifyContent: 'center' },
+  side: { minWidth: 72, minHeight: touchTarget, justifyContent: 'center' },
   cancel: { fontSize: fontSize.base, color: colors.textInverse },
   shutter: {
     width: 72,
