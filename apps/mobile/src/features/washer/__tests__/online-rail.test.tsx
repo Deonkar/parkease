@@ -140,3 +140,21 @@ describe('the rail s announcements', () => {
     expect(announced).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * M4 (walkthrough V4). The track is availability green because "available for
+ * jobs" is exactly what green means here; the thumb is a token too, on the web
+ * as well, where react-native-web otherwise draws its own teal.
+ */
+describe('the online switch colours', () => {
+  it('draws the thumb and the track from the tokens, on and off', () => {
+    const toggle = byTestId(rail(), 'online-switch');
+
+    expect(toggle?.props['thumbColor']).toBe(colors.surface);
+    expect(toggle?.props['activeThumbColor']).toBe(colors.surface);
+    expect(toggle?.props['trackColor']).toEqual({
+      false: colors.borderStrong,
+      true: colors.available,
+    });
+  });
+});

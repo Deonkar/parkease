@@ -27,6 +27,7 @@ import { SERVICE_LABELS } from '../labels';
 import { paiseToRupees, parseMinutes, rupeesToPaise, type MenuRow } from '../menu-rows';
 
 import { FieldError } from './FieldError';
+import { switchColors } from './switch-colors';
 
 export interface ServiceRowProps {
   readonly row: MenuRow;
@@ -268,8 +269,7 @@ export function ServiceRow({ row, onSave, saving = false, failure = null }: Serv
           disabled={saving || unpriced}
           value={offered}
           onValueChange={toggle}
-          trackColor={{ false: colors.borderStrong, true: colors.primary }}
-          thumbColor={colors.surface}
+          {...switchColors(colors.primary)}
         />
       </View>
 

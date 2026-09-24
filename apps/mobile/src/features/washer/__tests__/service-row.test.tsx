@@ -4,6 +4,7 @@ import {
   MIN_SERVICE_DURATION_MINUTES,
   type UpsertWashService,
 } from '@parkease/contracts/washer';
+import { colors } from '@parkease/tokens';
 import { act, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -473,5 +474,24 @@ describe('after a save', () => {
     blur('price-car-premium_wash');
 
     expect(announced).toHaveBeenCalledWith(expect.stringMatching(/Enter a price between/));
+  });
+});
+
+/**
+ * M4 (walkthrough V4): the "on" thumb was react-native-web's default teal
+ * (#009688), a colour from no palette. Thumb and track come from the tokens on
+ * every platform: `thumbColor` on Android, `activeThumbColor` on the web.
+ */
+describe('the offered switch colours', () => {
+  it('draws the thumb and the track from the tokens, on and off', () => {
+    const { node } = setup();
+    const toggle = node('active-premium_wash');
+
+    expect(toggle?.props['thumbColor']).toBe(colors.surface);
+    expect(toggle?.props['activeThumbColor']).toBe(colors.surface);
+    expect(toggle?.props['trackColor']).toEqual({
+      false: colors.borderStrong,
+      true: colors.primary,
+    });
   });
 });

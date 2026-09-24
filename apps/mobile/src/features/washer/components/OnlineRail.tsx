@@ -6,6 +6,8 @@ import { useAnnounce } from '@/features/shared/hooks/useAnnounce';
 
 import type { PresenceError } from '../presence';
 
+import { switchColors } from './switch-colors';
+
 export interface OnlineRailProps {
   readonly isOnline: boolean;
   /** A toggle is in flight; the switch waits for the server's answer. */
@@ -178,8 +180,8 @@ export function OnlineRail({
         disabled={disabled}
         value={isOnline}
         onValueChange={onToggle}
-        trackColor={{ false: colors.borderStrong, true: colors.available }}
-        thumbColor={colors.surface}
+        // Availability green: "available for jobs" is what green means here.
+        {...switchColors(colors.available)}
         testID="online-switch"
       />
     </View>
