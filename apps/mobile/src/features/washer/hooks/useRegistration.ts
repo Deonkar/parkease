@@ -4,13 +4,20 @@ import { useCallback, useRef, useState } from 'react';
 import { newIntent, type Intent } from '@/lib/api';
 import { warn } from '@/lib/log';
 
-import { apiErrorCodeOf, isDefiniteRefusal } from '../api/errors';
+import { apiErrorCodeOf, classifyFailure, failureCopy, settlesIntent } from '../api/errors';
+import { matchesStoredProfile } from '../registration';
 
-import { useCreateProfile, useSubmitDocuments } from './useWasherQueries';
+import { useCreateProfile, useRefreshProfile, useSubmitDocuments } from './useWasherQueries';
 
 export type RegistrationOutcome =
   /** Everything the form sent has landed. */
   | { readonly kind: 'registered' }
+  /**
+   * An earlier attempt had already registered this partner, with details that
+   * differ from what this form sent (G6). They are registered, and the profile
+   * says "check your details" rather than pretending the edit landed.
+   */
+  | { readonly kind: 'already-registered' }
   /**
    * The profile exists and the ID did not send. The partner is registered, so
    * they go to their profile — which shows the missing ID with its own upload
@@ -47,6 +54,10 @@ interface HeldIntent {
 
 type Call = 'create' | 'documents';
 
+type CreateResult =
+  | { readonly ok: true; readonly differs: boolean }
+  | { readonly ok: false; readonly message: string };
+
 /**
  * Submitting a registration (§14.2, R-FE-05).
  *
@@ -61,6 +72,7 @@ type Call = 'create' | 'documents';
 export function useRegistration(): Registration {
   const { mutateAsync: createProfile } = useCreateProfile();
   const { mutateAsync: submitDocuments } = useSubmitDocuments();
+  const refreshProfile = useRefreshProfile();
   const held = useRef(new Map<Call, HeldIntent>());
   const [submitting, setSubmitting] = useState(false);
 
@@ -72,38 +84,51 @@ export function useRegistration(): Registration {
     return intent;
   }, []);
 
-  /** Whether the server's answer was final, so the key must not be replayed. */
-  const settle = useCallback((call: Call, error: unknown): boolean => {
-    const refused = isDefiniteRefusal(error);
-    if (refused) held.current.delete(call);
-    return refused;
+  /** A final answer (a refusal, or one this build cannot read) drops the key (G1). */
+  const settle = useCallback((call: Call, error: unknown) => {
+    if (settlesIntent(error)) held.current.delete(call);
   }, []);
 
+  /** Whether the server holds what was sent; unreadable counts as "check it". */
+  const storedMatches = useCallback(
+    async (input: CreateWasherProfile): Promise<boolean> => {
+      try {
+        return matchesStoredProfile(input, await refreshProfile());
+      } catch (error) {
+        warn('washer.register: could not read back the existing profile', error);
+        return false;
+      }
+    },
+    [refreshProfile],
+  );
+
   const createOnce = useCallback(
-    async (input: CreateWasherProfile): Promise<string | null> => {
+    async (input: CreateWasherProfile): Promise<CreateResult> => {
       try {
         await createProfile({ input, intent: intentFor('create', input) });
         held.current.delete('create');
-        return null;
+        return { ok: true, differs: false };
       } catch (error) {
         if (apiErrorCodeOf(error) === ALREADY_REGISTERED) {
           // Registered by an attempt this phone gave up on. Not a failure: the
-          // partner is who the form says, and anything after this still runs.
+          // partner is registered, and anything after this still runs. But the
+          // server kept THAT attempt's details, so they are compared (G6).
           warn('washer.register: the profile already existed; continuing', error);
           held.current.delete('create');
-          return null;
+          return { ok: true, differs: !(await storedMatches(input)) };
         }
-        const refused = settle('create', error);
+        settle('create', error);
         warn(
-          refused
-            ? `washer.register: registration was refused (${apiErrorCodeOf(error) ?? 'no code'})`
-            : 'washer.register: registration did not reach the server',
+          `washer.register: registration failed (${classifyFailure(error)}, ${apiErrorCodeOf(error) ?? 'no code'})`,
           error,
         );
-        return refused ? REFUSED : OFFLINE;
+        return {
+          ok: false,
+          message: failureCopy(error, { refused: REFUSED, unreachable: OFFLINE }),
+        };
       }
     },
-    [createProfile, intentFor, settle],
+    [createProfile, intentFor, settle, storedMatches],
   );
 
   const documentsOnce = useCallback(
@@ -113,14 +138,12 @@ export function useRegistration(): Registration {
         held.current.delete('documents');
         return null;
       } catch (error) {
-        const refused = settle('documents', error);
+        settle('documents', error);
         warn(
-          refused
-            ? `washer.register: the ID was refused (${apiErrorCodeOf(error) ?? 'no code'})`
-            : 'washer.register: the ID did not reach the server',
+          `washer.register: the ID failed (${classifyFailure(error)}, ${apiErrorCodeOf(error) ?? 'no code'})`,
           error,
         );
-        return refused ? DOCUMENT_REFUSED : DOCUMENT_OFFLINE;
+        return failureCopy(error, { refused: DOCUMENT_REFUSED, unreachable: DOCUMENT_OFFLINE });
       }
     },
     [submitDocuments, intentFor, settle],
@@ -133,10 +156,12 @@ export function useRegistration(): Registration {
     ): Promise<RegistrationOutcome> => {
       setSubmitting(true);
       try {
-        const failure = await createOnce(profile);
-        if (failure !== null) return { kind: 'failed', message: failure };
-        if (id === null) return { kind: 'registered' };
-        const sent = await documentsOnce(id);
+        const created = await createOnce(profile);
+        if (!created.ok) return { kind: 'failed', message: created.message };
+        const sent = id === null ? null : await documentsOnce(id);
+        // Details that differ outrank a missing ID: the profile screen shows
+        // the missing ID with its own action either way.
+        if (created.differs) return { kind: 'already-registered' };
         return sent === null ? { kind: 'registered' } : { kind: 'document-not-sent' };
       } finally {
         setSubmitting(false);

@@ -31,7 +31,7 @@ export function profileScreenState<T>(query: ProfileQueryShape<T>): ProfileScree
 }
 
 /** The reasons registration hands the profile screen, as a route param. */
-export type RegistrationNoticeKind = 'registered' | 'document-not-sent';
+export type RegistrationNoticeKind = 'registered' | 'document-not-sent' | 'already-registered';
 
 /**
  * The one line the profile says after registration, true to the server.
@@ -45,7 +45,14 @@ export function registrationNotice(
   status: string,
   partnerType: WasherPartnerType,
 ): string | null {
-  if (kind !== 'registered' && kind !== 'document-not-sent') return null;
+  if (kind !== 'registered' && kind !== 'document-not-sent' && kind !== 'already-registered') {
+    return null;
+  }
+  // An earlier attempt registered this partner with other details (G6): what
+  // is below is what the server kept, which may not be what they just typed.
+  if (kind === 'already-registered') {
+    return 'You were already registered. Check your details below: they are from your first attempt.';
+  }
   // Also true once an ID sent from this screen later puts the profile in review.
   if (verificationStateFor(status) === 'pending') {
     return "Submitted for review. We'll let you know once your documents are checked.";

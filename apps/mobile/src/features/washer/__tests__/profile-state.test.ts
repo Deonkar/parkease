@@ -93,3 +93,16 @@ describe('registrationNotice', () => {
     expect(registrationNotice('something-else', 'pending', 'business')).toBeNull();
   });
 });
+
+/** G6: a retry that found an earlier registration with different details. */
+describe('registrationNotice for an earlier registration', () => {
+  it('says the partner was already registered and asks them to check their details', () => {
+    for (const status of ['unverified', 'pending'] as const) {
+      for (const type of ['gig', 'business'] as const) {
+        const notice = registrationNotice('already-registered', status, type) ?? '';
+        expect(notice).toMatch(/already registered/i);
+        expect(notice).toMatch(/check your details/i);
+      }
+    }
+  });
+});

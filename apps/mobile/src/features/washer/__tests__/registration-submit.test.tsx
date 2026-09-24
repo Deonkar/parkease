@@ -1,8 +1,14 @@
-import type { CreateWasherProfile } from '@parkease/contracts/washer';
+import {
+  washerProfileViewSchema,
+  type CreateWasherProfile,
+  type WasherProfileView,
+} from '@parkease/contracts/washer';
 import { act } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ZodError } from 'zod';
 
 import { render } from '../../shared/__tests__/render-native';
+import { IN_FLIGHT_COPY, OUTDATED_COPY } from '../api/errors';
 import { useRegistration, type Registration } from '../hooks/useRegistration';
 
 /**
@@ -21,6 +27,7 @@ import { useRegistration, type Registration } from '../hooks/useRegistration';
 const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   documents: vi.fn(),
+  refreshProfile: vi.fn(),
   warn: vi.fn(),
   minted: 0,
 }));
@@ -37,6 +44,7 @@ vi.mock('@/lib/log', () => ({ warn: mocks.warn }));
 vi.mock('../hooks/useWasherQueries', () => ({
   useCreateProfile: () => ({ mutateAsync: mocks.create }),
   useSubmitDocuments: () => ({ mutateAsync: mocks.documents }),
+  useRefreshProfile: () => mocks.refreshProfile,
 }));
 
 let registration: Registration;
@@ -54,10 +62,28 @@ const GIG = {
 const BUSINESS = {
   partnerType: 'business',
   businessName: 'SparkleWash',
-  businessPhotoIds: ['spaces/1'],
+  businessPhotoIds: ['parkease/spaces/1'],
   capabilities: ['premium_wash'],
 } as CreateWasherProfile;
-const ID = { idDocumentId: 'documents/id-1' };
+const ID = { idDocumentId: 'parkease/documents/id-1' };
+
+/** What `GET /washer/profile` holds for the GIG form above, parsed like the wire. */
+const stored = (overrides: Partial<WasherProfileView> = {}): WasherProfileView =>
+  washerProfileViewSchema.parse({
+    partnerType: 'gig',
+    businessName: 'Raju M.',
+    gstin: null,
+    businessPhotoIds: [],
+    operatingHours: null,
+    capabilities: ['quick_wipe'],
+    idDocumentId: null,
+    verificationStatus: 'unverified',
+    isOnline: false,
+    lastSeenAt: null,
+    ratingAvgBp: null,
+    ratingCount: 0,
+    ...overrides,
+  });
 
 const OFFLINE = new Error('Network Error');
 const REFUSED = { response: { status: 400, data: { error: { code: 'VALIDATION_FAILED' } } } };
@@ -70,6 +96,7 @@ const keyOf = (mock: typeof mocks.create, call: number) =>
 beforeEach(() => {
   mocks.create.mockReset();
   mocks.documents.mockReset();
+  mocks.refreshProfile.mockReset();
   mocks.warn.mockReset();
   mocks.minted = 0;
   render(<Harness />);
@@ -128,12 +155,75 @@ describe('a gig registration', () => {
    */
   it('treats "already registered" as registered, and still sends the ID', async () => {
     mocks.create.mockRejectedValue(EXISTS);
+    mocks.refreshProfile.mockResolvedValue(stored());
     mocks.documents.mockResolvedValue({});
 
     const outcome = await act(() => registration.register(GIG, ID));
 
     expect(outcome).toEqual({ kind: 'registered' });
     expect(mocks.documents).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * G6: "already registered" is only "registered" when what the server holds is
+ * what this form sent. A retry after the partner EDITED the form lands on the
+ * first attempt's profile, and quietly calling that success hides their edit.
+ */
+describe('already registered, with different details', () => {
+  it('refetches the profile and says so when it differs from what was sent', async () => {
+    mocks.create.mockRejectedValue(EXISTS);
+    mocks.refreshProfile.mockResolvedValue(stored({ businessName: 'Raju' }));
+    mocks.documents.mockResolvedValue({});
+
+    const outcome = await act(() => registration.register(GIG, ID));
+
+    expect(mocks.refreshProfile).toHaveBeenCalledTimes(1);
+    expect(outcome).toEqual({ kind: 'already-registered' });
+    // The partner IS registered, so the ID still goes.
+    expect(mocks.documents).toHaveBeenCalledTimes(1);
+  });
+
+  it('is plain registered when the stored profile matches, capabilities in any order', async () => {
+    mocks.create.mockRejectedValue(EXISTS);
+    mocks.refreshProfile.mockResolvedValue(stored({ capabilities: ['quick_wipe'] }));
+    mocks.documents.mockResolvedValue({});
+
+    const outcome = await act(() => registration.register(GIG, ID));
+
+    expect(outcome).toEqual({ kind: 'registered' });
+  });
+
+  it('says check your details when the profile cannot be read back', async () => {
+    mocks.create.mockRejectedValue(EXISTS);
+    mocks.refreshProfile.mockRejectedValue(OFFLINE);
+    mocks.documents.mockResolvedValue({});
+
+    const outcome = await act(() => registration.register(GIG, ID));
+
+    expect(outcome).toEqual({ kind: 'already-registered' });
+    expect(mocks.warn).toHaveBeenCalled();
+  });
+});
+
+/** G1: the classes that mean the same thing everywhere. */
+describe('an out-of-date app and a call still in flight', () => {
+  it('says "Update the app" when the answer could not be read', async () => {
+    mocks.create.mockRejectedValue(new ZodError([]));
+
+    const outcome = await act(() => registration.register(BUSINESS, null));
+
+    expect(outcome).toMatchObject({ kind: 'failed', message: OUTDATED_COPY });
+  });
+
+  it('says the first attempt is still being processed', async () => {
+    mocks.create.mockRejectedValue({
+      response: { status: 409, data: { error: { code: 'REQUEST_IN_FLIGHT', message: 'm' } } },
+    });
+
+    const outcome = await act(() => registration.register(BUSINESS, null));
+
+    expect(outcome).toMatchObject({ kind: 'failed', message: IN_FLIGHT_COPY });
   });
 });
 

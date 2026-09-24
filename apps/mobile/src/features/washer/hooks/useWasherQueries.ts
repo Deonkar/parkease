@@ -4,8 +4,10 @@ import type {
   SubmitWasherDocuments,
   UpsertWashService,
   WasherEarningsPeriod,
+  WasherProfileView,
 } from '@parkease/contracts/washer';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback } from 'react';
 
 import type { Intent } from '@/lib/api';
 
@@ -58,6 +60,23 @@ export function useWasherEarnings(period: WasherEarningsPeriod) {
 
 export function useWasherProfile() {
   return useQuery({ queryKey: washerKeys.profile, queryFn: ({ signal }) => fetchProfile(signal) });
+}
+
+/**
+ * Reads the profile from the server now, bypassing the cache, and stores the
+ * answer — for a caller that must compare against the server's truth (G6).
+ */
+export function useRefreshProfile(): () => Promise<WasherProfileView> {
+  const client = useQueryClient();
+  return useCallback(
+    () =>
+      client.query({
+        queryKey: washerKeys.profile,
+        queryFn: ({ signal }) => fetchProfile(signal),
+        staleTime: 0,
+      }),
+    [client],
+  );
 }
 
 export function useServiceMenu() {

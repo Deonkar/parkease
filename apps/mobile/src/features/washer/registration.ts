@@ -5,6 +5,7 @@ import {
   type CreateWasherProfile,
   type OperatingHours,
   type SubmitWasherDocuments,
+  type WasherProfileView,
 } from '@parkease/contracts/washer';
 import type { z } from 'zod';
 
@@ -221,4 +222,39 @@ export function describeHours(hours: OperatingHours | null): string {
   );
   if (!same || first === undefined) return 'Varies by day';
   return `${formatTime12(first.open)} – ${formatTime12(first.close)}, every day`;
+}
+
+/** A list compared as a set: the server may echo it in another order. */
+const asSet = (values: readonly string[] | undefined): string =>
+  [...(values ?? [])].sort().join('|');
+
+/** JSON with sorted keys, so two equal objects compare equal whatever their key order. */
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+  if (typeof value === 'object' && value !== null) {
+    const entries = Object.entries(value).sort(([a], [b]) => a.localeCompare(b));
+    return `{${entries.map(([key, inner]) => `${JSON.stringify(key)}:${canonical(inner)}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+/**
+ * Whether the profile the server holds is the one this form sent (G6).
+ *
+ * `WASHER_PROFILE_EXISTS` after a retry means an earlier attempt landed. If the
+ * partner changed the form in between, the server kept the FIRST version, and
+ * calling that "registered" would hide the edit they just made.
+ */
+export function matchesStoredProfile(
+  sent: CreateWasherProfile,
+  stored: WasherProfileView,
+): boolean {
+  return (
+    sent.partnerType === stored.partnerType &&
+    sent.businessName.trim() === (stored.businessName ?? '').trim() &&
+    (sent.gstin ?? null) === stored.gstin &&
+    asSet(sent.businessPhotoIds) === asSet(stored.businessPhotoIds) &&
+    canonical(sent.operatingHours ?? null) === canonical(stored.operatingHours) &&
+    asSet(sent.capabilities) === asSet(stored.capabilities)
+  );
 }
