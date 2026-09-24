@@ -1,3 +1,5 @@
+import { uploadSignatureResponseSchema } from '@parkease/contracts/shared';
+import { attachWashPhotoSchema } from '@parkease/contracts/washer';
 import { uuidv7 } from '@parkease/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -1402,6 +1404,250 @@ describe('the washer card, without a registered name', () => {
 
     expect(res.status).toBe(500);
     expect(errorOf(res.body).code).toBe('INTERNAL_ERROR');
+  });
+});
+
+/**
+ * Test adequacy 1 (task 14 final fix wave), the highest-risk gap: nothing
+ * drove an unverified partner through the real stack. The partner app routes
+ * on these codes, and the dispatch pool depends on the refusal.
+ */
+describe('a partner who is not verified', () => {
+  const setAvailability = (washerId: string, payload: unknown) => {
+    asUser(washerId, ['washer']);
+    return http.request({
+      method: 'PATCH',
+      url: '/api/v1/washer/availability',
+      headers: key(),
+      payload,
+    });
+  };
+
+  for (const status of ['pending', 'unverified'] as const) {
+    it(`cannot go online while ${status}: 403 WASHER_NOT_VERIFIED`, async () => {
+      const washerId = await seedWasher({ online: false });
+      await h.sql`UPDATE washer_profiles SET verification_status = ${status} WHERE user_id = ${washerId}`;
+
+      const res = await setAvailability(washerId, { isOnline: true, location: SPACE });
+
+      expect(res.status).toBe(403);
+      expect(errorOf(res.body).code).toBe('WASHER_NOT_VERIFIED');
+      const [row] = await h.sql<{ is_online: boolean }[]>`
+        SELECT is_online FROM washer_profiles WHERE user_id = ${washerId}
+      `;
+      expect(row?.is_online).toBe(false);
+    });
+
+    it(`cannot accept an offer made before they became ${status}: 403`, async () => {
+      // Offered while verified, then moved to review (a re-submitted document)
+      // inside the three-minute window — the case accept re-checks for.
+      const washerId = await seedWasher();
+      const jobId = await openJob();
+      await h.sql`UPDATE washer_profiles SET verification_status = ${status} WHERE user_id = ${washerId}`;
+
+      const res = await accept(jobId, washerId);
+
+      expect(res.status).toBe(403);
+      expect(errorOf(res.body).code).toBe('WASHER_NOT_VERIFIED');
+      const [job] = await h.sql<{ washer_user_id: string | null }[]>`
+        SELECT washer_user_id FROM wash_jobs WHERE id = ${jobId}
+      `;
+      expect(job?.washer_user_id).toBeNull();
+    });
+  }
+
+  it('can still go offline while unverified', async () => {
+    // Going offline claims nothing, so it is never refused — a partner whose
+    // verification was pulled must be able to leave the pool.
+    const washerId = await seedWasher();
+    await h.sql`UPDATE washer_profiles SET verification_status = 'pending' WHERE user_id = ${washerId}`;
+
+    const res = await setAvailability(washerId, { isOnline: false });
+
+    expect(res.status).toBe(200);
+  });
+});
+
+/**
+ * Test adequacy 5 (task 14 final fix wave). Presence is what dispatch reads:
+ * `is_online`, `last_seen_at` inside the heartbeat window, and the location.
+ */
+describe('PATCH /washer/availability — presence', () => {
+  it('writes last_seen_at and the location on a beat, and going offline clears the flag', async () => {
+    const washerId = await seedWasher({ online: false });
+    await h.sql`
+      UPDATE washer_profiles SET last_seen_at = now() - interval '1 hour' WHERE user_id = ${washerId}
+    `;
+    const here = { lat: 12.9401, lng: 77.6301 };
+
+    asUser(washerId, ['washer']);
+    const online = await http.request({
+      method: 'PATCH',
+      url: '/api/v1/washer/availability',
+      headers: key(),
+      payload: { isOnline: true, location: here },
+    });
+    expect(online.status).toBe(200);
+    expect(dataOf<{ isOnline: boolean }>(online.body).isOnline).toBe(true);
+
+    const [beat] = await h.sql<{ is_online: boolean; fresh: boolean; lat: number; lng: number }[]>`
+      SELECT is_online,
+             last_seen_at > now() - interval '1 minute' AS fresh,
+             ST_Y(current_location::geometry) AS lat,
+             ST_X(current_location::geometry) AS lng
+      FROM washer_profiles WHERE user_id = ${washerId}
+    `;
+    expect(beat).toMatchObject({ is_online: true, fresh: true });
+    expect(beat?.lat).toBeCloseTo(here.lat, 6);
+    expect(beat?.lng).toBeCloseTo(here.lng, 6);
+
+    const offline = await http.request({
+      method: 'PATCH',
+      url: '/api/v1/washer/availability',
+      headers: key(),
+      payload: { isOnline: false },
+    });
+    expect(offline.status).toBe(200);
+
+    const [after] = await h.sql<{ is_online: boolean }[]>`
+      SELECT is_online FROM washer_profiles WHERE user_id = ${washerId}
+    `;
+    expect(after?.is_online).toBe(false);
+  });
+});
+
+/**
+ * Test adequacy 6 (task 14 final fix wave). The partner app branches on these
+ * codes; a rename would turn a first-run state into a generic error screen.
+ * WASHER_NOT_VERIFIED is pinned above and WASHER_NOT_ONBOARDED by the accept
+ * tests; this is the third.
+ */
+describe('POST /washer/profile — registering twice', () => {
+  it('answers 409 WASHER_PROFILE_EXISTS to a second registration under a new key', async () => {
+    const washerId = await seedUser(h, 'washer');
+    asUser(washerId, ['washer']);
+    const payload = { partnerType: 'gig', businessName: 'Raju M.', capabilities: ['premium_wash'] };
+
+    const first = await http.request({
+      method: 'POST',
+      url: '/api/v1/washer/profile',
+      headers: key(),
+      payload,
+    });
+    const second = await http.request({
+      method: 'POST',
+      url: '/api/v1/washer/profile',
+      headers: key(),
+      payload: { ...payload, businessName: 'Someone Else' },
+    });
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(409);
+    expect(errorOf(second.body).code).toBe('WASHER_PROFILE_EXISTS');
+    const [row] = await h.sql<{ business_name: string }[]>`
+      SELECT business_name FROM washer_profiles WHERE user_id = ${washerId}
+    `;
+    expect(row?.business_name).toBe('Raju M.');
+  });
+
+  it('refuses duplicate capabilities with a 400', async () => {
+    const washerId = await seedUser(h, 'washer');
+    asUser(washerId, ['washer']);
+
+    const res = await http.request({
+      method: 'POST',
+      url: '/api/v1/washer/profile',
+      headers: key(),
+      payload: {
+        partnerType: 'gig',
+        businessName: 'Raju M.',
+        capabilities: ['premium_wash', 'premium_wash'],
+      },
+    });
+
+    expect(res.status).toBe(400);
+    expect(errorOf(res.body).code).toBe('VALIDATION_FAILED');
+  });
+});
+
+/** Test adequacy 10 (task 14 final fix wave): the menu's write bounds, through HTTP. */
+describe('PUT /washer/services/:name — bounds', () => {
+  const edit = (washerId: string, over: Record<string, unknown>) => {
+    asUser(washerId, ['washer']);
+    return http.request({
+      method: 'PUT',
+      url: '/api/v1/washer/services/premium_wash',
+      headers: key(),
+      payload: {
+        carPricePaise: 44900,
+        bikePricePaise: 17900,
+        durationMinutes: 45,
+        isActive: true,
+        ...over,
+      },
+    });
+  };
+
+  it('refuses a price of 999 paise, one under the ₹10 floor', async () => {
+    const washerId = await seedWasher();
+
+    const res = await edit(washerId, { carPricePaise: 999 });
+
+    expect(res.status).toBe(400);
+    expect(errorOf(res.body).code).toBe('VALIDATION_FAILED');
+  });
+
+  it('refuses a duration of 4 minutes, one under the floor', async () => {
+    const washerId = await seedWasher();
+
+    const res = await edit(washerId, { durationMinutes: 4 });
+
+    expect(res.status).toBe(400);
+    expect(errorOf(res.body).code).toBe('VALIDATION_FAILED');
+  });
+
+  it('accepts the floor itself, so the bound is not off by one', async () => {
+    const washerId = await seedWasher();
+
+    const res = await edit(washerId, { carPricePaise: 1000, durationMinutes: 5 });
+
+    expect(res.status).toBe(200);
+  });
+});
+
+/**
+ * Test adequacy 2 (task 14 final fix wave). The partner app parses this body
+ * strictly, and before task 14 `fields` was not in the contract at all, so a
+ * strict client threw the signature away. Through the real pipeline — the
+ * interceptors, the envelope — not just the service.
+ */
+describe('POST /me/upload-signature', () => {
+  it('returns a body the app s contract accepts, with overwrite=false and a pinned upload URL', async () => {
+    const washerId = await seedWasher();
+    asUser(washerId, ['washer']);
+
+    const res = await http.request({
+      method: 'POST',
+      url: '/api/v1/me/upload-signature',
+      headers: key(),
+      payload: { fileName: 'before.jpg', contentType: 'image/jpeg', folder: 'proofs' },
+    });
+
+    expect(res.status).toBe(200);
+    const parsed = uploadSignatureResponseSchema.safeParse(dataOf<unknown>(res.body));
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    expect(parsed.data.uploadUrl).toMatch(
+      /^https:\/\/api\.cloudinary\.com\/v1_1\/[^/]+\/image\/upload$/,
+    );
+    expect(parsed.data.fields).toMatchObject({ overwrite: 'false', folder: 'parkease/proofs' });
+    // Cloudinary answers the upload with `public_id` = `<folder>/<public_id>`,
+    // which is what the app attaches — so it must pass the attach contract.
+    expect(
+      attachWashPhotoSchema.safeParse({
+        photoId: `${parsed.data.fields['folder'] ?? ''}/${parsed.data.fields['public_id'] ?? ''}`,
+      }).success,
+    ).toBe(true);
   });
 });
 

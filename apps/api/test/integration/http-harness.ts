@@ -12,6 +12,9 @@ import type { FastifyRequest } from 'fastify';
 
 import { BookingModule } from '../../src/domains/booking/booking.module.js';
 import { CarwashModule } from '../../src/domains/carwash/carwash.module.js';
+import { SwitchRoleCommand } from '../../src/domains/identity/commands/switch-role.command.js';
+import { RoleRepository } from '../../src/domains/identity/repositories/role.repository.js';
+import { UserRepository } from '../../src/domains/identity/repositories/user.repository.js';
 import { PaymentModule } from '../../src/domains/payment/payment.module.js';
 import { RAZORPAY } from '../../src/domains/payment/razorpay.client.js';
 import { PricingModule } from '../../src/domains/pricing/pricing.module.js';
@@ -20,6 +23,7 @@ import { SurgeModule } from '../../src/domains/surge/surge.module.js';
 import { ValetModule } from '../../src/domains/valet/valet.module.js';
 import type { AuthUser } from '../../src/platform/auth/current-user.decorator.js';
 import { IS_PUBLIC_KEY } from '../../src/platform/auth/public.decorator.js';
+import { TokenService } from '../../src/platform/auth/token.service.js';
 import { DB, DbModule } from '../../src/platform/db/db.module.js';
 import { AllExceptionsFilter } from '../../src/platform/http/exception.filter.js';
 import { TransformInterceptor } from '../../src/platform/http/transform.interceptor.js';
@@ -30,6 +34,7 @@ import { OutboxModule } from '../../src/platform/outbox/outbox.module.js';
 import { ActiveRoleGuard } from '../../src/platform/rbac/active-role.guard.js';
 import { RolesGuard } from '../../src/platform/rbac/roles.guard.js';
 import { REDIS, RedisModule } from '../../src/platform/redis/redis.module.js';
+import { StorageModule } from '../../src/platform/storage/storage.module.js';
 import { TelephonyModule } from '../../src/platform/telephony/telephony.module.js';
 import { AdminSurgeController } from '../../src/roles/admin/surge.controller.js';
 import { DriverBookingsController } from '../../src/roles/driver/bookings.controller.js';
@@ -40,6 +45,7 @@ import { DriverSearchController } from '../../src/roles/driver/search.controller
 import { DriverValetController } from '../../src/roles/driver/valet.controller.js';
 import { OwnerBookingsController } from '../../src/roles/owner/bookings.controller.js';
 import { RazorpayWebhookController } from '../../src/roles/public/webhooks/razorpay.controller.js';
+import { MeController } from '../../src/roles/shared/me.controller.js';
 import { ValetAvailabilityController } from '../../src/roles/valet/availability.controller.js';
 import { ValetEarningsController } from '../../src/roles/valet/earnings.controller.js';
 import { ValetJobsController } from '../../src/roles/valet/jobs.controller.js';
@@ -122,6 +128,8 @@ class StubAuthGuard implements CanActivate {
     // Domain only, for the same reason as ValetModule above. The car wash
     // controllers need CarwashModule's commands; nothing in it needs AuthModule.
     CarwashModule,
+    // `/me/upload-signature` signs through the real CloudinaryService.
+    StorageModule,
   ],
   controllers: [
     AdminSurgeController,
@@ -142,8 +150,20 @@ class StubAuthGuard implements CanActivate {
     WasherAvailabilityController,
     WasherEarningsController,
     WasherProfileController,
+    MeController,
   ],
   providers: [
+    /**
+     * `MeController`'s own dependencies, provided one by one rather than by
+     * importing `SharedModule`: that pulls in IdentityModule, whose
+     * `CreateSessionCommand` needs FirebaseVerifierService (see StubAuthGuard).
+     * All four are the real classes; `TokenService` needs only the database and
+     * the audit log, both real here.
+     */
+    TokenService,
+    RoleRepository,
+    UserRepository,
+    SwitchRoleCommand,
     // Registered exactly as AppModule does, and in its order. This is the whole
     // point of these tests: the interceptor and guard stack a real request
     // actually passes through. Only RateLimitModule's guard is absent —
