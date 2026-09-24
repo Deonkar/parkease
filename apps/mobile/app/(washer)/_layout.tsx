@@ -84,8 +84,9 @@ export default function WasherLayout() {
           options={{ title: 'Earnings', tabBarIcon: tabIcon('wallet-outline', 'wallet') }}
         />
         {/* Out of the bar, which holds §14.3's four tabs; reached from the header
-            gear on Offers and Menu. */}
-        <Tabs.Screen name="profile" options={{ href: null }} />
+            gear on Offers and Menu. Popped to its top on blur (H2), so the gear
+            always opens the profile, never a registration left underneath. */}
+        <Tabs.Screen name="profile" options={{ href: null, popToTopOnBlur: true }} />
       </Tabs>
     </WasherPresenceProvider>
   );

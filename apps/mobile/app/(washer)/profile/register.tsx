@@ -4,8 +4,8 @@ import type {
   WasherPartnerType,
 } from '@parkease/contracts/washer';
 import { colors, fontSize, lineHeight, spacing } from '@parkease/tokens';
-import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import {
   BackHandler,
   KeyboardAvoidingView,
@@ -56,17 +56,21 @@ export default function WasherRegisterScreen() {
   const [failure, setFailure] = useState<string | null>(null);
 
   // Android's back from a form returns to the picker, as the header's does,
-  // instead of leaving registration with the photos taken so far.
-  useEffect(() => {
-    if (type === null) return undefined;
-    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-      setType(null);
-      return true;
-    });
-    return () => {
-      subscription.remove();
-    };
-  }, [type]);
+  // instead of leaving registration with the photos taken so far — but only
+  // while this screen is in front (H2). A listener that outlived focus
+  // swallowed the back press on whichever tab the partner had moved to.
+  useFocusEffect(
+    useCallback(() => {
+      if (type === null) return undefined;
+      const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+        setType(null);
+        return true;
+      });
+      return () => {
+        subscription.remove();
+      };
+    }, [type]),
+  );
 
   const submit = async (profile: CreateWasherProfile, documents: SubmitWasherDocuments | null) => {
     setFailure(null);

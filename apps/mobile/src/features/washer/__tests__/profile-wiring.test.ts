@@ -24,7 +24,7 @@ describe('the washer route structure', () => {
   it('keeps the bar at the four tabs of §14.3, with profile routable but hidden', () => {
     const layout = code(read('_layout.tsx'));
 
-    expect(layout).toMatch(/name="profile"\s+options=\{\{\s*href: null\s*\}\}/);
+    expect(layout).toMatch(/name="profile"\s+options=\{\{\s*href: null[,\s]/);
     const titled = [...layout.matchAll(/title: '([^']+)'/g)].map((m) => m[1]);
     expect(titled).toEqual(['Offers', 'Active', 'Menu', 'Earnings']);
     expect(layout).toContain('<WasherPresenceProvider>');
@@ -129,5 +129,22 @@ describe('the ID upload held across screens', () => {
     expect(screen).toContain('useHeldIdUpload()');
     expect(screen).toMatch(/idPhoto\.uploadIds\[0\] \?\? heldId\.id/);
     expect(screen).toMatch(/heldId\.release\(\)/);
+  });
+});
+
+/** H2: Android back and the profile tab behave while the screen is not in front. */
+describe('focus and the profile stack', () => {
+  it('holds the hardware back only while registration is focused', () => {
+    const register = code(read('profile', 'register.tsx'));
+    expect(register).toMatch(/useFocusEffect\(\s*useCallback\(/);
+    expect(register).toMatch(/useFocusEffect[\s\S]{0,600}BackHandler\.addEventListener/);
+    expect(register).not.toMatch(/useEffect\([\s\S]{0,200}BackHandler/);
+  });
+
+  it('pops the profile stack to its top when the tab loses focus, so the gear never stacks two', () => {
+    const layout = code(read('_layout.tsx'));
+    expect(layout).toMatch(
+      /name="profile"\s+options=\{\{\s*href: null,\s*popToTopOnBlur: true\s*\}\}/,
+    );
   });
 });
