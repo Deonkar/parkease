@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { UPLOAD_COPY, UploadError } from '@/lib/upload-failure';
+
 import {
   PROOF_MAX_BYTES,
   PROOF_MAX_WIDTH,
@@ -95,5 +97,18 @@ describe('submitProof', () => {
     expect(PROOF_MAX_BYTES).toBe(1_000_000);
     expect(PROOF_MAX_WIDTH).toBe(1_200);
     expect(PROOF_QUALITY).toBeLessThanOrEqual(0.7);
+  });
+});
+
+/** G4: an upload refusal is told as one, not as a dead connection. */
+describe('an upload that failed for a known reason', () => {
+  it('passes the upload s own copy through', async () => {
+    const { deps: d } = deps({
+      upload: () => Promise.reject(new UploadError('refused', UPLOAD_COPY.refused)),
+    });
+
+    const result = await submitProof('file://shot.jpg', d);
+
+    expect(result).toMatchObject({ ok: false, message: UPLOAD_COPY.refused });
   });
 });

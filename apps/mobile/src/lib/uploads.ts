@@ -1,11 +1,15 @@
 import {
   uploadSignatureResponseSchema,
+  type RequestUploadSignature,
   type UploadSignatureResponse,
 } from '@parkease/contracts/shared';
 import { z } from 'zod';
 
 import { api, newIntent, type Intent } from '@/lib/api';
 import { warn } from '@/lib/log';
+import { UploadError, UPLOAD_COPY, type UploadFailureReason } from '@/lib/upload-failure';
+
+export { UploadError, UPLOAD_COPY, type UploadFailureReason } from '@/lib/upload-failure';
 
 /**
  * The one way a file leaves this app.
@@ -23,7 +27,8 @@ import { warn } from '@/lib/log';
  * the evidence trail at any image on the internet.
  */
 
-export type UploadFolder = 'spaces' | 'documents' | 'avatars' | 'reviews' | 'proofs';
+/** The contract's folders, never a second copy of the list (I3). */
+export type UploadFolder = RequestUploadSignature['folder'];
 
 /**
  * R-FE-11's two limits this module can actually enforce. The rule also sets a
@@ -41,22 +46,46 @@ export interface CompressedImage {
 }
 
 export interface UploadDeps {
-  compress(uri: string, width: number, quality: number): Promise<CompressedImage>;
+  readonly compress: (uri: string, width: number, quality: number) => Promise<CompressedImage>;
   /**
    * `intent` carries the Idempotency-Key for THIS sign attempt, minted by
    * `uploadImage` — see there for why it is never reused.
    */
-  sign(
-    input: { fileName: string; contentType: string; folder: UploadFolder },
+  readonly sign: (
+    input: RequestUploadSignature,
     intent: Intent,
-  ): Promise<UploadSignatureResponse>;
-  put(uploadUrl: string, fields: Record<string, string>, uri: string): Promise<unknown>;
+  ) => Promise<UploadSignatureResponse>;
+  readonly put: (
+    uploadUrl: string,
+    fields: Record<string, string>,
+    uri: string,
+  ) => Promise<unknown>;
 }
 
 export type UploadResult =
   | { ok: true; uploadId: string }
   /** The ORIGINAL uri, so a retry costs no second photograph. */
-  | { ok: false; message: string; retainedUri: string };
+  | { ok: false; reason: UploadFailureReason; message: string; retainedUri: string };
+
+/** Cloudinary's refusal body. Parsed for the log only. */
+const cloudinaryErrorSchema = z.object({ error: z.object({ message: z.string() }) });
+
+/** Only the HTTP status of a failed call to our own API. */
+const httpStatusSchema = z.object({ response: z.object({ status: z.number().int() }) });
+
+/**
+ * A step that answered is a refusal unless it answered with something a retry
+ * may clear: a 5xx, a 408 or a 429. A step with no answer is offline. A body
+ * this build could not parse is a refusal: retrying the same call cannot fix it.
+ */
+function reasonForHttp(error: unknown): UploadFailureReason {
+  if (error instanceof z.ZodError) return 'refused';
+  if (error instanceof UploadError) return error.reason;
+  const parsed = httpStatusSchema.safeParse(error);
+  if (!parsed.success) return 'offline';
+  const { status } = parsed.data.response;
+  return status >= 500 || status === 408 || status === 429 ? 'offline' : 'refused';
+}
 
 /**
  * Cloudinary's answer is data from outside the process, so it is parsed and
@@ -82,10 +111,25 @@ export async function uploadImage(
   folder: UploadFolder,
   deps: UploadDeps,
 ): Promise<UploadResult> {
-  try {
-    const compressed = await deps.compress(uri, UPLOAD_MAX_WIDTH, UPLOAD_QUALITY);
+  // Each step is its own try, because which step failed is most of WHY.
+  const fail = (reason: UploadFailureReason, step: string, error: unknown): UploadResult => {
+    // Handled and logged, never swallowed (R-FAIL-01). The partner sees copy
+    // they can act on; the cause — Cloudinary's message included — lands in
+    // the log with the reason.
+    warn(`uploads.uploadImage: ${step} failed for ${folder} (${reason})`, error);
+    return { ok: false, reason, message: UPLOAD_COPY[reason], retainedUri: uri };
+  };
 
-    const signature = await deps.sign(
+  let compressed: CompressedImage;
+  try {
+    compressed = await deps.compress(uri, UPLOAD_MAX_WIDTH, UPLOAD_QUALITY);
+  } catch (error) {
+    return fail('device', 'compressing', error);
+  }
+
+  let signature: UploadSignatureResponse;
+  try {
+    signature = await deps.sign(
       {
         fileName: `${folder}.jpg`,
         contentType: 'image/jpeg',
@@ -93,21 +137,22 @@ export async function uploadImage(
       },
       newIntent(),
     );
-
-    const raw = await deps.put(signature.uploadUrl, signature.fields, compressed.uri);
-
-    return { ok: true, uploadId: cloudinaryResponseSchema.parse(raw).public_id };
   } catch (error) {
-    // Handled and logged, never swallowed (R-FAIL-01). The partner sees copy
-    // they can act on; the trace lands in the log with the reason.
-    warn(`uploads.uploadImage: could not upload to ${folder}`, error);
-    return {
-      ok: false,
-      // website.md §6 copy.
-      message: "Couldn't upload the photo. Check your connection.",
-      retainedUri: uri,
-    };
+    return fail(reasonForHttp(error), 'signing', error);
   }
+
+  let raw: unknown;
+  try {
+    raw = await deps.put(signature.uploadUrl, signature.fields, compressed.uri);
+  } catch (error) {
+    // `put` throws an `UploadError` for an answer, and anything else means the
+    // request never completed.
+    return fail(error instanceof UploadError ? error.reason : 'offline', 'the PUT', error);
+  }
+
+  const stored = cloudinaryResponseSchema.safeParse(raw);
+  if (!stored.success) return fail('refused', 'reading the upload', stored.error);
+  return { ok: true, uploadId: stored.data.public_id };
 }
 
 /** The real device implementation. Injected so the orchestration above is testable. */
@@ -157,9 +202,20 @@ export function defaultUploadDeps(): UploadDeps {
       body.append('file', { uri, name: 'upload.jpg', type: 'image/jpeg' } as unknown as Blob);
 
       const response = await fetch(uploadUrl, { method: 'POST', body });
-      // An ignored non-2xx is exactly what R-FAIL-01 forbids.
+      // An ignored non-2xx is exactly what R-FAIL-01 forbids. Cloudinary says
+      // why in `error.message`, which is worth the log line (never the screen).
       if (!response.ok) {
-        throw new Error(`cloudinary responded ${String(response.status)}`);
+        const status = response.status;
+        let detail = 'no error message';
+        try {
+          const parsed = cloudinaryErrorSchema.safeParse(await response.json());
+          if (parsed.success) detail = parsed.data.error.message;
+        } catch (bodyError) {
+          warn(`uploads.put: Cloudinary's ${String(status)} carried no JSON body`, bodyError);
+        }
+        const reason: UploadFailureReason =
+          status >= 500 || status === 408 || status === 429 ? 'offline' : 'refused';
+        throw new UploadError(reason, `cloudinary responded ${String(status)}: ${detail}`);
       }
       // `.json()` types as `any`; widen to `unknown` rather than pass an `any`
       // through — the caller still validates it with `cloudinaryResponseSchema`

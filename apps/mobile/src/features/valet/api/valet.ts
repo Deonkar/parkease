@@ -13,7 +13,7 @@ import { z } from 'zod';
 
 import { api, type Intent } from '@/lib/api';
 import { warn } from '@/lib/log';
-import { defaultUploadDeps, uploadImage } from '@/lib/uploads';
+import { UploadError, defaultUploadDeps, uploadImage } from '@/lib/uploads';
 
 import type { LocationFix, SendResult } from '../location/queue';
 
@@ -110,7 +110,8 @@ export interface HeldProof {
 export async function uploadProof(uri: string, jobId: string, held: HeldProof): Promise<string> {
   if (held.uploadId === null) {
     const uploaded = await uploadImage(uri, 'proofs', defaultUploadDeps());
-    if (!uploaded.ok) throw new Error(uploaded.message);
+    // The reason travels with the failure, so the screen says why (G4).
+    if (!uploaded.ok) throw new UploadError(uploaded.reason, uploaded.message);
     held.uploadId = uploaded.uploadId;
   }
 

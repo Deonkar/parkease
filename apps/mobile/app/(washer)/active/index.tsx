@@ -211,6 +211,7 @@ export default function WasherActiveScreen() {
         state: slotStateFor(attached[slot], capture, { writable }),
         uri: capture.uri,
         writable: writable && !capture.uploading,
+        error: capture.error,
       };
     };
 

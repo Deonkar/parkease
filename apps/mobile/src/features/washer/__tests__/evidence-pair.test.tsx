@@ -53,6 +53,7 @@ const slot = (overrides: Partial<EvidenceSlotView> = {}): EvidenceSlotView => ({
   state: 'empty',
   uri: null,
   writable: true,
+  error: null,
   ...overrides,
 });
 
@@ -253,5 +254,21 @@ describe('the pair as a layout', () => {
       expect(Number(style(button)['minHeight'])).toBeGreaterThanOrEqual(44);
       expect(String(button.props['accessibilityLabel'])).toMatch(/before|after/i);
     }
+  });
+});
+
+/** G4: the failed slot says the reason the upload gave, not one fixed sentence. */
+describe('a failed slot says why', () => {
+  it('shows the slot s own failure copy', () => {
+    const tree = pair({
+      before: slot({
+        state: 'failed',
+        uri: 'file:///a.jpg',
+        error: "The photo wasn't accepted. Try again, or take it again.",
+      }),
+    });
+
+    expect(text(tree)).toContain("The photo wasn't accepted. Try again, or take it again.");
+    expect(text(tree)).not.toContain('Check your connection');
   });
 });

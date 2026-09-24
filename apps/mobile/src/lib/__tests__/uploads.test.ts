@@ -1,14 +1,18 @@
+import type { RequestUploadSignature } from '@parkease/contracts/shared';
 import MockAdapter from 'axios-mock-adapter';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
+import { ZodError } from 'zod';
 
 import { api } from '@/lib/api';
 
 import {
+  UPLOAD_COPY,
   UPLOAD_MAX_WIDTH,
   UPLOAD_QUALITY,
   defaultUploadDeps,
   uploadImage,
   type UploadDeps,
+  type UploadFolder,
 } from '../uploads';
 
 // `../secure-storage` is mocked so a static `import { api } from '@/lib/api'`
@@ -18,6 +22,9 @@ import {
 vi.mock('../secure-storage', () => ({
   secureStorage: { read: vi.fn(), write: vi.fn(), clear: vi.fn() },
 }));
+
+const logged = vi.hoisted(() => ({ warn: vi.fn() }));
+vi.mock('../log', () => ({ warn: logged.warn }));
 
 const signed = {
   uploadUrl: 'https://api.cloudinary.com/v1_1/demo/image/upload',
@@ -77,6 +84,7 @@ describe('uploadImage', () => {
 
     expect(result).toEqual({
       ok: false,
+      reason: 'offline',
       message: "Couldn't upload the photo. Check your connection.",
       retainedUri: 'file:///raw.jpg',
     });
@@ -156,5 +164,170 @@ describe('defaultUploadDeps', () => {
 
     expect(capturedHeader).toBe(intent.idempotencyKey);
     expect(result).toEqual(signed);
+  });
+});
+
+/**
+ * G4: a failed upload says WHY. "Check your connection" over a photo Cloudinary
+ * refused, or a phone that could not compress it, sends the partner to fix the
+ * wrong thing. Cloudinary's own words go to the warn log, never the screen.
+ */
+describe('why an upload failed', () => {
+  const refusedHttp = (status: number) =>
+    Object.assign(new Error(`Request failed with status code ${String(status)}`), {
+      isAxiosError: true,
+      response: { status, data: { error: { code: 'X', message: 'm', traceId: 't' } } },
+    });
+
+  beforeEach(() => {
+    logged.warn.mockReset();
+  });
+
+  it('is the device when the photo could not be compressed', async () => {
+    const { deps: d } = deps({ compress: () => Promise.reject(new Error('no disk')) });
+    const result = await uploadImage('file:///raw.jpg', 'proofs', d);
+    expect(result).toMatchObject({ ok: false, reason: 'device', message: UPLOAD_COPY.device });
+  });
+
+  it('is offline when signing never reached the server, or it answered 5xx', async () => {
+    for (const failure of [new Error('Network Error'), refusedHttp(503), refusedHttp(429)]) {
+      const { deps: d } = deps({ sign: () => Promise.reject(failure) });
+      const result = await uploadImage('file:///raw.jpg', 'proofs', d);
+      expect(result).toMatchObject({ ok: false, reason: 'offline' });
+    }
+  });
+
+  it('is refused when the server said no to the signature, or answered in a shape we cannot read', async () => {
+    for (const failure of [refusedHttp(403), new ZodError([])]) {
+      const { deps: d } = deps({ sign: () => Promise.reject(failure) });
+      const result = await uploadImage('file:///raw.jpg', 'proofs', d);
+      expect(result).toMatchObject({ ok: false, reason: 'refused', message: UPLOAD_COPY.refused });
+    }
+  });
+
+  it('is offline when the PUT never reached Cloudinary', async () => {
+    const { deps: d } = deps({
+      put: () => Promise.reject(new TypeError('Network request failed')),
+    });
+    const result = await uploadImage('file:///raw.jpg', 'proofs', d);
+    expect(result).toMatchObject({ ok: false, reason: 'offline', message: UPLOAD_COPY.offline });
+  });
+
+  it('is refused when Cloudinary answers without a public_id', async () => {
+    const { deps: d } = deps({ put: () => Promise.resolve({ error: 'nope' }) });
+    const result = await uploadImage('file:///raw.jpg', 'proofs', d);
+    expect(result).toMatchObject({ ok: false, reason: 'refused' });
+  });
+
+  it('says each reason in its own words, and only offline mentions the connection', () => {
+    expect(new Set(Object.values(UPLOAD_COPY)).size).toBe(3);
+    expect(UPLOAD_COPY.offline).toMatch(/connection/i);
+    expect(UPLOAD_COPY.refused).not.toMatch(/connection/i);
+    expect(UPLOAD_COPY.device).not.toMatch(/connection/i);
+  });
+});
+
+/**
+ * K1: the REAL `put`. Everything above injects a fake one, which is how a
+ * wrong field name or a dropped signature would reach a device unnoticed.
+ */
+describe('defaultUploadDeps().put', () => {
+  const appended: [string, unknown][] = [];
+
+  class SpyFormData {
+    append(key: string, value: unknown) {
+      appended.push([key, value]);
+    }
+  }
+
+  beforeEach(() => {
+    appended.length = 0;
+    logged.warn.mockReset();
+    vi.stubGlobal('FormData', SpyFormData);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('appends every signed field and the file part, and POSTs them to the signed URL', async () => {
+    const fetchSpy = vi.fn(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ public_id: 'parkease/proofs/abc' }), { status: 200 }),
+      ),
+    );
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const answer = await defaultUploadDeps().put(signed.uploadUrl, signed.fields, 'file:///s.jpg');
+
+    for (const [key, value] of Object.entries(signed.fields)) {
+      expect(appended).toContainEqual([key, value]);
+    }
+    expect(appended).toContainEqual([
+      'file',
+      { uri: 'file:///s.jpg', name: 'upload.jpg', type: 'image/jpeg' },
+    ]);
+    expect(appended).toHaveLength(Object.keys(signed.fields).length + 1);
+    const [url, init] = fetchSpy.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe(signed.uploadUrl);
+    expect(init.method).toBe('POST');
+    expect(init.body).toBeInstanceOf(SpyFormData);
+    expect(answer).toEqual({ public_id: 'parkease/proofs/abc' });
+  });
+
+  it('throws on a non-2xx, carrying Cloudinary s own message for the log', async () => {
+    vi.stubGlobal('fetch', () =>
+      Promise.resolve(
+        new Response(JSON.stringify({ error: { message: 'Invalid Signature abc' } }), {
+          status: 401,
+        }),
+      ),
+    );
+
+    await expect(
+      defaultUploadDeps().put(signed.uploadUrl, signed.fields, 'file:///s.jpg'),
+    ).rejects.toThrow(/401.*Invalid Signature abc/);
+  });
+
+  it('turns that refusal into refused copy on screen and Cloudinary s words in the log only', async () => {
+    vi.stubGlobal('fetch', () =>
+      Promise.resolve(
+        new Response(JSON.stringify({ error: { message: 'Invalid Signature abc' } }), {
+          status: 401,
+        }),
+      ),
+    );
+    const real = defaultUploadDeps();
+    const result = await uploadImage('file:///raw.jpg', 'proofs', {
+      compress: (uri, width) => Promise.resolve({ uri, width, height: 1 }),
+      sign: () => Promise.resolve(signed),
+      put: real.put,
+    });
+
+    expect(result).toMatchObject({ ok: false, reason: 'refused', message: UPLOAD_COPY.refused });
+    if (!result.ok) expect(result.message).not.toContain('Invalid Signature');
+    // The real `warn` keeps an error's message through its allow-list.
+    const loggedMessages = logged.warn.mock.calls.map(([, error]) =>
+      error instanceof Error ? error.message : '',
+    );
+    expect(loggedMessages.join(' ')).toContain('Invalid Signature abc');
+  });
+
+  it('still throws a non-2xx whose body is not JSON, and logs that', async () => {
+    vi.stubGlobal('fetch', () =>
+      Promise.resolve(new Response('<html>502</html>', { status: 502 })),
+    );
+
+    await expect(
+      defaultUploadDeps().put(signed.uploadUrl, signed.fields, 'file:///s.jpg'),
+    ).rejects.toThrow(/502/);
+  });
+});
+
+/** I3: the folders and the sign input are the contract's, never a local copy. */
+describe('the upload types', () => {
+  it('derive from RequestUploadSignature', () => {
+    expectTypeOf<UploadFolder>().toEqualTypeOf<RequestUploadSignature['folder']>();
+    expectTypeOf<Parameters<UploadDeps['sign']>[0]>().toEqualTypeOf<RequestUploadSignature>();
   });
 });

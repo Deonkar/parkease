@@ -20,6 +20,8 @@ export interface EvidenceSlotView {
   readonly uri: string | null;
   /** The server would take a photo for this slot now: capture or Retake. */
   readonly writable: boolean;
+  /** Why this slot's last send failed, in the words the upload chose (G4). */
+  readonly error: string | null;
 }
 
 export interface EvidencePairProps {
@@ -29,7 +31,7 @@ export interface EvidencePairProps {
   readonly onRetry: (slot: PhotoSlot) => void;
 }
 
-/** website.md §6 copy. */
+/** website.md §6 copy, for a failed slot that was handed no reason. */
 const UPLOAD_FAILED = "Couldn't upload the photo. Check your connection.";
 
 const NAME: Readonly<Record<PhotoSlot, string>> = { before: 'Before', after: 'After' };
@@ -243,7 +245,7 @@ function EvidenceSlot({ slot, view, fill, onCapture, onRetry }: EvidenceSlotProp
       {state === 'failed' ? (
         <>
           <Text style={styles.failure} accessibilityLiveRegion="polite">
-            {UPLOAD_FAILED}
+            {view.error ?? UPLOAD_FAILED}
           </Text>
           {/* Their own row: two actions do not fit beside the status in a half. */}
           <View style={styles.actions}>

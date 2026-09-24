@@ -1,4 +1,5 @@
 import { warn } from '@/lib/log';
+import { UPLOAD_COPY, UploadError } from '@/lib/upload-failure';
 
 /**
  * Capturing the proof photo that unlocks `parking → parked`.
@@ -45,8 +46,9 @@ export async function submitProof(uri: string, deps: ProofDeps): Promise<ProofRe
     warn('valet.submitProof: could not attach the proof photo', error);
     return {
       ok: false,
-      // website.md §6 copy.
-      message: "Couldn't upload the photo. Check your connection.",
+      // The upload's own reason when it gave one (G4); anything else — the
+      // attach call — is website.md §6's connection copy.
+      message: error instanceof UploadError ? error.message : UPLOAD_COPY.offline,
       retainedUri: uri,
     };
   }
