@@ -21,7 +21,7 @@ import {
 const BUSINESS: BusinessDraft = {
   businessName: 'SparkleWash Koramangala',
   gstin: '',
-  photoIds: ['spaces/abc'],
+  photoIds: ['parkease/spaces/abc'],
   opens: '07:00',
   closes: '20:00',
   services: ['basic_exterior', 'premium_wash'],
@@ -29,7 +29,7 @@ const BUSINESS: BusinessDraft = {
 
 const GIG: GigDraft = {
   name: 'Raju M.',
-  idDocumentId: 'documents/id-1',
+  idDocumentId: 'parkease/documents/id-1',
   services: ['quick_wipe'],
 };
 
@@ -43,7 +43,7 @@ describe('the business form', () => {
     if (!built.ok) return;
     expect(built.profile.partnerType).toBe('business');
     expect(built.profile.businessName).toBe('SparkleWash Koramangala');
-    expect(built.profile.businessPhotoIds).toEqual(['spaces/abc']);
+    expect(built.profile.businessPhotoIds).toEqual(['parkease/spaces/abc']);
     expect(built.profile.capabilities).toEqual(['basic_exterior', 'premium_wash']);
     expect(built.profile).not.toHaveProperty('gstin');
   });
@@ -142,7 +142,7 @@ describe('the gig form', () => {
     expect(built.profile.businessName).toBe('Raju M.');
     expect(built.profile.capabilities).toEqual(['quick_wipe']);
     expect(built.profile.businessPhotoIds).toEqual([]);
-    expect(built.documents).toEqual({ idDocumentId: 'documents/id-1' });
+    expect(built.documents).toEqual({ idDocumentId: 'parkease/documents/id-1' });
   });
 
   it('never carries an identity number, whatever the draft holds', () => {

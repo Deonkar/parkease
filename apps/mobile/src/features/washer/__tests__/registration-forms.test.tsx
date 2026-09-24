@@ -39,16 +39,28 @@ const heldUploads = (overrides: Partial<HeldUploads> = {}): HeldUploads => ({
 
 const UPLOADED_ID = heldUploads({
   items: [
-    { key: '1', uri: 'file:///id.jpg', uploadId: 'documents/id-1', uploading: false, error: null },
+    {
+      key: '1',
+      uri: 'file:///id.jpg',
+      uploadId: 'parkease/documents/id-1',
+      uploading: false,
+      error: null,
+    },
   ],
-  uploadIds: ['documents/id-1'],
+  uploadIds: ['parkease/documents/id-1'],
 });
 
 const UPLOADED_PHOTO = heldUploads({
   items: [
-    { key: '1', uri: 'file:///shop.jpg', uploadId: 'spaces/1', uploading: false, error: null },
+    {
+      key: '1',
+      uri: 'file:///shop.jpg',
+      uploadId: 'parkease/spaces/1',
+      uploading: false,
+      error: null,
+    },
   ],
-  uploadIds: ['spaces/1'],
+  uploadIds: ['parkease/spaces/1'],
 });
 
 const inputs = (tree: RenderedNode | null) => nodes(tree).filter((n) => n.type === 'TextInput');
@@ -172,7 +184,7 @@ describe('the gig form', () => {
         businessPhotoIds: [],
         capabilities: ['quick_wipe'],
       },
-      documents: { idDocumentId: 'documents/id-1' },
+      documents: { idDocumentId: 'parkease/documents/id-1' },
     });
   });
 
@@ -304,7 +316,7 @@ describe('the business form', () => {
       operatingHours?: Record<string, unknown>;
       capabilities?: string[];
     };
-    expect(profile.businessPhotoIds).toEqual(['spaces/1']);
+    expect(profile.businessPhotoIds).toEqual(['parkease/spaces/1']);
     expect(Object.keys(profile.operatingHours ?? {})).toHaveLength(7);
     expect(profile.capabilities).toEqual(['premium_wash']);
   });
