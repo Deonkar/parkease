@@ -12,6 +12,13 @@ export interface OfferCountdownProps {
 /** How often the countdown re-reads the clock. It shows whole seconds. */
 const TICK_MS = 1_000;
 
+/**
+ * The share of the window left below which the countdown turns to warning
+ * (M11). Before, it was amber from the first second, so "urgent" was its
+ * resting state and meant nothing once it really was.
+ */
+const URGENT_FRACTION = 1 / 3;
+
 function formatCountdown(msLeft: number): string {
   const seconds = Math.floor(Math.max(0, msLeft) / 1000);
   return `${String(Math.floor(seconds / 60))}:${String(seconds % 60).padStart(2, '0')}`;
@@ -49,17 +56,23 @@ export function OfferCountdown({ offeredAt, expiresAt, onExpire }: OfferCountdow
   const percent = Math.round(Math.min(1, Math.max(0, fraction)) * 100);
   // In-process arithmetic on a clamped number, so the template type holds.
   const fill = `${String(percent)}%` as `${number}%`;
+  const urgent = fraction <= URGENT_FRACTION;
 
   return (
     <View style={styles.expiry}>
-      <Text style={styles.expiryLabel}>{`Expires in ${formatCountdown(msLeft)}`}</Text>
+      <Text style={[styles.expiryLabel, urgent && styles.urgent]}>
+        {`Expires in ${formatCountdown(msLeft)}`}
+      </Text>
       {/* The words above already say it; the bar is for a glance with wet hands. */}
       <View
         style={styles.track}
         accessibilityElementsHidden
         importantForAccessibility="no-hide-descendants"
       >
-        <View style={[styles.fill, { width: fill }]} testID="offer-expiry-fill" />
+        <View
+          style={[styles.fill, urgent && styles.fillUrgent, { width: fill }]}
+          testID="offer-expiry-fill"
+        />
       </View>
     </View>
   );
@@ -67,12 +80,20 @@ export function OfferCountdown({ offeredAt, expiresAt, onExpire }: OfferCountdow
 
 const styles = StyleSheet.create({
   expiry: { marginTop: spacing.base, gap: spacing.sm },
-  expiryLabel: { fontSize: fontSize.xs, fontWeight: fontWeight.semibold, color: colors.warning },
+  // M11: readable at the card's body size, calm until the last third.
+  expiryLabel: {
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.semibold,
+    color: colors.textSecondary,
+  },
+  urgent: { color: colors.warning },
+  // ElapsedBar's height, so the two bars in the flow read as one family.
   track: {
-    height: spacing.xs,
+    height: spacing.sm,
     borderRadius: radius.full,
     backgroundColor: colors.surfaceTertiary,
     overflow: 'hidden',
   },
-  fill: { height: spacing.xs, borderRadius: radius.full, backgroundColor: colors.warning },
+  fill: { height: spacing.sm, borderRadius: radius.full, backgroundColor: colors.textTertiary },
+  fillUrgent: { backgroundColor: colors.warning },
 });

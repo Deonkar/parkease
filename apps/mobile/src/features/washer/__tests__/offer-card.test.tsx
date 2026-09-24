@@ -1,6 +1,6 @@
 import { toPaise } from '@parkease/contracts/primitives';
 import type { WashJobOffer } from '@parkease/contracts/washer';
-import { fontSize } from '@parkease/tokens';
+import { colors, fontSize, spacing } from '@parkease/tokens';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -272,5 +272,45 @@ describe('accepting', () => {
 
     expect(buttons).toHaveLength(1);
     expect(String(buttons[0]?.props['accessibilityLabel'])).toContain('₹319.20');
+  });
+});
+
+/**
+ * M11 (impeccable P5): the countdown was the smallest text on the card and
+ * amber from 5:00, so "urgent" was the resting state. It reads at `fontSize.sm`
+ * in the secondary ink for the first two-thirds of the window and turns to
+ * `warning` only for the last third; the bar matches ElapsedBar's height.
+ */
+describe('the countdown styling', () => {
+  const label = (tree: ReturnType<typeof card>) =>
+    nodes(tree).find((node) => node.type === 'Text' && text(node).startsWith('Expires in'));
+  const fillOf = (tree: ReturnType<typeof card>) => byTestId(tree, 'offer-expiry-fill');
+
+  it('is calm for the first two-thirds of the window', () => {
+    // 2:31 of 3:00 left.
+    const tree = card();
+    const words = label(tree);
+
+    expect(words && style(words)['fontSize']).toBe(fontSize.sm);
+    expect(words && style(words)['color']).toBe(colors.textSecondary);
+    const fill = fillOf(tree);
+    expect(fill && style(fill)['backgroundColor']).not.toBe(colors.warning);
+  });
+
+  it('turns to warning for the last third', () => {
+    // 0:59 of 3:00 left: under a third.
+    vi.setSystemTime(Date.parse('2026-09-23T10:02:01.000Z'));
+    const tree = card();
+    const words = label(tree);
+
+    expect(words && style(words)['color']).toBe(colors.warning);
+    const fill = fillOf(tree);
+    expect(fill && style(fill)['backgroundColor']).toBe(colors.warning);
+  });
+
+  it('draws its track at the elapsed bar s height', () => {
+    const fill = fillOf(card());
+
+    expect(fill && style(fill)['height']).toBe(spacing.sm);
   });
 });
