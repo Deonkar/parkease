@@ -54,7 +54,9 @@ describe('attachWashPhotoSchema', () => {
    * any image on the internet.
    */
   it('takes one upload id', () => {
-    expect(attachWashPhotoSchema.safeParse({ photoId: 'wash/before/abc123' }).success).toBe(true);
+    expect(
+      attachWashPhotoSchema.safeParse({ photoId: 'parkease/proofs/before-abc123' }).success,
+    ).toBe(true);
   });
 
   it('refuses a URL and refuses an array', () => {
@@ -151,7 +153,7 @@ describe('upsertWashServiceSchema', () => {
 });
 
 describe('createWasherProfileSchema', () => {
-  const PHOTO = ['spaces/shop-front'];
+  const PHOTO = ['parkease/spaces/shop-front'];
 
   it('requires a business name from a business partner', () => {
     expect(

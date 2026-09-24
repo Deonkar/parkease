@@ -132,7 +132,7 @@ const attachPhoto = (jobId: string, washerId: string, slot: 'before' | 'after') 
     method: 'POST',
     url: `/api/v1/washer/jobs/${jobId}/${slot}-photo`,
     headers: key(),
-    payload: { photoId: `wash/${slot}/abc123` },
+    payload: { photoId: `parkease/proofs/${slot}-abc123` },
   });
 };
 

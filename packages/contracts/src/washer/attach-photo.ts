@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { uploadIdIn } from '../shared/upload-signature.js';
+
 /**
  * The before or the after photo, as an upload id.
  *
@@ -11,14 +13,12 @@ import { z } from 'zod';
  * validates magic bytes rather than trusting a content type (R-VAL-01) and
  * stores to Cloudinary with private delivery. Accepting a client-supplied URL
  * would let a partner point the proof trail at any image on the internet —
- * which is the whole evidentiary value of a before/after pair, gone.
+ * which is the whole evidentiary value of a before/after pair, gone. And it
+ * must be a PROOF: an id from `documents` would point the evidence trail at
+ * somebody's ID image.
  */
 export const attachWashPhotoSchema = z.object({
-  photoId: z
-    .string()
-    .min(1)
-    .max(255)
-    .regex(/^[A-Za-z0-9_\-/]+$/, 'an upload id, not a URL'),
+  photoId: uploadIdIn('proofs'),
 });
 
 export type AttachWashPhoto = z.infer<typeof attachWashPhotoSchema>;

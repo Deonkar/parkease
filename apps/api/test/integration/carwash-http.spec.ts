@@ -153,7 +153,7 @@ const attachPhoto = (
   jobId: string,
   washerId: string,
   slot: 'before' | 'after',
-  photoId = `wash/${slot}/abc123`,
+  photoId = `parkease/proofs/${slot}-abc123`,
 ) => {
   asUser(washerId, ['washer']);
   return http.request({
@@ -574,20 +574,22 @@ describe('photo slots close with the step they evidence', () => {
     const res = await attachPhoto(jobId, washerId, 'before');
 
     expect(res.status).toBe(200);
-    expect(dataOf<{ beforePhotoId: string }>(res.body).beforePhotoId).toBe('wash/before/abc123');
+    expect(dataOf<{ beforePhotoId: string }>(res.body).beforePhotoId).toBe(
+      'parkease/proofs/before-abc123',
+    );
   });
 
   it('lets the before photo be retaken while still on the way', async () => {
     const washerId = await seedWasher();
     const jobId = await openJob();
     await accept(jobId, washerId);
-    await attachPhoto(jobId, washerId, 'before', 'wash/before/first');
+    await attachPhoto(jobId, washerId, 'before', 'parkease/proofs/before-first');
     await advance(jobId, washerId, 'en_route');
 
-    const res = await attachPhoto(jobId, washerId, 'before', 'wash/before/second');
+    const res = await attachPhoto(jobId, washerId, 'before', 'parkease/proofs/before-second');
 
     expect(res.status).toBe(200);
-    expect((await photoIds(jobId))?.before).toBe('wash/before/second');
+    expect((await photoIds(jobId))?.before).toBe('parkease/proofs/before-second');
   });
 
   it('refuses a before photo once washing has started, and keeps the original', async () => {
@@ -595,14 +597,14 @@ describe('photo slots close with the step they evidence', () => {
     const jobId = await openJob();
     await accept(jobId, washerId);
     await advance(jobId, washerId, 'en_route');
-    await attachPhoto(jobId, washerId, 'before', 'wash/before/original');
+    await attachPhoto(jobId, washerId, 'before', 'parkease/proofs/before-original');
     await advance(jobId, washerId, 'start_washing');
 
-    const res = await attachPhoto(jobId, washerId, 'before', 'wash/before/replacement');
+    const res = await attachPhoto(jobId, washerId, 'before', 'parkease/proofs/before-replacement');
 
     expect(res.status).toBe(409);
     expect(errorOf(res.body).code).toBe('PHOTO_SLOT_CLOSED');
-    expect((await photoIds(jobId))?.before).toBe('wash/before/original');
+    expect((await photoIds(jobId))?.before).toBe('parkease/proofs/before-original');
   });
 
   it('refuses an after photo before washing has started', async () => {
@@ -625,14 +627,14 @@ describe('photo slots close with the step they evidence', () => {
     await advance(jobId, washerId, 'en_route');
     await attachPhoto(jobId, washerId, 'before');
     await advance(jobId, washerId, 'start_washing');
-    await attachPhoto(jobId, washerId, 'after', 'wash/after/original');
+    await attachPhoto(jobId, washerId, 'after', 'parkease/proofs/after-original');
     expect((await advance(jobId, washerId, 'complete')).status).toBe(200);
 
-    const res = await attachPhoto(jobId, washerId, 'after', 'wash/after/replacement');
+    const res = await attachPhoto(jobId, washerId, 'after', 'parkease/proofs/after-replacement');
 
     expect(res.status).toBe(409);
     expect(errorOf(res.body).code).toBe('PHOTO_SLOT_CLOSED');
-    expect((await photoIds(jobId))?.after).toBe('wash/after/original');
+    expect((await photoIds(jobId))?.after).toBe('parkease/proofs/after-original');
   });
 
   it('refuses a photo on a cancelled job', async () => {
@@ -660,7 +662,7 @@ describe('photo slots close with the step they evidence', () => {
     const jobId = await openJob();
     await accept(jobId, washerId);
     await advance(jobId, washerId, 'en_route');
-    await attachPhoto(jobId, washerId, 'before', 'wash/before/owner');
+    await attachPhoto(jobId, washerId, 'before', 'parkease/proofs/before-owner');
     await advance(jobId, washerId, 'start_washing');
 
     // Both slot states: open for the owner (after) and closed for everybody
@@ -672,7 +674,7 @@ describe('photo slots close with the step they evidence', () => {
     expect(closed.status).toBe(404);
     expect(errorOf(closed.body).code).not.toBe('PHOTO_SLOT_CLOSED');
     const ids = await photoIds(jobId);
-    expect(ids?.before).toBe('wash/before/owner');
+    expect(ids?.before).toBe('parkease/proofs/before-owner');
     expect(ids?.after).toBeNull();
   });
 
@@ -971,7 +973,7 @@ describe('the service menu', () => {
       headers: key(),
       payload: {
         partnerType: 'business',
-        businessPhotoIds: ['spaces/shop-front'],
+        businessPhotoIds: ['parkease/spaces/shop-front'],
         capabilities: ['premium_wash'],
       },
     });
@@ -1049,7 +1051,7 @@ describe('POST /washer/profile — where verification starts', () => {
     const created = await register({
       partnerType: 'business',
       businessName: 'SparkleWash',
-      businessPhotoIds: ['spaces/shop-front'],
+      businessPhotoIds: ['parkease/spaces/shop-front'],
       capabilities: ['premium_wash'],
     });
 
@@ -1087,7 +1089,7 @@ describe('POST /washer/profile — where verification starts', () => {
       method: 'POST',
       url: '/api/v1/washer/profile/documents',
       headers: key(),
-      payload: { idDocumentId: 'documents/id-front' },
+      payload: { idDocumentId: 'parkease/documents/id-front' },
     });
     expect(sent.status).toBe(201);
     expect(await statusOf()).toBe('pending');

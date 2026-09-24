@@ -5,6 +5,13 @@ import {
   carwashServiceNameSchema,
 } from '../enums/carwash-service-name.js';
 import { verificationStatusSchema } from '../enums/verification-status.js';
+import { uploadIdIn } from '../shared/upload-signature.js';
+
+/**
+ * A business's shop-front photos: uploads signed into `spaces`, the folder a
+ * space listing's photos use, at most ten.
+ */
+const businessPhotoIdsSchema = z.array(uploadIdIn('spaces')).max(10);
 
 export const WASHER_PARTNER_TYPE_VALUES = ['business', 'gig'] as const;
 export const washerPartnerTypeSchema = z.enum(WASHER_PARTNER_TYPE_VALUES);
@@ -68,7 +75,7 @@ export const createWasherProfileSchema = z
       .string()
       .regex(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/, 'not a GSTIN')
       .optional(),
-    businessPhotoIds: z.array(z.string().min(1).max(255)).max(10).default([]),
+    businessPhotoIds: businessPhotoIdsSchema.default([]),
     operatingHours: operatingHoursSchema.optional(),
     /**
      * The services this partner offers, from the closed catalogue (ruling
@@ -103,8 +110,14 @@ export type CreateWasherProfile = z.infer<typeof createWasherProfileSchema>;
  * they are replacing.
  */
 export const submitWasherDocumentsSchema = z.object({
-  idDocumentId: z.string().min(1).max(255),
-  businessPhotoIds: z.array(z.string().min(1).max(255)).max(10).optional(),
+  /** An upload signed into `documents`, the folder Cloudinary delivers privately. */
+  idDocumentId: uploadIdIn('documents'),
+  /**
+   * Absent leaves the business's photos as they are. Present replaces them, so
+   * it must hold at least one: `[]` erased every photo and still moved the
+   * business to `pending` — a review of a submission with nothing in it.
+   */
+  businessPhotoIds: businessPhotoIdsSchema.min(1).optional(),
 });
 
 export type SubmitWasherDocuments = z.infer<typeof submitWasherDocumentsSchema>;

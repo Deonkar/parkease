@@ -975,31 +975,35 @@ face has the same gap.
   profile screens collect and show it, and an HTTP test covers the write and its ownership
   check.
 
-### S-50 — Upload ids are never verified server-side (security)
+### S-50 — Upload ids are never checked for existence or ownership (security)
 
 - **Status:** `open`
 - **Found in:** task 14 task-11 review stack, security lens (the task-1 upload path and the
-  task-7 / task-10 attach endpoints)
+  task-7 / task-10 attach endpoints); corrected in the task 14 final fix wave
 - **Surface:** api (washer, valet, owner)
 
 `attachWashPhotoSchema.photoId`, `submitWasherDocumentsSchema.idDocumentId` /
-`businessPhotoIds` and valet's `proofPhotoId` accept any string that matches the upload-id
-regex. Nothing checks three things: that the upload exists, that it belongs to the caller, and
-that it sits in the right folder. ID proof should be in `documents`, which uses private
-delivery. Two consequences follow:
+`businessPhotoIds`, `createWasherProfileSchema.businessPhotoIds` and valet's `proofPhotoId`
+are well-formed upload ids. Nothing checks two things: that the upload exists, and that it
+belongs to the caller. Two consequences follow:
 
 - A partner can reach `verification_status = 'pending'` with an id they made up.
 - An evidence photo, the before/after pair whose value is that it can't be forged, can point
-  at another user's upload.
+  at another user's upload in the same folder.
 
-The regex blocks URLs. It does not establish ownership.
+**Corrected.** This row used to say "the regex blocks URLs". That was true only of
+`attachWashPhotoSchema`: the profile fields were `z.string().min(1).max(255)` and took a URL.
+The task 14 final fix wave closed the URL and folder half: every field above now parses through
+`uploadIdIn(folder)` (`packages/contracts/src/shared/upload-signature.ts`), which refuses a URL
+and requires the `parkease/<folder>/` prefix the signer uses (`proofs`, `documents`, `spaces`).
+What remains is existence and ownership, which a schema cannot know.
 
 - **Why deferred:** the fix is a new record of issued upload signatures, and the washer, valet
   and owner attach paths would all have to check against it. That is a cross-role security
   change with its own migration, not a fix inside the mobile screens.
 - **Done means:** the API records each signed upload (id, owner, folder) when it issues the
   signature. Every attach endpoint checks the id against that record, and rejects an unknown
-  id, another user's id, or a wrong-folder id with a 4xx. An HTTP test covers each rejection.
+  id or another user's id with a 4xx. An HTTP test covers each rejection.
 
 ### S-51 — Valet location heartbeat idempotency keys are not UUIDs
 
