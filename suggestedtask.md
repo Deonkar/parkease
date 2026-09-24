@@ -1261,3 +1261,173 @@ gateway call) can run twice.
 - **Done means:** a Fastify `requestTimeout`, a pool `statement_timeout` and a gateway client
   timeout are set, each below `IDEMPOTENCY_IN_FLIGHT_STALE_MS`. A comment on the constant names
   them as the bound it is derived from, and a unit test asserts the ordering.
+
+### S-65 — `switch-exhaustiveness-check` is not on, so exhaustiveness is a convention
+
+- **Status:** `open`
+- **Found in:** task 14 final fix wave, I1 (TypeScript lens)
+- **Surface:** mobile + admin + web + api
+
+I1 ended every `switch` over a union in the washer screens and components in
+`default: return assertNever(x)` (`apps/mobile/src/lib/assert-never.ts`), and
+`features/washer/__tests__/exhaustive-switch.test.ts` pins the files the fix wave named. Every
+other role's `switch` still falls through silently when a union gains a member, and the pin is a
+grep over named files, not a rule.
+
+- **Why deferred:** turning on `@typescript-eslint/switch-exhaustiveness-check` in the shared
+  ESLint config touches driver, owner, valet, admin, web and api code, far outside task 14's
+  file list, and each hit needs a decision rather than a mechanical default.
+- **Done means:** the rule is on in the shared config with
+  `requireDefaultForNonUnion: true`, every hit is fixed with a case or `assertNever`, and the
+  washer grep test is deleted as redundant.
+
+### S-66 — `washerKeys` are bare arrays, so a cache write is not type-checked
+
+- **Status:** `open`
+- **Found in:** task 14 final fix wave, H1/H3 (React lens)
+- **Surface:** mobile
+
+`features/washer/hooks/useWasherQueries.ts` keys the cache with `as const` arrays. So
+`client.setQueryData(washerKeys.active, job)` accepts any value for `job`: nothing ties the key to
+the `WashJobView | null` its query returns. H1 and H3 added more cache writes (the won job, the
+held ID upload) and each is correct only by reading.
+
+- **Why deferred:** moving the keys to `queryOptions()` changes every `useQuery` and
+  `setQueryData` call in the file and the tests that mock them. The fix wave kept to the behaviour
+  it was asked for.
+- **Done means:** each key is a `queryOptions({ queryKey, queryFn })`, every `setQueryData`,
+  `getQueryData` and `invalidateQueries` uses it, and a type test shows a wrong value for a key
+  failing `tsc`.
+
+### S-67 — No test proves presence `stop()` returns without waiting out the GPS timeout
+
+- **Status:** `open`
+- **Found in:** task 14 final fix wave, test-adequacy lens
+- **Surface:** mobile
+
+`presence.test.ts` › "stop() resolves while a beat is stuck on the GPS" advances the fake clock
+by `LOCATE_TIMEOUT_MS * 2` before it awaits `stop()`. So it passes whether `stop()` returns
+straight away or only after the stuck beat times out. The promise the code makes is the first
+one: a partner switching off in a basement goes offline now, not in 15 seconds.
+
+- **Why deferred:** found while reading the suite for I5; the fix wave's brief lists it as a row.
+- **Done means:** a test holds the GPS promise open, calls `stop()`, advances the clock by less
+  than `LOCATE_TIMEOUT_MS` (or not at all), and asserts `stop()` has resolved and the offline
+  PATCH has been sent.
+
+### S-68 — The bare-href guard only sees template literals
+
+- **Status:** `open`
+- **Found in:** task 14 final fix wave, test-adequacy lens
+- **Surface:** mobile
+
+`src/lib/__tests__/landing-route.test.ts` › "no file under app/ or src/ builds a bare
+/(${...}) href" matches `` `/(${`` only. A bare group href written as a string literal
+(`'/(washer)'`) or built by concatenation (`'/(' + role + ')'`) resolves nowhere for a group
+with no `index.tsx` (T11-W1), and the guard does not see it.
+
+- **Why deferred:** widening the pattern means auditing every `href` and `router.*` call across
+  every role for false positives.
+- **Done means:** the guard also catches a string-literal `'/(group)'` and a concatenated one,
+  or `landingRouteFor`'s route type is narrowed so a bare group is a type error, with a test
+  that fails on each form.
+
+### S-69 — Dev-mock preview leftovers (task 11b)
+
+- **Status:** `open`
+- **Found in:** task 11b live walk-through; task 14 final fix wave, L
+- **Surface:** mobile (dev only)
+
+Three dev-only items from the preview, none reachable in a release build:
+
+- After a completion, the fixture earnings summary reads inconsistent with its lines:
+  `recordCompleted` adds the line and bumps `jobsCompleted`, but leaves the summary's money
+  figures as seeded.
+- The fixture data (`features/washer/api/dev-fixtures.ts`) ships in the release bundle.
+  `isWasherDevMock()` makes it unreachable, but Metro bundles every `require()`
+  (learnings.md), so the bytes are there.
+- Refusals as plain `Error`s: **closed by I7.** The store now throws the API's envelope with
+  the server's status and code, so the preview takes the production failure paths.
+
+- **Why deferred:** dev-only, and the first two need a fixture-summary recomputation and a
+  build-time exclusion respectively, neither of which the partner sees.
+- **Done means:** the fixture summary is recomputed from its lines by a helper that is itself
+  dev-only, and the fixtures are excluded from release builds (a `__DEV__`-guarded `require`
+  that Metro strips, or a separate entry), with a bundle check that the fixture file is absent.
+
+### S-70 — The profile screen has no back arrow
+
+- **Status:** `open`
+- **Found in:** task 14 live walk-through (V-series), pending the device pass
+- **Surface:** mobile
+
+The washer profile is reached from the header account icon and is a hidden tab
+(`href: null`), so it draws no back arrow. On Android the system back works; in the browser
+preview there is no way back except the tab bar. H2's `popToTopOnBlur` keeps the stack sane; it
+does not add the arrow.
+
+- **Why deferred:** whether a hidden tab should draw a back arrow is a navigation-design call
+  that the device pass decides (Android back may be enough), and section M owns the header.
+- **Done means:** after the device pass, either the profile draws a back arrow that returns to
+  the tab it came from, or the decision not to is recorded with the device evidence.
+
+### S-71 — The Offers tab has no badge for waiting offers (§14.3)
+
+- **Status:** `open`
+- **Found in:** task 14 whole-branch spec review
+- **Surface:** mobile
+
+§14.3's tab bar shows a count on Offers when jobs are waiting. The washer layout draws four
+plain tabs. A partner on Menu or Earnings has no cue that an offer is expiring.
+
+- **Why deferred:** a badge needs the offers count outside the offers screen (a shared query
+  subscription in the layout) and a design pass for its colour and size (section M territory).
+- **Done means:** the Offers tab shows the number of open offers while online, from the same
+  query the screen uses (no second poll), announced for TalkBack, with a test.
+
+### S-72 — The active job shows no step timestamps (§14.4)
+
+- **Status:** `open`
+- **Found in:** task 14 whole-branch spec review
+- **Surface:** mobile + contracts
+
+The §14.4 wireframe shows a time beside each completed step (accepted 10:02, on the way 10:04).
+`StepRail` shows the steps with no times, because `washJobViewSchema` carries only
+`acceptedAt`, `startedAt` and `completedAt`, not the `en_route` time.
+
+- **Why deferred:** the missing timestamp is a contract and database field, outside mobile.
+- **Done means:** the job view carries a time for each step, `StepRail` shows it beside the
+  step, formatted in IST with `hourCycle: 'h23'` (learnings.md), with a test.
+
+### S-73 — A stale screen re-rendering is proven only at the cache level
+
+- **Status:** `open`
+- **Found in:** task 14 final fix wave, test-adequacy lens (H3)
+- **Surface:** mobile
+
+`washer-queries.test.ts` proves each mutation cancels in-flight fetches, writes the cache and
+invalidates while another write runs. No test renders a screen through that cache and shows the
+screen itself moving from the stale answer to the new one. A screen that read a stale local copy
+would pass.
+
+- **Why deferred:** a screen-level test needs a `QueryClient`, the screen's providers and the
+  router mocked, a harness the washer screens do not have yet.
+- **Done means:** one screen (the active job) is rendered with a real `QueryClient`, a mutation
+  answer is written, and the rendered status changes with no refetch; a second case shows a
+  late refetch cannot overwrite it.
+
+### S-74 — ID-image copies linger in the app cache after upload
+
+- **Status:** `open`
+- **Found in:** task 14 security lens; task 14 final fix wave, L
+- **Surface:** mobile
+
+The camera writes the ID photo to the app's cache directory, and `expo-image-manipulator`
+writes a compressed copy beside it. Neither is deleted after the upload lands, so an image of a
+government ID stays on the device until the OS evicts the cache. The held upload id (G9) is in
+memory only and is cleared on sign-out; the files are not.
+
+- **Why deferred:** pairs with S-26 (erasure of partner personal data) and needs
+  `expo-file-system` deletes with device testing of the cache paths.
+- **Done means:** after an ID upload succeeds (and on sign-out) the original and compressed files
+  are deleted, a test asserts the delete is called with both uris, and S-26 references this row.
