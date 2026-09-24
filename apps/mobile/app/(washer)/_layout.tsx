@@ -1,6 +1,6 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { Role } from '@parkease/contracts/enums';
-import { colors, fontSize, fontWeight } from '@parkease/tokens';
+import { colors, fontSize, fontWeight, layout, lineHeight, spacing } from '@parkease/tokens';
 import { Tabs, Redirect } from 'expo-router';
 import type { ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -28,12 +28,6 @@ function tabIcon(outline: IconName, filled: IconName) {
   };
 }
 
-/**
- * Material's minimum for bottom navigation with labels. The default tab bar is
- * 48px, which clips the label under a 24px icon — visible at 375x812.
- */
-const TAB_BAR_HEIGHT = 60;
-
 export default function WasherLayout() {
   const auth = useAuth();
   const insets = useSafeAreaInsets();
@@ -51,13 +45,22 @@ export default function WasherLayout() {
         screenOptions={{
           tabBarActiveTintColor: colors.primary,
           tabBarInactiveTintColor: colors.tabInactive,
-          tabBarLabelStyle: { fontSize: fontSize.xs, fontWeight: fontWeight.medium },
-          // The gesture bar sits under the tab bar on a modern Android device, so
-          // the inset is added to the height rather than eating into it.
+          // M2: below the icon at every width. From 768px the bar would put
+          // labels beside the icons in a narrow item and cut "Earnings" short.
+          tabBarLabelPosition: 'below-icon',
+          // Its own line box: without one the 12px label sat in a 9px box.
+          tabBarLabelStyle: {
+            fontSize: fontSize.xs,
+            fontWeight: fontWeight.medium,
+            lineHeight: fontSize.xs * lineHeight.normal,
+          },
+          // Tall enough for the icon box and the label's line (the token says
+          // how). The gesture bar sits under the tab bar on a modern Android
+          // device, so the inset is added to the height rather than eating into it.
           tabBarStyle: {
-            height: TAB_BAR_HEIGHT + insets.bottom,
-            paddingBottom: insets.bottom + 6,
-            paddingTop: 6,
+            height: layout.tabBarHeight + insets.bottom,
+            paddingBottom: insets.bottom + spacing.xs,
+            paddingTop: spacing.xs,
             backgroundColor: colors.surface,
             borderTopColor: colors.border,
           },

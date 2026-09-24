@@ -40,3 +40,25 @@ describe('washer tab bar', () => {
     expect(profile).toMatch(/href:\s*null/);
   });
 });
+
+/**
+ * M2 (walkthrough V2, V3): the label was 12px text in a 9px box, and at 1280px
+ * the bar switched to beside-icon and cut "Earnings" to "Earni…". A fixed word
+ * never truncates (ui-ux-pro-max, compact label overflow: HIGH).
+ */
+describe('washer tab labels', () => {
+  it('stay below the icon at every width', () => {
+    expect(source).toMatch(/tabBarLabelPosition:\s*'below-icon'/);
+  });
+
+  it('get their own line box, from the tokens', () => {
+    expect(source).toMatch(
+      /tabBarLabelStyle:\s*\{[^}]*lineHeight:\s*fontSize\.xs \* lineHeight\.normal/,
+    );
+  });
+
+  it('sit in a bar sized by the token, with the gesture inset added on top', () => {
+    expect(source).toMatch(/height:\s*layout\.tabBarHeight \+ insets\.bottom/);
+    expect(source).not.toMatch(/TAB_BAR_HEIGHT = \d+/);
+  });
+});
