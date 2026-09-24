@@ -1,6 +1,8 @@
 import { uuidv7 } from '@parkease/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
+import { WasherEarningsQuery } from '../../src/domains/carwash/queries/washer-earnings.query.js';
+
 import {
   type Harness,
   HOURLY_ONLY,
@@ -198,6 +200,23 @@ async function postWashAt(
   `;
 }
 
+/**
+ * One accept posting — the same three legs as `postWashAt` — at an exact
+ * instant, for the period-bound tests that need a row a minute either side of
+ * an IST midnight rather than whole days back.
+ */
+async function postWashAtInstant(washerId: string, at: Date): Promise<void> {
+  const txnId = uuidv7();
+  await h.sql`
+    INSERT INTO ledger_entries
+      (txn_id, account, direction, amount_paise, counterparty_user_id, description, occurred_at)
+    VALUES
+      (${txnId}, 'driver_receivable', 'debit', 39900, NULL, 'car wash service', ${at}),
+      (${txnId}, 'owner_payable', 'credit', 31920, ${washerId}, 'car wash service', ${at}),
+      (${txnId}, 'platform_revenue', 'credit', 7980, NULL, 'car wash service', ${at})
+  `;
+}
+
 interface Summary {
   grossPaise: number;
   reversedPaise: number;
@@ -347,5 +366,218 @@ describe('GET /washer/earnings — period filter and per-job lines', () => {
     asUser(h.driverId, ['driver']);
     const asDriver = await http.request({ method: 'GET', url: '/api/v1/washer/earnings' });
     expect(asDriver.status).toBe(403);
+  });
+});
+
+/**
+ * Database M3 = silent failure M8, and silent failure M9 (task 14 final fix
+ * wave). A completed job is paid for by a ledger posting; a line with no
+ * posting behind it is a broken row. `coalesce(…, 0)` used to turn it into a
+ * ₹0 line — a plausible lie on a money screen — and a response that did fail
+ * its parse answered 400, blaming the partner's phone. Now it fails loudly, as
+ * the server fault it is.
+ */
+describe('GET /washer/earnings — a missing posting fails loudly', () => {
+  it('answers 500 INTERNAL_ERROR, never a ₹0 line, for a completed job with no posting', async () => {
+    const washerId = await seedWasher();
+    const jobId = await completeAJob(washerId);
+    // Point the job at a transaction nothing was ever posted under. The
+    // ledger is append-only, so this is the only way to lose a posting — and
+    // it is exactly what a job whose accept posting never landed looks like.
+    await h.sql`UPDATE wash_jobs SET txn_id = ${uuidv7()} WHERE id = ${jobId}`;
+
+    const res = await earnings(washerId, '?period=all');
+
+    expect(res.status).toBe(500);
+    expect(errorOf(res.body).code).toBe('INTERNAL_ERROR');
+  });
+
+  it('still reports a zero fee for a zero-commission job, whose posting has no fee leg', async () => {
+    // The one case where a missing platform_revenue leg is the ledger's true
+    // answer: `leg()` drops zero-amount entries, and a 0% rate is a legal
+    // `commission_rate`. Only the net's absence means a missing posting.
+    const washerId = await seedWasher();
+    const jobId = await completeAJob(washerId);
+    const txnId = uuidv7();
+    await h.sql`
+      INSERT INTO ledger_entries (txn_id, account, direction, amount_paise, counterparty_user_id, description)
+      VALUES (${txnId}, 'driver_receivable', 'debit', 39900, NULL, 'car wash service'),
+             (${txnId}, 'owner_payable', 'credit', 39900, ${washerId}, 'car wash service')
+    `;
+    await h.sql`UPDATE wash_jobs SET txn_id = ${txnId}, commission_rate = 0 WHERE id = ${jobId}`;
+
+    const res = await earnings(washerId, '?period=all');
+
+    expect(res.status).toBe(200);
+    const [line] = dataOf<{ lines: { feePaise: number; netPaise: number }[] }>(res.body).lines;
+    expect(line).toMatchObject({ feePaise: 0, netPaise: 39900 });
+  });
+});
+
+/**
+ * Test adequacy 3 (task 14 final fix wave). The fee test above uses a posting
+ * where fee = gross − net holds, so a query that subtracted instead of reading
+ * the ledger would pass it. This posting breaks the identity on purpose.
+ */
+describe('GET /washer/earnings — the lines are the ledger, not arithmetic', () => {
+  /**
+   * Found while writing the test below. The per-line subqueries were written
+   * `${ledgerEntries.txnId} = ${washJobs.txnId}`, and Drizzle renders both as a
+   * bare "txn_id" inside a select field — so the correlation read
+   * `"txn_id" = "txn_id"`, true for every row. Each line's fee was every
+   * platform_revenue credit in the ledger and each net was all of this
+   * partner's credits. With one job the two coincide, which is why the fee
+   * test above could not see it.
+   */
+  it('gives each line its own posting, not the sum of every posting', async () => {
+    const washerId = await seedWasher();
+    const first = await completeAJob(washerId);
+    const second = await completeAJob(washerId, 2);
+
+    const res = await earnings(washerId, '?period=all');
+
+    expect(res.status).toBe(200);
+    const lines = dataOf<{ lines: { jobId: string; feePaise: number; netPaise: number }[] }>(
+      res.body,
+    ).lines;
+    expect(lines.map((l) => l.jobId).sort()).toEqual([first, second].sort());
+    for (const line of lines) {
+      expect(line).toMatchObject({ feePaise: 7980, netPaise: 31920 });
+    }
+  });
+
+  it('reports a second platform_revenue leg as fee, and the job price as gross, unchanged', async () => {
+    const washerId = await seedWasher();
+    const jobId = await completeAJob(washerId);
+    const [job] = await h.sql<
+      { txn_id: string }[]
+    >`SELECT txn_id FROM wash_jobs WHERE id = ${jobId}`;
+    if (job === undefined) throw new Error('job vanished');
+    // A balanced pair on the SAME transaction: 500 more to platform_revenue.
+    // Gross stays 39900 (the job's price) and net stays 31920 (this partner's
+    // credit), so fee = gross − net would still say 7980. The ledger says 8480.
+    await h.sql`
+      INSERT INTO ledger_entries (txn_id, account, direction, amount_paise, counterparty_user_id, description)
+      VALUES (${job.txn_id}, 'driver_receivable', 'debit', 500, NULL, 'car wash adjustment'),
+             (${job.txn_id}, 'platform_revenue', 'credit', 500, NULL, 'car wash adjustment')
+    `;
+
+    const res = await earnings(washerId, '?period=all');
+
+    expect(res.status).toBe(200);
+    expect(dataOf<{ lines: unknown[] }>(res.body).lines).toEqual([
+      expect.objectContaining({ jobId, grossPaise: 39900, feePaise: 8480, netPaise: 31920 }),
+    ]);
+  });
+});
+
+/**
+ * Test adequacy 4 (task 14 final fix wave). The bounds are IST, and the only
+ * instants that tell IST from UTC are the five and a half hours after an IST
+ * midnight — which is where these tests put their rows.
+ */
+describe('GET /washer/earnings — period bounds are Asia/Kolkata', () => {
+  /** The start of this IST day / week / month, plus an offset in minutes, as an instant. */
+  const istStart = async (unit: 'day' | 'week' | 'month', minutes: number): Promise<Date> => {
+    const [row] = await h.sql<{ at: Date }[]>`
+      SELECT (date_trunc(${unit}, now() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata')
+             + make_interval(mins => ${minutes}) AS at
+    `;
+    if (row === undefined) throw new Error('no instant');
+    return row.at;
+  };
+
+  it('counts a posting at Monday 01:00 IST in this week, and one at Sunday 23:00 IST in the last', async () => {
+    // Monday 01:00 IST is Sunday 19:30 UTC: this week in IST, last week in UTC.
+    const washerId = await seedWasher();
+    await postWashAtInstant(washerId, await istStart('week', 60));
+    await postWashAtInstant(washerId, await istStart('week', -60));
+
+    const res = await earnings(washerId, '?period=week');
+
+    expect(res.status).toBe(200);
+    expect(dataOf<{ summary: Summary }>(res.body).summary).toMatchObject({
+      grossPaise: 31920,
+      netPaise: 31920,
+    });
+  });
+
+  it('puts a job completed just after IST midnight in today, and one just before it out', async () => {
+    const washerId = await seedWasher();
+    const afterMidnight = await completeAJob(washerId);
+    const beforeMidnight = await completeAJob(washerId, 2);
+    // 00:01 IST is 18:31 UTC the previous day — today only in IST.
+    const justAfter = await istStart('day', 1);
+    const justBefore = await istStart('day', -1);
+    await h.sql`UPDATE wash_jobs SET completed_at = ${justAfter} WHERE id = ${afterMidnight}`;
+    await h.sql`UPDATE wash_jobs SET completed_at = ${justBefore} WHERE id = ${beforeMidnight}`;
+
+    const today = await earnings(washerId, '?period=today');
+    const week = await earnings(washerId, '?period=week');
+
+    expect(today.status).toBe(200);
+    expect(dataOf<{ lines: { jobId: string }[] }>(today.body).lines.map((l) => l.jobId)).toEqual([
+      afterMidnight,
+    ]);
+
+    // Yesterday 23:59 IST is in this week unless today is Monday in IST, when
+    // it is last week's Sunday. Both answers are asserted, never skipped.
+    const [dow] = await h.sql<{ isodow: number }[]>`
+      SELECT extract(isodow FROM now() AT TIME ZONE 'Asia/Kolkata')::int AS isodow
+    `;
+    const weekIds = dataOf<{ lines: { jobId: string }[] }>(week.body).lines.map((l) => l.jobId);
+    expect(week.status).toBe(200);
+    expect(weekIds).toEqual(dow?.isodow === 1 ? [afterMidnight] : [afterMidnight, beforeMidnight]);
+  });
+
+  it('answers 200 for period=month, with this month’s job in it', async () => {
+    const washerId = await seedWasher();
+    const jobId = await completeAJob(washerId);
+    const monthStart = await istStart('month', 1);
+    await h.sql`UPDATE wash_jobs SET completed_at = ${monthStart} WHERE id = ${jobId}`;
+
+    const res = await earnings(washerId, '?period=month');
+
+    expect(res.status).toBe(200);
+    const view = dataOf<{ period: string; lines: { jobId: string }[] }>(res.body);
+    expect(view.period).toBe('month');
+    expect(view.lines.map((l) => l.jobId)).toEqual([jobId]);
+  });
+});
+
+/**
+ * Database L7 (task 14 final fix wave). The summary and the lines are two
+ * queries; each one's `now()` was its own statement's, so a request straddling
+ * IST midnight could bound the two halves of one response by two different
+ * days. One read-only transaction gives both queries one snapshot and one
+ * `now()`. Asserted on the database handle the query is given: every read goes
+ * through a single `transaction` call in read-only mode, none straight to the
+ * pool.
+ */
+describe('WasherEarningsQuery — one snapshot', () => {
+  it('runs the summary and the lines inside one read-only transaction', async () => {
+    const washerId = await seedWasher();
+    await completeAJob(washerId);
+
+    const calls: { method: string; config: unknown }[] = [];
+    const watched = new Proxy(h.db, {
+      get(target, property, receiver) {
+        const value: unknown = Reflect.get(target, property, receiver);
+        if ((property === 'select' || property === 'transaction') && typeof value === 'function') {
+          return (...args: unknown[]) => {
+            calls.push({ method: property, config: args[1] });
+            return (value as (...a: unknown[]) => unknown).apply(target, args);
+          };
+        }
+        return value;
+      },
+    });
+
+    const view = await new WasherEarningsQuery(watched).forWasher(washerId, 'week');
+
+    expect(view.lines).toHaveLength(1);
+    expect(calls).toEqual([
+      { method: 'transaction', config: expect.objectContaining({ accessMode: 'read only' }) },
+    ]);
   });
 });

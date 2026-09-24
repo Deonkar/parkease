@@ -27,6 +27,7 @@ import { and, asc, count, eq, inArray, notInArray, sql } from 'drizzle-orm';
 
 import { DB, type Database } from '../../platform/db/db.module.js';
 import type { TxHandle } from '../../platform/db/transaction.js';
+import { parseOutgoing } from '../../platform/http/outgoing-contract.js';
 
 import {
   BookingNotWashEligibleError,
@@ -428,7 +429,8 @@ export class CarwashService {
    * The name is the one the partner registered under (ruling T10-C2):
    * `business_name` holds a gig partner's own name too, and nothing writes
    * `users.name`. Both null means a row made outside registration, and the
-   * card's parse refuses it loudly rather than showing a blank partner.
+   * card's parse refuses it loudly rather than showing a blank partner — as a
+   * 500, because it is our row that is broken, not the driver's request.
    */
   async washerCard(washerUserId: string): Promise<WasherCard | null> {
     const [row] = await this.db
@@ -444,7 +446,7 @@ export class CarwashService {
       .innerJoin(users, eq(users.id, washerProfiles.userId))
       .where(eq(washerProfiles.userId, washerUserId));
 
-    return row === undefined ? null : washerCardSchema.parse(row);
+    return row === undefined ? null : parseOutgoing(washerCardSchema, row, 'washer card');
   }
 
   async profileFor(washerUserId: string): Promise<WasherProfileView | null> {
@@ -496,18 +498,23 @@ export class CarwashService {
   }
 }
 
+/** Parsed through `parseOutgoing`: a stored row that fails the view is our fault (S-33). */
 const toProfileView = (row: typeof washerProfiles.$inferSelect): WasherProfileView =>
-  washerProfileViewSchema.parse({
-    partnerType: row.partnerType,
-    businessName: row.businessName,
-    gstin: row.gstin,
-    businessPhotoIds: row.businessPhotoIds,
-    operatingHours: row.operatingHours ?? null,
-    capabilities: row.capabilities,
-    idDocumentId: row.idDocumentId,
-    verificationStatus: row.verificationStatus,
-    isOnline: row.isOnline,
-    lastSeenAt: row.lastSeenAt?.toISOString() ?? null,
-    ratingAvgBp: row.ratingAvgBp,
-    ratingCount: row.ratingCount,
-  });
+  parseOutgoing(
+    washerProfileViewSchema,
+    {
+      partnerType: row.partnerType,
+      businessName: row.businessName,
+      gstin: row.gstin,
+      businessPhotoIds: row.businessPhotoIds,
+      operatingHours: row.operatingHours ?? null,
+      capabilities: row.capabilities,
+      idDocumentId: row.idDocumentId,
+      verificationStatus: row.verificationStatus,
+      isOnline: row.isOnline,
+      lastSeenAt: row.lastSeenAt?.toISOString() ?? null,
+      ratingAvgBp: row.ratingAvgBp,
+      ratingCount: row.ratingCount,
+    },
+    'washer profile view',
+  );

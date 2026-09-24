@@ -654,9 +654,9 @@ failure, but the database should make the row impossible.
   then `VALIDATE CONSTRAINT`), reviewed SAFE, with an integration test that a completed row
   without `completed_at` is refused.
 
-### S-33 — A server-side response parse failure answers `400 VALIDATION_FAILED`
+### S-33 — A server-side response parse failure answers `400 VALIDATION_FAILED` (washer surface done)
 
-- **Status:** `open`
+- **Status:** `open` (the washer surface is done; the rest of the repo remains)
 - **Found in:** task 14 task-3 review (earnings period filter and per-job lines)
 - **Surface:** api
 
@@ -667,13 +667,19 @@ something invalid — that is a server bug and should be a `500`, logged at erro
 id, not blamed on the caller. Task-3's review found exactly this: a negative period net failed
 `washerEarningsViewSchema.parse` and the partner's default earnings screen answered 400.
 
-- **Why deferred:** the fix is a cross-cutting change to the global filter and to how every
-  response parse is written (a distinct error type, or a wrapper), touching every role's
-  endpoints — far outside a single endpoint's review round.
-- **Done means:** response-parse failures are distinguishable from request validation (e.g. a
-  `ResponseContractError` thrown by a shared response-parse helper, or request parsing moved to
-  a pipe that tags its `ZodError`), the filter maps them to `500 INTERNAL_ERROR`, and an HTTP
-  test proves a malformed request still answers 400 while a malformed response answers 500.
+**Done for the washer surface (task 14 final fix wave).** `parseOutgoing(schema, value, what)` in
+`apps/api/src/platform/http/outgoing-contract.ts` parses an outgoing value and rethrows a failure
+as `500 INTERNAL_ERROR` carrying the `ZodError` as its cause, logged at error with the trace id.
+The earnings view, `washerCard()`, the washer profile view and the service menu (`toMenu`) use it;
+`test/outgoing-contract.spec.ts` and two HTTP tests (a completed job with no posting, a washer
+card with no name) prove the 500. **What remains** is every other role's outgoing parse — valet,
+driver, owner and admin views still call `schema.parse()` on their responses and still answer
+400 on a broken row.
+
+- **Why deferred:** the remaining call sites are other roles' endpoints, outside task 14's files.
+- **Done means:** every response parse in `apps/api/src` goes through `parseOutgoing` (a grep for
+  `ViewSchema.parse(` / `Schema.parse(` on response values finds none), and one HTTP test per role
+  proves a malformed response answers 500 while a malformed request still answers 400.
 
 ### S-34 — A wash offer carries no address and no duration, so the card cannot show either
 

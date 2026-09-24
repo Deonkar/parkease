@@ -1285,6 +1285,44 @@ describe('the washer card, for a partner registered through the app', () => {
   });
 });
 
+/**
+ * The other two branches of `washerCard()`'s `coalesce(business_name,
+ * users.name)` (test adequacy 12, task 14 final fix wave), and what the driver
+ * gets when neither exists (silent failure M9).
+ */
+describe('the washer card, without a registered name', () => {
+  const driverView = async (jobId: string) => {
+    asUser(h.driverId, ['driver']);
+    return http.request({ method: 'GET', url: `/api/v1/driver/carwash/requests/${jobId}` });
+  };
+
+  it('falls back to users.name when business_name is null', async () => {
+    // `seedWasher` writes no business_name and `seedUser` writes users.name —
+    // the shape of a partner row made before T10-C2.
+    const washerId = await seedWasher();
+    const [user] = await h.sql<{ name: string }[]>`SELECT name FROM users WHERE id = ${washerId}`;
+    const jobId = await openJob();
+    expect((await accept(jobId, washerId)).status).toBe(200);
+
+    const res = await driverView(jobId);
+
+    expect(res.status).toBe(200);
+    expect(dataOf<{ washer: { name: string } | null }>(res.body).washer?.name).toBe(user?.name);
+  });
+
+  it('answers 500 INTERNAL_ERROR, not a 400 blaming the driver, when neither name exists', async () => {
+    const washerId = await seedWasher();
+    const jobId = await openJob();
+    expect((await accept(jobId, washerId)).status).toBe(200);
+    await h.sql`UPDATE users SET name = NULL WHERE id = ${washerId}`;
+
+    const res = await driverView(jobId);
+
+    expect(res.status).toBe(500);
+    expect(errorOf(res.body).code).toBe('INTERNAL_ERROR');
+  });
+});
+
 describe('the offers list', () => {
   it('quotes the partner their own earnings rather than the price', async () => {
     const washerId = await seedWasher();

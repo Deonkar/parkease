@@ -9,6 +9,7 @@ import { ledgerEntries, washJobs } from '@parkease/db/schema';
 import { and, desc, eq, sql, type SQL, type SQLWrapper } from 'drizzle-orm';
 
 import { DB, type Database } from '../../../platform/db/db.module.js';
+import { parseOutgoing } from '../../../platform/http/outgoing-contract.js';
 import { signedBalancePaise } from '../../ledger/accounts.js';
 
 /**
@@ -30,6 +31,19 @@ function periodBound(column: SQLWrapper, period: WasherEarningsPeriod): SQL | un
   const unit = period === 'today' ? 'day' : period;
   return sql`${column} >= date_trunc(${unit}, now() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata'`;
 }
+
+type ReadTx = Parameters<Parameters<Database['transaction']>[0]>[0];
+
+/**
+ * The job's `txn_id`, qualified by its table.
+ *
+ * Inside a select field Drizzle renders a column as its bare name, so writing
+ * `${ledgerEntries.txnId} = ${washJobs.txnId}` in the correlated subqueries
+ * below produced `"txn_id" = "txn_id"` — both sides resolving to the inner
+ * `ledger_entries`, true for every row. Every line then summed every posting
+ * in the ledger. The outer side has to name its table.
+ */
+const JOB_TXN_ID = sql`${washJobs}.${sql.identifier(washJobs.txnId.name)}`;
 
 /**
  * What a car wash partner has earned, answered from the ledger and nothing else.
@@ -69,9 +83,72 @@ export class WasherEarningsQuery {
     washerUserId: string,
     period: WasherEarningsPeriod = 'week',
   ): Promise<WasherEarningsView> {
-    const summaryBound = periodBound(ledgerEntries.occurredAt, period);
+    /**
+     * One read-only, repeatable-read transaction for both queries (database
+     * L7). The summary and the lines each bound on `now()`; as two statements
+     * outside a transaction they read two clocks and two snapshots, so a
+     * request straddling IST midnight could count the summary by one day and
+     * the lines by the next. Inside one, `now()` is the transaction's start and
+     * both see the same rows. Read-only, so it can take no lock a writer waits
+     * on and can never fail serialisation.
+     */
+    const { summary, lines } = await this.db.transaction(
+      async (tx) => ({
+        summary: await this.summary(tx, washerUserId, period),
+        lines: await this.lines(tx, washerUserId, period),
+      }),
+      { isolationLevel: 'repeatable read', accessMode: 'read only' },
+    );
 
-    const [balance] = await this.db
+    const creditsPaise = Number(summary?.creditsPaise ?? 0);
+    const debitsPaise = Number(summary?.debitsPaise ?? 0);
+
+    /**
+     * The sign comes from the chart of accounts, not from a subtraction written
+     * the way it happened to read here. `owner_payable` is a liability, so it
+     * grows on the credit side — getting this backwards produces a statement
+     * where every partner appears to owe us money.
+     */
+    const netPaise = signedBalancePaise(LedgerAccount.OWNER_PAYABLE, debitsPaise, creditsPaise);
+
+    /**
+     * Raw values in, no fallbacks: a completed job with no `completed_at`, no
+     * price, or no posting behind it is a broken row, and the parse below
+     * refusing it loudly is the right failure. Defaulting to 1970 or to zero
+     * would put a plausible-looking lie on a money screen (R-FAIL-01). A NULL
+     * amount stays NULL here — `Number(null)` is 0, which is exactly the lie —
+     * and `parseOutgoing` turns the refusal into a 500 rather than a 400 that
+     * blames the partner's phone (silent failure M9).
+     */
+    return parseOutgoing(
+      washerEarningsViewSchema,
+      {
+        period,
+        summary: {
+          grossPaise: creditsPaise,
+          reversedPaise: debitsPaise,
+          netPaise,
+          jobsCompleted: lines.length,
+        },
+        lines: lines.map((row) => ({
+          jobId: row.jobId,
+          serviceName: row.serviceName,
+          vehicleType: row.vehicleType,
+          completedAt: row.completedAt === null ? null : row.completedAt.toISOString(),
+          grossPaise: row.grossPaise,
+          feePaise: row.feePaise === null ? null : Number(row.feePaise),
+          netPaise: row.netPaise === null ? null : Number(row.netPaise),
+        })),
+      },
+      'washer earnings view',
+    );
+  }
+
+  /** Ledger movement on this partner's `owner_payable`, by posting time. */
+  private async summary(tx: ReadTx, washerUserId: string, period: WasherEarningsPeriod) {
+    const bound = periodBound(ledgerEntries.occurredAt, period);
+
+    const [balance] = await tx
       .select({
         debitsPaise: sql<string>`coalesce(sum(${ledgerEntries.amountPaise})
           filter (where ${ledgerEntries.direction} = 'debit'), 0)::text`,
@@ -83,87 +160,60 @@ export class WasherEarningsQuery {
         and(
           eq(ledgerEntries.account, LedgerAccount.OWNER_PAYABLE),
           eq(ledgerEntries.counterpartyUserId, washerUserId),
-          ...(summaryBound === undefined ? [] : [summaryBound]),
+          ...(bound === undefined ? [] : [bound]),
         ),
       );
 
-    const creditsPaise = Number(balance?.creditsPaise ?? 0);
-    const debitsPaise = Number(balance?.debitsPaise ?? 0);
+    return balance;
+  }
 
-    /**
-     * The sign comes from the chart of accounts, not from a subtraction written
-     * the way it happened to read here. `owner_payable` is a liability, so it
-     * grows on the credit side — getting this backwards produces a statement
-     * where every partner appears to owe us money.
-     */
-    const netPaise = signedBalancePaise(LedgerAccount.OWNER_PAYABLE, debitsPaise, creditsPaise);
+  /**
+   * One row per completed job, with the fee READ from the books rather than
+   * computed. `feePaise` is the `platform_revenue` credit on the same
+   * `txn_id`; subtracting net from gross would quietly relabel anything else
+   * that ever posts against that transaction as commission.
+   *
+   * The summary's `coalesce(sum, 0)` is right — no movement in a period is
+   * zero. Here it was wrong (database M3): no posting behind a completed job
+   * is a missing posting, and a coalesce turned it into a ₹0 line. So `net`
+   * is NULL when nothing was posted, and the response parse refuses it. `fee`
+   * is NULL too, except on a 0% job: `leg()` drops zero-amount entries, so a
+   * zero-commission posting legitimately has no fee leg and its fee is 0.
+   */
+  private async lines(tx: ReadTx, washerUserId: string, period: WasherEarningsPeriod) {
+    const bound = periodBound(washJobs.completedAt, period);
 
-    const linesBound = periodBound(washJobs.completedAt, period);
-
-    /**
-     * One row per completed job, with the fee READ from the books rather than
-     * computed. `feePaise` is the `platform_revenue` credit on the same
-     * `txn_id`; subtracting net from gross would quietly relabel anything else
-     * that ever posts against that transaction as commission.
-     */
-    const lines = await this.db
+    return tx
       .select({
         jobId: washJobs.id,
         serviceName: washJobs.serviceName,
         vehicleType: washJobs.vehicleType,
         completedAt: washJobs.completedAt,
         grossPaise: washJobs.pricePaise,
-        feePaise: sql<string>`coalesce((
+        feePaise: sql<string | null>`coalesce((
           select sum(${ledgerEntries.amountPaise})
           from ${ledgerEntries}
-          where ${ledgerEntries.txnId} = ${washJobs.txnId}
+          where ${ledgerEntries.txnId} = ${JOB_TXN_ID}
             and ${ledgerEntries.account} = ${LedgerAccount.PLATFORM_REVENUE}
             and ${ledgerEntries.direction} = 'credit'
-        ), 0)::text`,
-        netPaise: sql<string>`coalesce((
+        ), case when ${washJobs.commissionRate} = 0 then 0 end)::text`,
+        netPaise: sql<string | null>`(
           select sum(${ledgerEntries.amountPaise})
           from ${ledgerEntries}
-          where ${ledgerEntries.txnId} = ${washJobs.txnId}
+          where ${ledgerEntries.txnId} = ${JOB_TXN_ID}
             and ${ledgerEntries.account} = ${LedgerAccount.OWNER_PAYABLE}
             and ${ledgerEntries.counterpartyUserId} = ${washerUserId}
             and ${ledgerEntries.direction} = 'credit'
-        ), 0)::text`,
+        )::text`,
       })
       .from(washJobs)
       .where(
         and(
           eq(washJobs.washerUserId, washerUserId),
           eq(washJobs.status, 'completed'),
-          ...(linesBound === undefined ? [] : [linesBound]),
+          ...(bound === undefined ? [] : [bound]),
         ),
       )
       .orderBy(desc(washJobs.completedAt));
-
-    /**
-     * Raw values in, no fallbacks: a completed job with no `completed_at`, or
-     * no price, is a broken row, and the parse below refusing it loudly is the
-     * right failure. Defaulting to 1970 or to a zero price would put a
-     * plausible-looking lie on a money screen (R-FAIL-01). Migration 0030's
-     * `wash_jobs_assignee_presence_check` already guarantees the price on a
-     * completed row; `completed_at` has no such CHECK yet (suggestedtask.md).
-     */
-    return washerEarningsViewSchema.parse({
-      period,
-      summary: {
-        grossPaise: creditsPaise,
-        reversedPaise: debitsPaise,
-        netPaise,
-        jobsCompleted: lines.length,
-      },
-      lines: lines.map((row) => ({
-        jobId: row.jobId,
-        serviceName: row.serviceName,
-        vehicleType: row.vehicleType,
-        completedAt: row.completedAt === null ? null : row.completedAt.toISOString(),
-        grossPaise: row.grossPaise,
-        feePaise: Number(row.feePaise),
-        netPaise: Number(row.netPaise),
-      })),
-    });
   }
 }
