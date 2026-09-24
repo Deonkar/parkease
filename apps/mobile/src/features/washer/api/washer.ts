@@ -1,5 +1,6 @@
 import { type CarwashJobEvent, type CarwashServiceName } from '@parkease/contracts/enums';
 import {
+  acceptWashJobSchema,
   advanceWashJobSchema,
   attachWashPhotoSchema,
   createWasherProfileSchema,
@@ -81,7 +82,9 @@ export async function acceptOffer(jobId: string, intent: Intent): Promise<WashJo
   if (await isWasherDevMock()) return washerDevStore().accept(jobId);
   const response = await api.post<unknown>(
     `/washer/jobs/${jobId}/accept`,
-    {},
+    // Through the contract, even empty (J3): a field added to it later is a
+    // parse here, not a body the server no longer accepts.
+    acceptWashJobSchema.parse({}),
     { headers: { 'Idempotency-Key': intent.idempotencyKey } },
   );
   return envelope(washJobViewSchema).parse(response.data).data;
