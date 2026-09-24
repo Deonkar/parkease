@@ -63,11 +63,18 @@ export const WashOfferCard = memo(function WashOfferCard({
   lockedReason: givenLock,
   accepting = false,
 }: WashOfferCardProps) {
-  // Set once, by the countdown, when the offer runs out.
-  const [expired, setExpired] = useState(() => Date.parse(offer.expiresAt) <= Date.now());
+  // The id of the offer the countdown saw run out (N1). FlashList RECYCLES a
+  // card component across offers, so a plain boolean would carry one offer's
+  // expiry into the next and lock a live offer. Holding the job id ties the
+  // lock to the offer it belongs to.
+  const [expiredJobId, setExpiredJobId] = useState<string | null>(() =>
+    Date.parse(offer.expiresAt) <= Date.now() ? offer.jobId : null,
+  );
+  const { jobId } = offer;
   const markExpired = useCallback(() => {
-    setExpired(true);
-  }, []);
+    setExpiredJobId(jobId);
+  }, [jobId]);
+  const expired = expiredJobId === jobId;
   const lockedReason = givenLock ?? (expired ? EXPIRED : undefined);
   const locked = lockedReason !== undefined;
   const disabled = locked || accepting;
@@ -101,7 +108,10 @@ export const WashOfferCard = memo(function WashOfferCard({
         )}
       </View>
 
+      {/* Keyed by the job: a recycled card starts its countdown from a fresh
+          clock, and an offer that is already over reports it on mount. */}
       <OfferCountdown
+        key={jobId}
         offeredAt={offer.offeredAt}
         expiresAt={offer.expiresAt}
         onExpire={markExpired}

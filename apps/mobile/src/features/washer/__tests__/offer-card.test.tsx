@@ -170,6 +170,54 @@ describe('the countdown', () => {
     expect(byTestId(view.tree(), 'offer-accept')?.props['disabled']).toBe(true);
   });
 
+  /**
+   * N1: FlashList recycles a card component across different offers. A card
+   * that expired and is reused for a fresh offer must not carry the lock over.
+   */
+  it('does not carry an expired lock to the next offer when the card is recycled', () => {
+    const view = mount(cardElement());
+    act(() => {
+      vi.advanceTimersByTime(152_000);
+    });
+    expect(text(view.tree())).toContain('This offer has expired');
+
+    const now = Date.now();
+    const fresh = offer({
+      jobId: '0192f2a1-0000-7000-8000-000000000009' as WashJobOffer['jobId'],
+      offeredAt: new Date(now).toISOString(),
+      expiresAt: new Date(now + 180_000).toISOString(),
+    });
+    view.update(cardElement({ offer: fresh }));
+
+    expect(text(view.tree())).not.toContain('This offer has expired');
+    expect(text(view.tree())).toContain('Expires in 3:00');
+    expect(byTestId(view.tree(), 'offer-accept')?.props['disabled']).toBe(false);
+  });
+
+  it('still expires the recycled card when ITS offer runs out', () => {
+    const view = mount(cardElement());
+    act(() => {
+      vi.advanceTimersByTime(152_000);
+    });
+    const now = Date.now();
+    view.update(
+      cardElement({
+        offer: offer({
+          jobId: '0192f2a1-0000-7000-8000-000000000009' as WashJobOffer['jobId'],
+          offeredAt: new Date(now).toISOString(),
+          expiresAt: new Date(now + 60_000).toISOString(),
+        }),
+      }),
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(61_000);
+    });
+
+    expect(text(view.tree())).toContain('This offer has expired');
+    expect(byTestId(view.tree(), 'offer-accept')?.props['disabled']).toBe(true);
+  });
+
   it('is a memoised card, so an unchanged offer is not re-rendered by its list', () => {
     expect((WashOfferCard as unknown as { $$typeof: symbol }).$$typeof).toBe(
       Symbol.for('react.memo'),

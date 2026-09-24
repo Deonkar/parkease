@@ -36,6 +36,11 @@ export function render(element: ReactElement): ReactTestRendererJSON | null {
  */
 export function mount(element: ReactElement): {
   readonly tree: () => ReactTestRendererJSON | null;
+  /**
+   * Re-renders the SAME component instance with new props, keeping its state:
+   * what a recycling list (FlashList) does when it reuses a cell for another item.
+   */
+  readonly update: (next: ReactElement) => void;
 } {
   // React 19 renders through a concurrent root: without this flag `act` does
   // not flush, and every `toJSON()` comes back null — which reads as "the
@@ -50,6 +55,11 @@ export function mount(element: ReactElement): {
   const committed = renderer as TestRenderer.ReactTestRenderer | null;
   return {
     tree: () => (committed === null ? null : (committed.toJSON() as ReactTestRendererJSON | null)),
+    update: (next) => {
+      act(() => {
+        committed?.update(next);
+      });
+    },
   };
 }
 
