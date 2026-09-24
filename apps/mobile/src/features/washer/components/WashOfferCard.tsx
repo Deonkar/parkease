@@ -9,6 +9,7 @@ import {
   radius,
   spacing,
 } from '@parkease/tokens';
+import { memo, useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { formatDistance } from '@/lib/format';
@@ -16,19 +17,21 @@ import { formatPaise } from '@/lib/money';
 
 import { SERVICE_LABELS, VEHICLE_LABELS } from '../labels';
 
+import { OfferCountdown } from './OfferCountdown';
+
 export interface WashOfferCardProps {
   readonly offer: WashJobOffer;
-  /** `m:ss` left on the offer, rendered as "Expires in 2:31". */
-  readonly expiresInLabel: string;
-  /** 1 when just offered, 0 when expired. Clamped here, not trusted. */
-  readonly expiresFraction: number;
   /**
    * From the partner's OWN menu row for this service and vehicle — the same row
    * the server priced the earnings from. `null` drops the chip rather than
    * guessing a number.
    */
   readonly durationMinutes: number | null;
-  readonly onAccept: () => void;
+  /**
+   * Called with this card's job id, so the screen can pass ONE stable callback
+   * to every card and the memoised cards stay unrendered (H5).
+   */
+  readonly onAccept: (jobId: string) => void;
   /** Accept is locked and this says why, in words (R-FE-12). */
   readonly lockedReason?: string;
   /** This card's accept is in flight. */
@@ -47,22 +50,29 @@ export interface WashOfferCardProps {
  * Locked cards keep the money visible. A partner who can see what they would
  * have earned has a reason to finish verifying; a greyed-out blank does not.
  */
-export function WashOfferCard({
+const EXPIRED = 'This offer has expired';
+
+/**
+ * Memoised (H5): the countdown inside owns the one-second tick, so a card is
+ * re-rendered only when its own props change, not every second.
+ */
+export const WashOfferCard = memo(function WashOfferCard({
   offer,
-  expiresInLabel,
-  expiresFraction,
   durationMinutes,
   onAccept,
-  lockedReason,
+  lockedReason: givenLock,
   accepting = false,
 }: WashOfferCardProps) {
+  // Set once, by the countdown, when the offer runs out.
+  const [expired, setExpired] = useState(() => Date.parse(offer.expiresAt) <= Date.now());
+  const markExpired = useCallback(() => {
+    setExpired(true);
+  }, []);
+  const lockedReason = givenLock ?? (expired ? EXPIRED : undefined);
   const locked = lockedReason !== undefined;
   const disabled = locked || accepting;
   const earnings = formatPaise(offer.earningsPaise, { alwaysDecimals: true });
   const service = SERVICE_LABELS[offer.serviceName];
-  const percent = Math.round(Math.min(1, Math.max(0, expiresFraction)) * 100);
-  // In-process arithmetic on a clamped number, so the template type holds.
-  const fill = `${String(percent)}%` as `${number}%`;
 
   return (
     <View style={styles.root} testID="wash-offer-card">
@@ -91,17 +101,11 @@ export function WashOfferCard({
         )}
       </View>
 
-      <View style={styles.expiry}>
-        <Text style={styles.expiryLabel}>{`Expires in ${expiresInLabel}`}</Text>
-        {/* The words above already say it; the bar is for a glance with wet hands. */}
-        <View
-          style={styles.track}
-          accessibilityElementsHidden
-          importantForAccessibility="no-hide-descendants"
-        >
-          <View style={[styles.fill, { width: fill }]} testID="offer-expiry-fill" />
-        </View>
-      </View>
+      <OfferCountdown
+        offeredAt={offer.offeredAt}
+        expiresAt={offer.expiresAt}
+        onExpire={markExpired}
+      />
 
       <View style={styles.acceptClip}>
         <Pressable
@@ -113,7 +117,9 @@ export function WashOfferCard({
           }
           accessibilityState={{ disabled, busy: accepting }}
           disabled={disabled}
-          onPress={onAccept}
+          onPress={() => {
+            onAccept(offer.jobId);
+          }}
           android_ripple={{ color: colors.primaryDark }}
           style={[styles.accept, locked && styles.acceptLocked]}
           testID="offer-accept"
@@ -130,7 +136,7 @@ export function WashOfferCard({
       {locked ? <Text style={styles.lockedReason}>{lockedReason}</Text> : null}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   root: {
@@ -174,15 +180,6 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.semibold,
     color: colors.textSecondary,
   },
-  expiry: { marginTop: spacing.base, gap: spacing.sm },
-  expiryLabel: { fontSize: fontSize.xs, fontWeight: fontWeight.semibold, color: colors.warning },
-  track: {
-    height: spacing.xs,
-    borderRadius: radius.full,
-    backgroundColor: colors.surfaceTertiary,
-    overflow: 'hidden',
-  },
-  fill: { height: spacing.xs, borderRadius: radius.full, backgroundColor: colors.warning },
   // The ripple is clipped by its parent on Android, not by its own radius.
   acceptClip: { marginTop: spacing.base, borderRadius: radius.md, overflow: 'hidden' },
   accept: {

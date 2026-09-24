@@ -1,9 +1,10 @@
 import { toPaise } from '@parkease/contracts/primitives';
 import type { WashJobOffer } from '@parkease/contracts/washer';
 import { fontSize } from '@parkease/tokens';
-import { describe, expect, it, vi } from 'vitest';
+import { act } from 'react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { byTestId, nodes, render, style, text } from '../../shared/__tests__/render-native';
+import { byTestId, mount, nodes, render, style, text } from '../../shared/__tests__/render-native';
 import { WashOfferCard, type WashOfferCardProps } from '../components/WashOfferCard';
 
 // react-native ships Flow source the node-environment parser cannot read.
@@ -17,6 +18,19 @@ vi.mock('react-native', () => ({
 vi.mock('@expo/vector-icons', () => ({
   MaterialCommunityIcons: 'MaterialCommunityIcons',
 }));
+
+// Counts the card's own renders: it formats the distance once per render.
+const formatCalls = vi.hoisted(() => ({ count: 0 }));
+vi.mock('@/lib/format', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/lib/format')>();
+  return {
+    ...real,
+    formatDistance: (metres: number) => {
+      formatCalls.count += 1;
+      return real.formatDistance(metres);
+    },
+  };
+});
 
 const offer = (overrides: Partial<WashJobOffer> = {}): WashJobOffer => ({
   // Branded ids carry no runtime constructor; a fixture is in-process data.
@@ -32,17 +46,24 @@ const offer = (overrides: Partial<WashJobOffer> = {}): WashJobOffer => ({
   ...overrides,
 });
 
-const card = (props: Partial<WashOfferCardProps> = {}) =>
-  render(
-    <WashOfferCard
-      offer={offer()}
-      expiresInLabel="2:31"
-      expiresFraction={0.84}
-      durationMinutes={40}
-      onAccept={() => undefined}
-      {...props}
-    />,
-  );
+/** 29 seconds into the three-minute window: 2:31 left, 84% of the bar. */
+const NOW = Date.parse('2026-09-23T10:00:29.000Z');
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(NOW);
+  formatCalls.count = 0;
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+const cardElement = (props: Partial<WashOfferCardProps> = {}) => (
+  <WashOfferCard offer={offer()} durationMinutes={40} onAccept={() => undefined} {...props} />
+);
+
+const card = (props: Partial<WashOfferCardProps> = {}) => render(cardElement(props));
 
 /**
  * Every figure in this file is deliberately inconsistent with the commission
@@ -102,11 +123,57 @@ describe('the expiry', () => {
   });
 
   it('never draws the bar outside its track', () => {
-    const over = byTestId(card({ expiresFraction: 1.7 }), 'offer-expiry-fill');
-    const under = byTestId(card({ expiresFraction: -0.3 }), 'offer-expiry-fill');
+    vi.setSystemTime(Date.parse('2026-09-23T09:59:00.000Z'));
+    const over = byTestId(card(), 'offer-expiry-fill');
+    vi.setSystemTime(Date.parse('2026-09-23T10:05:00.000Z'));
+    const under = byTestId(card(), 'offer-expiry-fill');
 
     expect(over && style(over)['width']).toBe('100%');
     expect(under && style(under)['width']).toBe('0%');
+  });
+});
+
+/**
+ * H5: the countdown owns its one-second timer. The card around it — and the
+ * screen around that — no longer re-render every second.
+ */
+describe('the countdown', () => {
+  it('ticks by itself, once a second', () => {
+    const view = mount(cardElement());
+
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
+
+    expect(text(view.tree())).toContain('Expires in 2:30');
+  });
+
+  it('does not re-render the card when it ticks', () => {
+    mount(cardElement());
+    const rendersBefore = formatCalls.count;
+
+    act(() => {
+      vi.advanceTimersByTime(5_000);
+    });
+
+    expect(formatCalls.count).toBe(rendersBefore);
+  });
+
+  it('locks Accept, in words, once the offer has expired', () => {
+    const view = mount(cardElement());
+
+    act(() => {
+      vi.advanceTimersByTime(152_000);
+    });
+
+    expect(text(view.tree())).toContain('This offer has expired');
+    expect(byTestId(view.tree(), 'offer-accept')?.props['disabled']).toBe(true);
+  });
+
+  it('is a memoised card, so an unchanged offer is not re-rendered by its list', () => {
+    expect((WashOfferCard as unknown as { $$typeof: symbol }).$$typeof).toBe(
+      Symbol.for('react.memo'),
+    );
   });
 });
 
@@ -118,13 +185,14 @@ describe('accepting', () => {
     expect(minHeight).toBeGreaterThanOrEqual(44);
   });
 
-  it('calls onAccept when pressed', () => {
+  it('calls onAccept with its own job id, so the screen can pass one stable callback (H5)', () => {
     const onAccept = vi.fn();
     const accept = byTestId(card({ onAccept }), 'offer-accept');
 
     (accept?.props['onPress'] as () => void)();
 
     expect(onAccept).toHaveBeenCalledOnce();
+    expect(onAccept).toHaveBeenCalledWith('0192f2a1-0000-7000-8000-000000000001');
   });
 
   it('states the lock in TEXT, never by colour alone (R-FE-12)', () => {

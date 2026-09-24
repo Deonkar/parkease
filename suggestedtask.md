@@ -951,17 +951,16 @@ write schema and the save fails validation.
 `apps/mobile/src/features/shared/screen-state.ts` now keeps a screen on its data when a refetch
 fails. That is the right call, so a failed refresh no longer swaps a live job for an error
 screen. The washer active, earnings, menu and profile screens pair it with a `RefreshNotice`
-that says the latest refresh failed and offers another. Three screens do not: the valet active
-screen (`app/(valet)/active/index.tsx`) and both offers feeds (`app/(valet)/offers.tsx`,
-`app/(washer)/offers.tsx`). On those, a partner looks at data of unknown age with no sign that
-it is stale.
+that says the latest refresh failed and offers another. Two valet screens do not: the valet
+active screen (`app/(valet)/active/index.tsx`) and the valet offers feed
+(`app/(valet)/offers.tsx`). On those, a valet looks at data of unknown age with no sign that it
+is stale. (The washer offers feed was the third; the task 14 final fix wave, J1, gave it the
+`RefreshNotice`, so this row is valet only.)
 
-- **Why deferred:** the valet screens were outside task 14's file list. The washer offers feed
-  also polls every 15 seconds, so its window of stale data is short. A notice there is still
-  owed.
-- **Done means:** each of the three screens shows a refresh notice when `isError` is true and
-  data is held. It uses a shared component (moved to `features/shared/` on this second role's
-  use, R-ARCH-07), and a test per screen renders the stale-with-error state.
+- **Why deferred:** the valet screens were outside task 14's file list.
+- **Done means:** both valet screens show a refresh notice when `isError` is true and data is
+  held. It uses a shared component (`RefreshNotice` moved to `features/shared/` on this second
+  role's use, R-ARCH-07), and a test per screen renders the stale-with-error state.
 
 ### S-49 — No endpoint writes a user's avatar
 

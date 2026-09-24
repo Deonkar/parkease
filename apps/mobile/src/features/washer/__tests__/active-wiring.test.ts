@@ -85,3 +85,15 @@ describe('the active-job screen', () => {
     expect(screen).toMatch(/actionNotice === null[\s\S]{0,200}testID="active-action-notice"/);
   });
 });
+
+/** H7: a double tap on the primary action sends one status change. */
+describe('the active primary action', () => {
+  it('is guarded by a ref, not only by the mutation s pending flag', () => {
+    expect(screen).toMatch(/const advancing = useRef\(false\)/);
+    expect(screen).toMatch(/if \(action === null \|\| isAdvancing\(\)\) return;/);
+  });
+
+  it('no longer claims every error invalidates the job', () => {
+    expect(screen).not.toMatch(/invalidates the job on every error/);
+  });
+});

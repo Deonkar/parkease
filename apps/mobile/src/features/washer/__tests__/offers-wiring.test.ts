@@ -44,7 +44,7 @@ describe('the offers screen', () => {
 
   it('removes a job that can no longer be accepted from the cache, now', () => {
     expect(offers).toContain('setQueryData<WashJobOffer[]>(washerKeys.offers');
-    expect(offers).toMatch(/outcome\.removeCard \? removeOffer\(jobId\)/);
+    expect(offers).toMatch(/outcome\.removeCard\s*\?\s*removeOffer\(jobId\)/);
   });
 
   it('takes every accept failure s meaning from the one tested function (G3)', () => {
@@ -78,5 +78,37 @@ describe('the offers screen', () => {
     expect(offers).toContain('<FlashList');
     expect(offers).not.toContain('FlatList');
     expect(offers).not.toContain('isLoading');
+  });
+});
+
+/** H5, H7 and J1 at the screen. */
+describe('the offers screen, per second and per tap', () => {
+  const offers = read('app', '(washer)', 'offers.tsx');
+
+  it('keeps no clock of its own: each card s countdown owns the tick (H5)', () => {
+    expect(offers).not.toContain('setInterval');
+    expect(offers).not.toMatch(/useState\(\(\) => Date\.now\(\)\)/);
+    expect(offers).not.toContain('formatCountdown');
+  });
+
+  it('hands every card one stable accept callback and a module-level key (H5)', () => {
+    expect(offers).toMatch(/onAccept=\{handleAccept\}/);
+    expect(offers).toMatch(/keyExtractor=\{offerKey\}/);
+    expect(offers).toMatch(/^const offerKey = /m);
+  });
+
+  it('guards Accept with a ref, so a double tap sends one accept (H7)', () => {
+    expect(offers).toMatch(/const acceptInFlight = useRef\(false\)/);
+    expect(offers).toMatch(/if \(isAccepting\(\)\) return;/);
+  });
+
+  it('locks the other cards while one accept is pending, with the reason in words (H7)', () => {
+    expect(offers).toMatch(/ANOTHER_ACCEPTING/);
+    expect(offers).toMatch(/acceptingId !== null && acceptingId !== item\.jobId/);
+  });
+
+  it('says a failed refresh over offers it still shows (J1, ruling T7-I2)', () => {
+    expect(offers).toMatch(/offers\.isError[\s\S]{0,300}testID="offers-refresh-notice"/);
+    expect(offers).toMatch(/testID="offers-refresh-notice"[\s\S]{0,300}offers\.refetch\(\)/);
   });
 });

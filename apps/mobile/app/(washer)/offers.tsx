@@ -5,7 +5,7 @@ import { EmptyState, ErrorState, Skeleton } from '@parkease/ui-native';
 import { FlashList } from '@shopify/flash-list';
 import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Alert, Linking, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -15,6 +15,7 @@ import { acceptOutcomeFor } from '@/features/washer/action-outcomes';
 import { isUnregisteredWasher, loadFailureCopy } from '@/features/washer/api/errors';
 import { OnlineRail } from '@/features/washer/components/OnlineRail';
 import { ProfileGear } from '@/features/washer/components/ProfileGear';
+import { RefreshNotice } from '@/features/washer/components/RefreshNotice';
 import { VerificationNotice } from '@/features/washer/components/VerificationNotice';
 import { WashOfferCard } from '@/features/washer/components/WashOfferCard';
 import {
@@ -72,10 +73,11 @@ const GO_ONLINE_COPY: Readonly<Record<PresenceError, GoOnlineCopy>> = {
   },
 };
 
-function formatCountdown(msLeft: number): string {
-  const seconds = Math.floor(Math.max(0, msLeft) / 1000);
-  return `${String(Math.floor(seconds / 60))}:${String(seconds % 60).padStart(2, '0')}`;
-}
+/** H7: while one Accept is pending, every other card says why it cannot be pressed. */
+const ANOTHER_ACCEPTING = 'Wait: another job is being accepted';
+
+/** Module-level, so the list never sees a new key function (H5). */
+const offerKey = (item: WashJobOffer) => item.jobId;
 
 const durationKey = (offer: Pick<WashJobOffer, 'serviceName' | 'vehicleType'>) =>
   `${offer.serviceName}:${offer.vehicleType}`;
@@ -111,6 +113,7 @@ export default function WasherOffersScreen() {
   const offers = useWasherOffers(presence.isOnline);
   const menu = useServiceMenu();
   const accept = useAcceptWash();
+  const { mutate: acceptMutate } = accept;
   const client = useQueryClient();
 
   // R-FE-05: one intent per offer, minted the first time the partner presses
@@ -155,18 +158,6 @@ export default function WasherOffersScreen() {
     () => (presence.isOnline ? (offers.data ?? []) : []),
     [presence.isOnline, offers.data],
   );
-
-  const [now, setNow] = useState(() => Date.now());
-  const ticking = items.length > 0;
-  useEffect(() => {
-    if (!ticking) return undefined;
-    const timer = setInterval(() => {
-      setNow(Date.now());
-    }, 1_000);
-    return () => {
-      clearInterval(timer);
-    };
-  }, [ticking]);
 
   // The duration a partner quoted on their OWN menu row for this service and
   // vehicle — the row the server priced the earnings from. A lookup, never a
@@ -218,12 +209,21 @@ export default function WasherOffersScreen() {
     [presence],
   );
 
+  // H7: a second tap lands before `isPending` has re-rendered, so the guard is
+  // a ref. Read through a function: TypeScript cannot see a callback change it.
+  const acceptInFlight = useRef(false);
+  const isAccepting = () => acceptInFlight.current;
+
+  // Stable for the life of the screen (H5): every dependency is itself stable,
+  // and the list it pins a notice to is read from the cache at the moment of
+  // failure rather than closed over.
   const handleAccept = useCallback(
     (jobId: string) => {
-      if (accept.isPending) return;
+      if (isAccepting()) return;
+      acceptInFlight.current = true;
       setAcceptNotice(null);
 
-      accept.mutate(
+      acceptMutate(
         { jobId, intent: intentFor(jobId) },
         {
           onSuccess: () => {
@@ -235,38 +235,36 @@ export default function WasherOffersScreen() {
             // and the profile on a refusal, so nothing here refetches (G3).
             const outcome = acceptOutcomeFor(error);
             if (!outcome.keepIntent) intents.current.delete(jobId);
-            const shownWith = outcome.removeCard ? removeOffer(jobId) : offers.data;
+            const shownWith = outcome.removeCard
+              ? removeOffer(jobId)
+              : client.getQueryData<WashJobOffer[]>(washerKeys.offers);
             setAcceptNotice({ text: outcome.notice, shownWith });
+          },
+          onSettled: () => {
+            acceptInFlight.current = false;
           },
         },
       );
     },
-    [accept, intentFor, offers.data, removeOffer],
+    [acceptMutate, client, intentFor, removeOffer],
   );
 
   const acceptingId = accept.isPending ? accept.variables.jobId : null;
 
   const renderOffer = useCallback(
-    ({ item }: { item: WashJobOffer }) => {
-      const expiresAt = Date.parse(item.expiresAt);
-      const window = expiresAt - Date.parse(item.offeredAt);
-      const msLeft = Math.max(0, expiresAt - now);
-
-      return (
-        <WashOfferCard
-          offer={item}
-          expiresInLabel={formatCountdown(msLeft)}
-          expiresFraction={window > 0 ? msLeft / window : 0}
-          durationMinutes={durations.get(durationKey(item)) ?? null}
-          lockedReason={verifyLock ?? (msLeft === 0 ? 'This offer has expired' : undefined)}
-          accepting={acceptingId === item.jobId}
-          onAccept={() => {
-            handleAccept(item.jobId);
-          }}
-        />
-      );
-    },
-    [now, durations, verifyLock, acceptingId, handleAccept],
+    ({ item }: { item: WashJobOffer }) => (
+      <WashOfferCard
+        offer={item}
+        durationMinutes={durations.get(durationKey(item)) ?? null}
+        lockedReason={
+          verifyLock ??
+          (acceptingId !== null && acceptingId !== item.jobId ? ANOTHER_ACCEPTING : undefined)
+        }
+        accepting={acceptingId === item.jobId}
+        onAccept={handleAccept}
+      />
+    ),
+    [durations, verifyLock, acceptingId, handleAccept],
   );
 
   const offersBody = (): ReactNode => {
@@ -346,10 +344,19 @@ export default function WasherOffersScreen() {
       case 'ready':
         return (
           <>
+            {offers.isError ? (
+              // The offers stay on screen (rule 10, ruling T7-I2); this only
+              // says the latest refresh failed, and offers another (J1).
+              <RefreshNotice
+                testID="offers-refresh-notice"
+                retryLabel="Refresh the offers"
+                onRetry={() => void offers.refetch()}
+              />
+            ) : null}
             {notice}
             <FlashList
               data={items}
-              keyExtractor={(item) => item.jobId}
+              keyExtractor={offerKey}
               renderItem={renderOffer}
               extraData={renderOffer}
               ItemSeparatorComponent={Separator}

@@ -164,10 +164,17 @@ export default function WasherActiveScreen() {
     });
   }, []);
 
+  // H7: a double tap on the primary action lands before `isPending` has
+  // re-rendered, so the guard is a ref, read through a function because
+  // TypeScript cannot see a callback change it.
+  const advancing = useRef(false);
+  const isAdvancing = () => advancing.current;
+
   const runAction = useCallback(
     (job: WashJobView) => {
       const action = primaryActionFor(job.availableEvents);
-      if (action === null || advance.isPending) return;
+      if (action === null || isAdvancing()) return;
+      advancing.current = true;
 
       const key = `${job.id}:${action.event}`;
       const intent = intents.current.get(key) ?? newIntent();
@@ -179,6 +186,9 @@ export default function WasherActiveScreen() {
         {
           onSuccess: () => {
             intents.current.delete(key);
+          },
+          onSettled: () => {
+            advancing.current = false;
           },
           onError: (error: unknown) => {
             // `useAdvanceWash` invalidates the job on a refusal or an unreadable
