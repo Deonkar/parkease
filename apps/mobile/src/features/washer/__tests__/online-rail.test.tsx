@@ -158,3 +158,24 @@ describe('the online switch colours', () => {
     });
   });
 });
+
+/**
+ * M8 (walkthrough V7): a go-online the partner pressed that failed is said on
+ * the rail too, not only in an Alert (a no-op on the web). The same words serve
+ * a resume after a restart, so none of them says "back online".
+ */
+describe('a failed go-online on the rail', () => {
+  it.each(['unreachable', 'location_failed', 'permission_denied', 'refused'] as const)(
+    'says why for %s, in words that fit a tap as well as a resume',
+    (problem) => {
+      const all = text(rail({ isOnline: false, problem }));
+
+      expect(all).toContain('Offline');
+      expect(all).not.toMatch(/back online/i);
+    },
+  );
+
+  it('tells an unreachable server to check the connection', () => {
+    expect(text(rail({ isOnline: false, problem: 'unreachable' }))).toMatch(/connection/i);
+  });
+});

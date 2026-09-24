@@ -14,12 +14,13 @@ import { useWasherPresence, type WasherPresence } from '../hooks/useWasherPresen
 const m = vi.hoisted(() => ({
   sent: [] as boolean[],
   releaseOnline: null as (() => void) | null,
+  permission: 'granted',
 }));
 
 vi.mock('expo-location', () => ({
   PermissionStatus: { GRANTED: 'granted' },
   Accuracy: { Balanced: 3 },
-  requestForegroundPermissionsAsync: () => Promise.resolve({ status: 'granted' }),
+  requestForegroundPermissionsAsync: () => Promise.resolve({ status: m.permission }),
   getForegroundPermissionsAsync: () => Promise.resolve({ status: 'granted' }),
   getCurrentPositionAsync: () => Promise.resolve({ coords: { latitude: 12.93, longitude: 77.61 } }),
 }));
@@ -59,6 +60,7 @@ function Harness() {
 beforeEach(() => {
   m.sent = [];
   m.releaseOnline = null;
+  m.permission = 'granted';
   render(<Harness />);
 });
 
@@ -84,5 +86,46 @@ describe('going offline while going online is still in flight', () => {
 
     expect(presence.isOnline).toBe(false);
     expect(m.sent).toEqual([true, false]);
+  });
+});
+
+/**
+ * M8 (walkthrough V7): a failed go-online said why only in an Alert, and
+ * react-native-web's Alert is a no-op. The rail is the accessible surface, so
+ * the reason is presence state, which the rail draws.
+ */
+describe('a go-online that fails', () => {
+  it('leaves the reason in presence state, for the rail to say', async () => {
+    m.permission = 'denied';
+
+    let result: unknown;
+    await act(async () => {
+      result = await presence.goOnline();
+    });
+
+    expect(result).toEqual({ ok: false, reason: 'permission_denied' });
+    expect(presence.isOnline).toBe(false);
+    expect(presence.error).toBe('permission_denied');
+  });
+
+  it('clears the reason once a later attempt starts', async () => {
+    m.permission = 'denied';
+    await act(async () => {
+      await presence.goOnline();
+    });
+
+    m.permission = 'granted';
+    await act(async () => {
+      void presence.goOnline();
+      await vi.waitFor(() => {
+        expect(m.releaseOnline).not.toBeNull();
+      });
+    });
+
+    expect(presence.error).toBeNull();
+    await act(async () => {
+      m.releaseOnline?.();
+      await Promise.resolve();
+    });
   });
 });

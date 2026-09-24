@@ -15,7 +15,7 @@ export interface OnlineRailProps {
   readonly onToggle: (next: boolean) => void;
   /**
    * Online: why the last heartbeat failed (the next is already scheduled).
-   * Offline: why an automatic resume after a restart did not work.
+   * Offline: why the last attempt to go online, pressed or resumed, did not work.
    */
   readonly problem?: PresenceError | null;
   /** The switch cannot be used, and this says why in words. */
@@ -74,14 +74,18 @@ const ONLINE_PROBLEM: Readonly<
   },
 };
 
-/** Offline because an automatic resume failed: what stopped it. */
-const RESUME_FAILED: Readonly<Record<PresenceError, string>> = {
-  unreachable: "Couldn't reach ParkEase to put you back online",
-  location_failed: "Couldn't find your location to put you back online",
-  permission_denied: 'Turn on location to go back online',
+/**
+ * Offline because going online failed: what stopped it. The same words serve a
+ * switch the partner pressed (M8: an Alert alone is a no-op on the web, and the
+ * rail is the accessible surface) and an automatic resume after a restart.
+ */
+const OFFLINE_PROBLEM: Readonly<Record<PresenceError, string>> = {
+  unreachable: "Couldn't reach ParkEase to put you online. Check your connection and try again",
+  location_failed: "Couldn't find your location. Check that location is on, then try again",
+  permission_denied: 'Turn on location permission to go online',
   not_verified: 'You can go online once your documents are approved',
   not_registered: 'Finish setting up your profile to go online',
-  refused: "ParkEase didn't accept going back online. Try switching on again",
+  refused: "ParkEase didn't accept going online. Check your profile, then try again",
 };
 
 /**
@@ -104,7 +108,7 @@ function present(
       title: busy ? 'Going online…' : 'Offline',
       detail:
         disabledReason ??
-        (problem === null ? 'Go online to get wash jobs near you' : RESUME_FAILED[problem]),
+        (problem === null ? 'Go online to get wash jobs near you' : OFFLINE_PROBLEM[problem]),
     };
   }
   if (busy) {

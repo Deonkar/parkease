@@ -31,7 +31,8 @@ export interface WasherPresence {
   readonly busy: boolean;
   /**
    * While online: why the last beat failed, `null` once one lands again.
-   * While offline: why an automatic resume after an app restart did not work.
+   * While offline: why the last attempt to go online did not work, pressed
+   * or resumed after an app restart (M8), so the rail can say it.
    */
   readonly error: PresenceError | null;
   readonly goOnline: () => Promise<PresenceResult>;
@@ -139,10 +140,15 @@ export function useWasherPresence(): WasherPresence {
   const goOnline = useCallback(() => {
     const started = start(true);
     pendingStart.current = started;
-    const clear = () => {
+    const settle = (result: PresenceResult | null) => {
       if (pendingStart.current === started) pendingStart.current = null;
+      // M8: the reason is state the rail draws and announces, not only the
+      // caller's Alert (a no-op on the web). `start` has logged it at warn.
+      if (result !== null && !result.ok && mounted.current) setError(result.reason);
     };
-    started.then(clear, clear);
+    started.then(settle, () => {
+      settle(null);
+    });
     return started;
   }, [start]);
 
