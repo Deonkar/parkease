@@ -263,3 +263,99 @@ describe('the capture belongs to one job', () => {
     expect(mocks.warn).toHaveBeenCalledOnce();
   });
 });
+
+/**
+ * G5: an attach the server REFUSED is told as a refusal, and its intent is
+ * dropped — replaying the same refused request forever is a Retry that can
+ * never work. A closed slot says, briefly, that the job moved on.
+ */
+describe('a refused attach', () => {
+  const refusal = (status: number, code: string) => ({
+    response: { status, data: { error: { code, message: `server: ${code}`, traceId: 't' } } },
+  });
+
+  it.each([
+    [404, 'WASH_JOB_NOT_FOUND'],
+    [403, 'FORBIDDEN'],
+    [422, 'IDEMPOTENCY_KEY_REUSED'],
+  ])('says a %i %s is a refusal, not the connection, and offers no Retry', async (status, code) => {
+    mocks.uploadImage.mockResolvedValue({ ok: true, uploadId: 'wash/before/1' });
+    mocks.mutateAsync.mockRejectedValue(refusal(status, code));
+    mount();
+
+    await act(() => slot.capture('file:///a.jpg'));
+
+    expect(slot.error).not.toBeNull();
+    expect(slot.error).not.toMatch(/connection/i);
+    expect(slot.retryable).toBe(false);
+    expect(slot.uri).toBe('file:///a.jpg');
+
+    await act(() => slot.retry());
+    expect(mocks.mutateAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps Retry for a transport failure', async () => {
+    mocks.uploadImage.mockResolvedValue({ ok: true, uploadId: 'wash/before/1' });
+    mocks.mutateAsync.mockRejectedValueOnce(new Error('Network Error'));
+    mount();
+
+    await act(() => slot.capture('file:///a.jpg'));
+
+    expect(slot.retryable).toBe(true);
+  });
+
+  it('says the job moved on when the slot has closed, instead of clearing silently', async () => {
+    mocks.uploadImage.mockResolvedValue({ ok: true, uploadId: 'wash/before/1' });
+    mocks.mutateAsync.mockRejectedValue(refusal(409, 'PHOTO_SLOT_CLOSED'));
+    mount();
+
+    await act(() => slot.capture('file:///a.jpg'));
+
+    expect(slot.notice).toMatch(/moved on/i);
+    expect(slot.uri).toBeNull();
+    expect(slot.error).toBeNull();
+  });
+
+  it('clears that note with the next capture', async () => {
+    mocks.uploadImage.mockResolvedValue({ ok: true, uploadId: 'wash/before/1' });
+    mocks.mutateAsync
+      .mockRejectedValueOnce(refusal(409, 'PHOTO_SLOT_CLOSED'))
+      .mockResolvedValueOnce({});
+    mount();
+
+    await act(() => slot.capture('file:///a.jpg'));
+    await act(() => slot.capture('file:///b.jpg'));
+
+    expect(slot.notice).toBeNull();
+  });
+});
+
+/** H7: a second Retry tap while the first is still running sends nothing. */
+describe('a double-tapped Retry', () => {
+  it('runs once', async () => {
+    mocks.uploadImage.mockResolvedValueOnce({ ...FAILED, retainedUri: 'file:///a.jpg' });
+    mount();
+    await act(() => slot.capture('file:///a.jpg'));
+
+    let finish: (value: unknown) => void = () => undefined;
+    mocks.uploadImage.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    mocks.mutateAsync.mockResolvedValue({});
+    let first: Promise<void> = Promise.resolve();
+    let second: Promise<void> = Promise.resolve();
+    act(() => {
+      first = slot.retry();
+      second = slot.retry();
+    });
+    await act(async () => {
+      finish({ ok: true, uploadId: 'wash/before/1' });
+      await Promise.all([first, second]);
+    });
+
+    expect(mocks.uploadImage).toHaveBeenCalledTimes(2);
+    expect(mocks.mutateAsync).toHaveBeenCalledTimes(1);
+  });
+});

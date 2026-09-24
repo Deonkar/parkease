@@ -5,20 +5,33 @@ import { warn } from '@/lib/log';
 import { defaultUploadDeps, uploadImage } from '@/lib/uploads';
 
 import { devProofUploadId } from '../api/dev-fixtures';
-import { apiErrorCodeOf } from '../api/errors';
+import { apiErrorCodeOf, classifyFailure, failureCopy, settlesIntent } from '../api/errors';
 import { isWasherDevMock } from '../dev-mock';
 import type { PhotoSlot } from '../photo-gate';
 
 import { useAttachPhoto } from './useWasherQueries';
 
-/** website.md §6 copy. An attach that failed reads the same to the partner. */
+/** website.md §6 copy. An attach that did not arrive reads the same to the partner. */
 const UPLOAD_FAILED = "Couldn't upload the photo. Check your connection.";
+
+/** The server refused the attach: the same request can never succeed (G5). */
+const ATTACH_REFUSED = "This photo wasn't accepted for the job. Take it again.";
+
+/** The job moved past this slot while the photo was on its way (G5). */
+const SLOT_CLOSED = 'The job moved on before this photo arrived, so it was not needed.';
 
 export interface PhotoSlotCapture {
   /** The local image of the capture in hand — kept through a failure. */
   readonly uri: string | null;
   readonly uploading: boolean;
   readonly error: string | null;
+  /**
+   * Whether Retry can still work. False once the server refused the attach:
+   * the intent is dropped, and only a fresh photograph (Retake) is honest.
+   */
+  readonly retryable: boolean;
+  /** A short note that is not a failure — the job moved on past this slot. */
+  readonly notice: string | null;
   /**
    * This capture reached the server during this session. Describes the LOCAL
    * capture only: whether the gate is open is read from the job view's photo
@@ -38,6 +51,8 @@ interface LocalState {
   readonly uri: string | null;
   readonly uploading: boolean;
   readonly error: string | null;
+  readonly retryable: boolean;
+  readonly notice: string | null;
   readonly attached: boolean;
 }
 
@@ -55,6 +70,8 @@ const EMPTY: LocalState = {
   uri: null,
   uploading: false,
   error: null,
+  retryable: true,
+  notice: null,
   attached: false,
 };
 
@@ -80,6 +97,10 @@ export function usePhotoSlot(jobId: string | null, slot: PhotoSlot): PhotoSlotCa
   const attachPhoto = useAttachPhoto();
   const [local, setLocal] = useState<LocalState>(EMPTY);
   const inFlight = useRef<CaptureInFlight | null>(null);
+  // H7: a second Retry tap while one is running sends nothing. Read through a
+  // function, because TypeScript cannot see an await change a ref.
+  const retrying = useRef(false);
+  const isRetrying = () => retrying.current;
 
   const run = useCallback(
     async (capture: CaptureInFlight) => {
@@ -92,6 +113,8 @@ export function usePhotoSlot(jobId: string | null, slot: PhotoSlot): PhotoSlotCa
         uri: capture.uri,
         uploading: true,
         error: null,
+        retryable: true,
+        notice: null,
         attached: false,
       });
 
@@ -125,13 +148,28 @@ export function usePhotoSlot(jobId: string | null, slot: PhotoSlot): PhotoSlotCa
           // The screen was stale: the job moved on and this slot will never
           // take the photo. `useAttachPhoto` has invalidated the job, so the
           // pair re-renders from server truth; a Retry here would be a lie.
+          // Said, briefly, rather than the photo vanishing without a word.
           warn(`washer.usePhotoSlot: ${slot} slot closed before the photo attached`, error);
           inFlight.current = null;
-          setLocal(EMPTY);
+          setLocal({ ...EMPTY, jobId: capture.jobId, notice: SLOT_CLOSED });
           return;
         }
-        warn(`washer.usePhotoSlot: could not attach the ${slot} photo`, error);
-        setLocal((prev) => ({ ...prev, uploading: false, error: UPLOAD_FAILED }));
+        warn(
+          `washer.usePhotoSlot: could not attach the ${slot} photo (${classifyFailure(error)})`,
+          error,
+        );
+        // A refusal (or an answer this build cannot read) is final: the attach
+        // intent is dropped, so no Retry can replay it forever. The photo stays
+        // on screen; Retake is the way on.
+        const final = settlesIntent(error);
+        if (final) inFlight.current = null;
+        const message = failureCopy(error, { refused: ATTACH_REFUSED, unreachable: UPLOAD_FAILED });
+        setLocal((prev) => ({
+          ...prev,
+          uploading: false,
+          error: message,
+          retryable: !final,
+        }));
       }
     },
     [attachPhoto, slot],
@@ -157,8 +195,13 @@ export function usePhotoSlot(jobId: string | null, slot: PhotoSlot): PhotoSlotCa
 
   const retry = useCallback(async () => {
     const held = inFlight.current;
-    if (held?.jobId !== jobId) return;
-    await run(held);
+    if (held?.jobId !== jobId || isRetrying()) return;
+    retrying.current = true;
+    try {
+      await run(held);
+    } finally {
+      retrying.current = false;
+    }
   }, [jobId, run]);
 
   const reset = useCallback(() => {
@@ -175,6 +218,8 @@ export function usePhotoSlot(jobId: string | null, slot: PhotoSlot): PhotoSlotCa
     uri: view.uri,
     uploading: view.uploading,
     error: view.error,
+    retryable: view.retryable,
+    notice: view.notice,
     attached: view.attached,
     capture,
     retry,

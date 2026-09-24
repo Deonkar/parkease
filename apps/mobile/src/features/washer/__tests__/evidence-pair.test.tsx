@@ -54,6 +54,8 @@ const slot = (overrides: Partial<EvidenceSlotView> = {}): EvidenceSlotView => ({
   uri: null,
   writable: true,
   error: null,
+  retryable: true,
+  notice: null,
   ...overrides,
 });
 
@@ -270,5 +272,26 @@ describe('a failed slot says why', () => {
 
     expect(text(tree)).toContain("The photo wasn't accepted. Try again, or take it again.");
     expect(text(tree)).not.toContain('Check your connection');
+  });
+});
+
+/** G5: a refused attach offers only Retake, and a closed slot says the job moved on. */
+describe('a refusal and a closed slot', () => {
+  it('offers no Retry once the server refused the attach', () => {
+    const tree = pair({
+      before: slot({ state: 'failed', uri: 'file:///a.jpg', retryable: false, error: 'refused' }),
+    });
+
+    expect(byTestId(tree, 'evidence-before-retry')).toBeUndefined();
+    expect(byTestId(tree, 'evidence-before-capture')).toBeDefined();
+  });
+
+  it('shows the note that the job moved on', () => {
+    const tree = pair({
+      before: slot({ state: 'attached', writable: false, notice: 'The job moved on.' }),
+    });
+
+    expect(byTestId(tree, 'evidence-before-notice')).toBeDefined();
+    expect(text(tree)).toContain('The job moved on.');
   });
 });

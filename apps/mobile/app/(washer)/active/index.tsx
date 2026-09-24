@@ -212,6 +212,8 @@ export default function WasherActiveScreen() {
         uri: capture.uri,
         writable: writable && !capture.uploading,
         error: capture.error,
+        retryable: capture.retryable,
+        notice: capture.notice,
       };
     };
 

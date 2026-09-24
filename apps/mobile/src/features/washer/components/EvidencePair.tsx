@@ -22,6 +22,10 @@ export interface EvidenceSlotView {
   readonly writable: boolean;
   /** Why this slot's last send failed, in the words the upload chose (G4). */
   readonly error: string | null;
+  /** False once the server refused the attach: only Retake is honest (G5). */
+  readonly retryable: boolean;
+  /** A short note that is not a failure, such as the job moving on (G5). */
+  readonly notice: string | null;
 }
 
 export interface EvidencePairProps {
@@ -215,7 +219,7 @@ function EvidenceSlot({ slot, view, fill, onCapture, onRetry }: EvidenceSlotProp
     ) : null;
 
   const retry =
-    state === 'failed' ? (
+    state === 'failed' && view.retryable ? (
       <Pressable
         testID={`evidence-${slot}-retry`}
         accessibilityRole="button"
@@ -242,6 +246,11 @@ function EvidenceSlot({ slot, view, fill, onCapture, onRetry }: EvidenceSlotProp
         </Text>
         {state === 'failed' ? null : retake}
       </View>
+      {view.notice === null ? null : (
+        <Text style={styles.note} testID={`evidence-${slot}-notice`}>
+          {view.notice}
+        </Text>
+      )}
       {state === 'failed' ? (
         <>
           <Text style={styles.failure} accessibilityLiveRegion="polite">
@@ -348,5 +357,6 @@ const styles = StyleSheet.create({
   link: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.sm },
   linkLabel: { fontSize: fontSize.sm, fontWeight: fontWeight.semibold, color: colors.primary },
   failure: { fontSize: fontSize.xs, color: colors.errorInk },
+  note: { fontSize: fontSize.xs, color: colors.textSecondary },
   actions: { flexDirection: 'row', flexWrap: 'wrap' },
 });
