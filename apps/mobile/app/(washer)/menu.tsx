@@ -5,6 +5,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { resolveScreenState } from '@/features/shared/screen-state';
+import { loadFailureCopy } from '@/features/washer/api/errors';
 import { ProfileGear } from '@/features/washer/components/ProfileGear';
 import { RefreshNotice } from '@/features/washer/components/RefreshNotice';
 import { ServiceRow } from '@/features/washer/components/ServiceRow';
@@ -55,7 +56,7 @@ export default function WasherMenuScreen() {
         return (
           <ErrorState
             title="Couldn't load your menu"
-            body="Check your connection and try again."
+            body={loadFailureCopy(menu.error)}
             onAction={() => void menu.refetch()}
           />
         );

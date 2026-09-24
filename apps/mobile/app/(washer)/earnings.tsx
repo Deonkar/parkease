@@ -8,6 +8,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { resolveScreenState } from '@/features/shared/screen-state';
+import { loadFailureCopy } from '@/features/washer/api/errors';
 import { EarningsLine } from '@/features/washer/components/EarningsLine';
 import { EarningsSummary } from '@/features/washer/components/EarningsSummary';
 import { PeriodTabs } from '@/features/washer/components/PeriodTabs';
@@ -85,7 +86,7 @@ export default function WasherEarningsScreen() {
         return (
           <ErrorState
             title="Couldn't load your earnings"
-            body="Check your connection and try again."
+            body={loadFailureCopy(earnings.error)}
             onAction={() => void earnings.refetch()}
           />
         );

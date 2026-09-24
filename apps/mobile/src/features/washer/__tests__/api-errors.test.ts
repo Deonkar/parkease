@@ -1,6 +1,18 @@
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 
-import { apiErrorCodeOf, isDefiniteRefusal, isUnregisteredWasher } from '../api/errors';
+import {
+  IN_FLIGHT_COPY,
+  OUTDATED_COPY,
+  apiErrorCodeOf,
+  classifyFailure,
+  failureCopy,
+  isDefiniteRefusal,
+  isUnregisteredWasher,
+  loadFailureCopy,
+  serverMessageOf,
+  settlesIntent,
+} from '../api/errors';
 
 const httpError = (status: number, data: unknown) => ({
   isAxiosError: true,
@@ -106,5 +118,102 @@ describe('isDefiniteRefusal', () => {
 
   it('is still true for any other 409, which is a real answer', () => {
     expect(isDefiniteRefusal(httpError(409, { error: { code: 'WASH_JOB_TAKEN' } }))).toBe(true);
+  });
+});
+
+/**
+ * G1: every failure is classified in ONE place, and each class is told
+ * truthfully. A 2xx whose body fails its parse is not a network problem: the
+ * server answered in a shape this build does not know, so the app is out of
+ * date. Telling that partner to "check your connection" sends them to fix a
+ * connection that works.
+ */
+describe('classifyFailure', () => {
+  const outdated = () => {
+    try {
+      z.object({ data: z.object({ id: z.string() }) }).parse({ data: { id: 7 } });
+    } catch (error) {
+      return error;
+    }
+    throw new Error('the parse above must throw');
+  };
+
+  it('reads a ZodError as an out-of-date app', () => {
+    expect(classifyFailure(outdated())).toBe('outdated');
+  });
+
+  it('reads REQUEST_IN_FLIGHT as the first attempt still running', () => {
+    const inFlight = httpError(409, { error: { code: 'REQUEST_IN_FLIGHT', message: 'm' } });
+    expect(classifyFailure(inFlight)).toBe('in-flight');
+  });
+
+  it('reads a definite 4xx as refused', () => {
+    expect(classifyFailure(httpError(409, { error: { code: 'WASH_JOB_TAKEN' } }))).toBe('refused');
+    expect(classifyFailure(httpError(404, 'Not Found'))).toBe('refused');
+  });
+
+  it('reads transport failures, 5xx, 408 and 429 as unreachable', () => {
+    expect(classifyFailure(new Error('Network Error'))).toBe('unreachable');
+    expect(classifyFailure(httpError(503, 'down'))).toBe('unreachable');
+    expect(classifyFailure(httpError(429, {}))).toBe('unreachable');
+    expect(classifyFailure(httpError(408, {}))).toBe('unreachable');
+  });
+
+  it('never calls an out-of-date app a refusal: the server did answer 2xx', () => {
+    expect(isDefiniteRefusal(outdated())).toBe(false);
+  });
+});
+
+describe('settlesIntent', () => {
+  it('drops the key for a refusal and for an out-of-date app', () => {
+    expect(settlesIntent(httpError(400, { error: { code: 'VALIDATION_FAILED' } }))).toBe(true);
+    expect(settlesIntent(new z.ZodError([]))).toBe(true);
+  });
+
+  it('keeps the key while the first attempt may still land', () => {
+    expect(settlesIntent(new Error('Network Error'))).toBe(false);
+    expect(settlesIntent(httpError(409, { error: { code: 'REQUEST_IN_FLIGHT' } }))).toBe(false);
+  });
+});
+
+describe('the copy each class gets', () => {
+  const copy = { refused: 'refused copy', unreachable: 'offline copy' };
+
+  it('says "Update the app" for an out-of-date app, never "check your connection"', () => {
+    const said = failureCopy(new z.ZodError([]), copy);
+    expect(said).toBe(OUTDATED_COPY);
+    expect(said).toMatch(/Update the app to continue/);
+    expect(said).not.toMatch(/connection/i);
+  });
+
+  it('says the first attempt is still being processed for REQUEST_IN_FLIGHT', () => {
+    const said = failureCopy(httpError(409, { error: { code: 'REQUEST_IN_FLIGHT' } }), copy);
+    expect(said).toBe(IN_FLIGHT_COPY);
+    expect(said).toMatch(/still being processed/);
+    expect(said).not.toMatch(/connection/i);
+  });
+
+  it('hands the other two classes the caller s own words', () => {
+    expect(failureCopy(httpError(400, { error: { code: 'X' } }), copy)).toBe('refused copy');
+    expect(failureCopy(new Error('Network Error'), copy)).toBe('offline copy');
+  });
+
+  it('gives a load failure its truth: out of date, or the connection', () => {
+    expect(loadFailureCopy(new z.ZodError([]))).toBe(OUTDATED_COPY);
+    expect(loadFailureCopy(new Error('Network Error'))).toBe(
+      'Check your connection and try again.',
+    );
+  });
+});
+
+describe('serverMessageOf', () => {
+  it('reads the envelope s message', () => {
+    const error = httpError(403, { error: { code: 'WASHER_NOT_VERIFIED', message: 'Wait.' } });
+    expect(serverMessageOf(error)).toBe('Wait.');
+  });
+
+  it('is null without an envelope message', () => {
+    expect(serverMessageOf(httpError(404, 'Not Found'))).toBeNull();
+    expect(serverMessageOf(new Error('x'))).toBeNull();
   });
 });

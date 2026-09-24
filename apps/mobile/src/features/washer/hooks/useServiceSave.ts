@@ -5,7 +5,7 @@ import { useCallback, useRef, useState } from 'react';
 import { newIntent, type Intent } from '@/lib/api';
 import { warn } from '@/lib/log';
 
-import { apiErrorCodeOf, isDefiniteRefusal } from '../api/errors';
+import { apiErrorCodeOf, classifyFailure, failureCopy, settlesIntent } from '../api/errors';
 
 import { useUpsertService } from './useWasherQueries';
 
@@ -64,15 +64,15 @@ export function useServiceSave(): ServiceSave {
         await mutateAsync({ serviceName, input, intent });
         intents.current.delete(serviceName);
       } catch (error) {
-        const refused = isDefiniteRefusal(error);
-        if (refused) intents.current.delete(serviceName);
+        // A refusal or an unreadable answer is final; anything else may still
+        // land, so its key is kept for the replay (G1).
+        if (settlesIntent(error)) intents.current.delete(serviceName);
         warn(
-          refused
-            ? `washer.menu: saving ${serviceName} was refused (${apiErrorCodeOf(error) ?? 'no code'})`
-            : `washer.menu: saving ${serviceName} did not reach the server`,
+          `washer.menu: saving ${serviceName} failed (${classifyFailure(error)}, ${apiErrorCodeOf(error) ?? 'no code'})`,
           error,
         );
-        setFailures((current) => ({ ...current, [serviceName]: refused ? REFUSED : OFFLINE }));
+        const message = failureCopy(error, { refused: REFUSED, unreachable: OFFLINE });
+        setFailures((current) => ({ ...current, [serviceName]: message }));
       } finally {
         setSaving((current) => {
           const next = new Set(current);

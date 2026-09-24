@@ -10,11 +10,8 @@ import { Alert, Linking, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { resolveScreenState } from '@/features/shared/screen-state';
-import {
-  apiErrorCodeOf,
-  isDefiniteRefusal,
-  isUnregisteredWasher,
-} from '@/features/washer/api/errors';
+import { acceptOutcomeFor } from '@/features/washer/action-outcomes';
+import { isUnregisteredWasher, loadFailureCopy } from '@/features/washer/api/errors';
 import { OnlineRail } from '@/features/washer/components/OnlineRail';
 import { ProfileGear } from '@/features/washer/components/ProfileGear';
 import { VerificationNotice } from '@/features/washer/components/VerificationNotice';
@@ -31,9 +28,6 @@ import type { PresenceError } from '@/features/washer/presence';
 import { usePresence } from '@/features/washer/presence-context';
 import { describeWasherVerification } from '@/features/washer/verification-copy';
 import { newIntent, type Intent } from '@/lib/api';
-
-/** §6 copy, and the server's own words for `WASH_JOB_TAKEN`. */
-const TAKEN_COPY = 'This job was taken by another partner. More jobs coming!';
 
 const VERIFY_LOCK = 'Verify your documents to accept jobs';
 
@@ -126,17 +120,18 @@ export default function WasherOffersScreen() {
     return minted;
   }, []);
 
-  // Losing the race is an ordinary outcome — two of every three partners
-  // offered a job see it — so it reads inline, never as a banner or an alert.
-  // It is pinned to the list it was shown with and disappears once that list
-  // changes (T6-M4). Structural sharing keeps the reference when a refetch
-  // returns the same offers, so the notice outlives a no-op refetch.
-  const [takenNotice, setTakenNotice] = useState<{
+  // Every failed Accept reads inline, never as an alert: losing the race is an
+  // ordinary outcome — two of every three partners offered a job see it — and
+  // react-native-web's Alert is a no-op. It is pinned to the list it was shown
+  // with and disappears once that list changes (T6-M4). Structural sharing
+  // keeps the reference when a refetch returns the same offers, so the notice
+  // outlives a no-op refetch.
+  const [acceptNotice, setAcceptNotice] = useState<{
     readonly text: string;
     readonly shownWith: WashJobOffer[] | undefined;
   } | null>(null);
   const visibleNotice =
-    takenNotice !== null && takenNotice.shownWith === offers.data ? takenNotice.text : null;
+    acceptNotice !== null && acceptNotice.shownWith === offers.data ? acceptNotice.text : null;
 
   // A job that can no longer be accepted leaves the list NOW, not when the
   // refetch lands — until then it would still be tappable.
@@ -218,7 +213,7 @@ export default function WasherOffersScreen() {
   const handleAccept = useCallback(
     (jobId: string) => {
       if (accept.isPending) return;
-      setTakenNotice(null);
+      setAcceptNotice(null);
 
       accept.mutate(
         { jobId, intent: intentFor(jobId) },
@@ -229,46 +224,16 @@ export default function WasherOffersScreen() {
           },
           onError: (error: unknown) => {
             // `useAcceptWash` invalidates offers and the active job on settle,
-            // so every branch below refetches without asking twice.
-            switch (apiErrorCodeOf(error)) {
-              case 'WASH_JOB_TAKEN':
-                intents.current.delete(jobId);
-                setTakenNotice({ text: TAKEN_COPY, shownWith: removeOffer(jobId) });
-                return;
-              case 'WASHER_NOT_VERIFIED':
-                intents.current.delete(jobId);
-                void profile.refetch();
-                Alert.alert('Not verified yet', 'You can accept jobs once your documents clear.');
-                return;
-              case 'WASHER_NOT_ONBOARDED':
-                intents.current.delete(jobId);
-                Alert.alert(
-                  'Payout setup needed',
-                  'Finish your payout setup before taking jobs, so we can pay you for them.',
-                );
-                return;
-              default:
-                // The server answered and the answer is no (the offer is
-                // gone, the service is off this partner's menu): trying again
-                // cannot work, so neither the intent nor the card is kept.
-                if (isDefiniteRefusal(error)) {
-                  intents.current.delete(jobId);
-                  removeOffer(jobId);
-                  Alert.alert(
-                    'Offer no longer available',
-                    'This job is no longer available. New offers will appear here.',
-                  );
-                  return;
-                }
-                // Transport failures and 5xx keep the intent: pressing Accept
-                // again replays this attempt rather than starting a new one.
-                Alert.alert('Could not accept', 'Please try again.');
-            }
+            // and the profile on a refusal, so nothing here refetches (G3).
+            const outcome = acceptOutcomeFor(error);
+            if (!outcome.keepIntent) intents.current.delete(jobId);
+            const shownWith = outcome.removeCard ? removeOffer(jobId) : offers.data;
+            setAcceptNotice({ text: outcome.notice, shownWith });
           },
         },
       );
     },
-    [accept, intentFor, profile, removeOffer],
+    [accept, intentFor, offers.data, removeOffer],
   );
 
   const acceptingId = accept.isPending ? accept.variables.jobId : null;
@@ -306,7 +271,7 @@ export default function WasherOffersScreen() {
       return (
         <ErrorState
           title="Couldn't check your current job"
-          body="Check your connection and try again."
+          body={loadFailureCopy(active.error)}
           onAction={() => void active.refetch()}
         />
       );
@@ -354,7 +319,7 @@ export default function WasherOffersScreen() {
         return (
           <ErrorState
             title="Couldn't load jobs"
-            body="Check your connection and try again."
+            body={loadFailureCopy(offers.error)}
             onAction={() => void offers.refetch()}
           />
         );
@@ -422,7 +387,7 @@ export default function WasherOffersScreen() {
       return (
         <ErrorState
           title="Couldn't load your profile"
-          body="Check your connection and try again."
+          body={loadFailureCopy(profile.error)}
           onAction={() => void profile.refetch()}
         />
       );

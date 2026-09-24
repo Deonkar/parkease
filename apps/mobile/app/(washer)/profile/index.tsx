@@ -16,6 +16,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/contexts/AuthContext';
+import { loadFailureCopy } from '@/features/washer/api/errors';
 import { FieldError } from '@/features/washer/components/FieldError';
 import { SubmitBlock } from '@/features/washer/components/FormFields';
 import { PhotoField } from '@/features/washer/components/PhotoField';
@@ -244,7 +245,7 @@ export default function WasherProfileScreen() {
         return (
           <ErrorState
             title="Couldn't load your profile"
-            body="Check your connection and try again."
+            body={loadFailureCopy(profile.error)}
             onAction={() => void profile.refetch()}
           />
         );

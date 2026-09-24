@@ -42,14 +42,16 @@ describe('the offers screen', () => {
     expect(offers).toContain('resolveScreenState(active)');
   });
 
-  it('removes a taken job from the cache so it cannot be pressed again', () => {
+  it('removes a job that can no longer be accepted from the cache, now', () => {
     expect(offers).toContain('setQueryData<WashJobOffer[]>(washerKeys.offers');
-    expect(offers).toMatch(/case 'WASH_JOB_TAKEN':[\s\S]{0,300}removeOffer\(jobId\)/);
+    expect(offers).toMatch(/outcome\.removeCard \? removeOffer\(jobId\)/);
   });
 
-  it('meets a definite refusal with "no longer available", not "try again"', () => {
-    expect(offers).toContain('isDefiniteRefusal(error)');
-    expect(offers).toContain('no longer available');
+  it('takes every accept failure s meaning from the one tested function (G3)', () => {
+    expect(offers).toContain('acceptOutcomeFor(error)');
+    expect(offers).toMatch(/if \(!outcome\.keepIntent\) intents\.current\.delete\(jobId\)/);
+    expect(offers).not.toContain('isDefiniteRefusal');
+    expect(offers).not.toContain('apiErrorCodeOf');
   });
 
   it('polls offers only while online', () => {
@@ -66,10 +68,10 @@ describe('the offers screen', () => {
     expect(offers).toContain("router.push('/(washer)/profile')");
   });
 
-  it('shows a lost race inline, announced, and never as an alert', () => {
-    expect(offers).toContain('This job was taken by another partner');
-    expect(offers).toMatch(/accessibilityLiveRegion="polite"[^>]*testID="offer-taken-notice"/);
-    expect(offers).not.toMatch(/Alert\.alert\([^)]*taken/);
+  it('shows an accept failure inline, and never as an alert', () => {
+    expect(offers).toContain('testID="offer-taken-notice"');
+    expect(offers).toMatch(/setAcceptNotice\(\{ text: outcome\.notice/);
+    expect(offers).not.toMatch(/Alert\.alert\([^)]*(taken|accept)/i);
   });
 
   it('lists with FlashList and never reads TanStack isLoading', () => {

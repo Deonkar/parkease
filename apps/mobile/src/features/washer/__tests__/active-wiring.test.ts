@@ -77,4 +77,11 @@ describe('the active-job screen', () => {
     expect(screen).toMatch(/openCamera[\s\S]{0,1500}catch \(error\)[\s\S]{0,200}warn\(/);
     expect(screen).not.toContain('void openCamera(');
   });
+
+  it('tells a refused status change through the one tested function (G2)', () => {
+    expect(screen).toContain('advanceOutcomeFor(error)');
+    expect(screen).toMatch(/if \(!outcome\.keepIntent\) intents\.current\.delete\(key\)/);
+    expect(screen).toMatch(/setActionNotice\(outcome\.notice\)/);
+    expect(screen).toMatch(/actionNotice === null[\s\S]{0,200}testID="active-action-notice"/);
+  });
 });

@@ -9,7 +9,8 @@ import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'r
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { resolveScreenState } from '@/features/shared/screen-state';
-import { apiErrorCodeOf, isDefiniteRefusal } from '@/features/washer/api/errors';
+import { advanceOutcomeFor } from '@/features/washer/action-outcomes';
+import { loadFailureCopy } from '@/features/washer/api/errors';
 import { ElapsedBar, elapsedMinutesSince } from '@/features/washer/components/ElapsedBar';
 import { EvidencePair, type EvidenceSlotView } from '@/features/washer/components/EvidencePair';
 import { RefreshNotice } from '@/features/washer/components/RefreshNotice';
@@ -85,6 +86,8 @@ export default function WasherActiveScreen() {
   };
 
   const [cameraSlot, setCameraSlot] = useState<PhotoSlot | null>(null);
+  /** Why the last status change did not happen, said above the action (G2). */
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
 
   // R-FE-05: one intent per status change the partner asks for, reused when
   // that change is retried so a retry after a timeout replays it rather than
@@ -165,6 +168,7 @@ export default function WasherActiveScreen() {
       const key = `${job.id}:${action.event}`;
       const intent = intents.current.get(key) ?? newIntent();
       intents.current.set(key, intent);
+      setActionNotice(null);
 
       advance.mutate(
         { jobId: job.id, event: action.event, intent },
@@ -173,19 +177,13 @@ export default function WasherActiveScreen() {
             intents.current.delete(key);
           },
           onError: (error: unknown) => {
-            // `useAdvanceWash` invalidates the job on every error, so a stale
-            // screen — ILLEGAL_CARWASH_TRANSITION, or a photo gate the pair got
-            // wrong — re-renders on the true status by itself.
-            if (isDefiniteRefusal(error)) {
-              intents.current.delete(key);
-              warn(
-                `washer.active: ${action.event} refused (${apiErrorCodeOf(error) ?? 'no code'})`,
-                error,
-              );
-              return;
-            }
-            warn(`washer.active: ${action.event} did not reach the server`, error);
-            Alert.alert("Couldn't update the job", 'Check your connection and try again.');
+            // `useAdvanceWash` invalidates the job on a refusal or an unreadable
+            // answer, so a stale screen re-renders on the true status by itself.
+            // Every refusal but an illegal transition is also TOLD (G2): a photo
+            // gate the pair got wrong is not something a refetch explains.
+            const outcome = advanceOutcomeFor(error);
+            if (!outcome.keepIntent) intents.current.delete(key);
+            setActionNotice(outcome.notice);
           },
         },
       );
@@ -311,6 +309,16 @@ export default function WasherActiveScreen() {
 
         {action === null ? null : (
           <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
+            {actionNotice === null ? null : (
+              <View style={styles.actionNotice} testID="active-action-notice">
+                <MaterialCommunityIcons
+                  name="alert-circle-outline"
+                  size={18}
+                  color={colors.errorInk}
+                />
+                <Text style={styles.actionNoticeText}>{actionNotice}</Text>
+              </View>
+            )}
             <WashActionBar
               action={action}
               lockReason={lockReasonFor(action, attached)}
@@ -337,7 +345,7 @@ export default function WasherActiveScreen() {
         return (
           <ErrorState
             title="Couldn't load your job"
-            body="Check your connection and try again."
+            body={loadFailureCopy(active.error)}
             onAction={() => void active.refetch()}
           />
         );
@@ -427,6 +435,16 @@ const styles = StyleSheet.create({
     backgroundColor: colors.availableSoft,
   },
   doneText: { flex: 1, fontSize: fontSize.sm, color: colors.availableInk },
+  actionNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.errorLight,
+  },
+  actionNoticeText: { flex: 1, fontSize: fontSize.sm, color: colors.errorInk },
   footer: {
     paddingHorizontal: spacing.base,
     paddingTop: spacing.md,

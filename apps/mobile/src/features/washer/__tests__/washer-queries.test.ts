@@ -1,6 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ZodError } from 'zod';
 
-import { useAdvanceWash, useAttachPhoto, washerKeys } from '../hooks/useWasherQueries';
+import {
+  useAcceptWash,
+  useAdvanceWash,
+  useAttachPhoto,
+  useCreateProfile,
+  useSubmitDocuments,
+  useUpsertService,
+  washerKeys,
+} from '../hooks/useWasherQueries';
 
 /**
  * What the washer mutations do to the cached job when they fail. The rule
@@ -41,6 +50,8 @@ vi.mock('../api/washer', () => ({
   fetchOffers: vi.fn(),
   fetchProfile: vi.fn(),
   upsertService: vi.fn(),
+  createProfile: vi.fn(),
+  submitDocuments: vi.fn(),
 }));
 
 const refused = (status: number, code: string) => ({
@@ -103,5 +114,55 @@ describe('useAdvanceWash', () => {
     failWith(useAdvanceWash, refused(503, 'ERROR'));
 
     expect(refetchedActive()).toBe(false);
+  });
+});
+
+/** G1: a 2xx this build could not parse means the cache is stale in unknown ways. */
+describe('an out-of-date app', () => {
+  const outdated = new ZodError([]);
+  const invalidated = (key: readonly unknown[]) =>
+    q.invalidateQueries.mock.calls.some(
+      (call) => JSON.stringify((call[0] as { queryKey: unknown }).queryKey) === JSON.stringify(key),
+    );
+
+  it('refetches the job after an advance whose answer could not be read', () => {
+    failWith(useAdvanceWash, outdated);
+    expect(invalidated(washerKeys.active)).toBe(true);
+  });
+
+  it('refetches the job after an attach whose answer could not be read', () => {
+    failWith(useAttachPhoto, outdated);
+    expect(invalidated(washerKeys.active)).toBe(true);
+  });
+
+  it('refetches the menu after a save whose answer could not be read', () => {
+    failWith(useUpsertService, outdated);
+    expect(invalidated(washerKeys.menu)).toBe(true);
+  });
+
+  it('refetches the profile after a registration whose answer could not be read', () => {
+    failWith(useCreateProfile, outdated);
+    expect(invalidated(washerKeys.profile)).toBe(true);
+    q.invalidateQueries.mockReset();
+    failWith(useSubmitDocuments, outdated);
+    expect(invalidated(washerKeys.profile)).toBe(true);
+  });
+});
+
+/** G3: a refused accept may be a verification or onboarding fact, which the profile holds. */
+describe('useAcceptWash', () => {
+  const invalidated = (key: readonly unknown[]) =>
+    q.invalidateQueries.mock.calls.some(
+      (call) => JSON.stringify((call[0] as { queryKey: unknown }).queryKey) === JSON.stringify(key),
+    );
+
+  it('refetches the profile after a refusal', () => {
+    failWith(useAcceptWash, refused(403, 'WASHER_NOT_VERIFIED'));
+    expect(invalidated(washerKeys.profile)).toBe(true);
+  });
+
+  it('leaves the profile alone after a transport failure', () => {
+    failWith(useAcceptWash, offline);
+    expect(invalidated(washerKeys.profile)).toBe(false);
   });
 });

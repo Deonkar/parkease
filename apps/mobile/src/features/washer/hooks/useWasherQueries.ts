@@ -9,7 +9,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type { Intent } from '@/lib/api';
 
-import { apiErrorCodeOf, isDefiniteRefusal } from '../api/errors';
+import { apiErrorCodeOf, classifyFailure, settlesIntent } from '../api/errors';
 import {
   acceptOffer,
   advanceJob,
@@ -74,6 +74,13 @@ export function useAcceptWash() {
       void client.invalidateQueries({ queryKey: washerKeys.offers });
       void client.invalidateQueries({ queryKey: washerKeys.active });
     },
+    onError: (error) => {
+      // Not verified, not onboarded: facts the profile holds, and the lock on
+      // every other card reads them (G3).
+      if (settlesIntent(error)) {
+        void client.invalidateQueries({ queryKey: washerKeys.profile });
+      }
+    },
   });
 }
 
@@ -104,7 +111,9 @@ export function useAdvanceWash() {
       void client.invalidateQueries({ queryKey: ['washer', 'earnings'] });
     },
     onError: (error) => {
-      if (isDefiniteRefusal(error)) {
+      // A refusal, or a 2xx this build could not read (G1): either way the
+      // server has answered, and the cached job is stale.
+      if (settlesIntent(error)) {
         void client.invalidateQueries({ queryKey: washerKeys.active });
       }
     },
@@ -132,7 +141,7 @@ export function useAttachPhoto() {
       // T7-S1: the job moved past this slot, so the screen was stale. Only this
       // code refetches — a transport failure leaves the cached job alone, so
       // the pair keeps rendering while the partner retries.
-      if (apiErrorCodeOf(error) === 'PHOTO_SLOT_CLOSED') {
+      if (apiErrorCodeOf(error) === 'PHOTO_SLOT_CLOSED' || classifyFailure(error) === 'outdated') {
         void client.invalidateQueries({ queryKey: washerKeys.active });
       }
     },
@@ -155,6 +164,12 @@ export function useUpsertService() {
       // The endpoint returns the WHOLE menu, so the app never merges by hand.
       client.setQueryData(washerKeys.menu, menu);
     },
+    onError: (error) => {
+      // The save may have landed with an answer this build cannot read (G1).
+      if (classifyFailure(error) === 'outdated') {
+        void client.invalidateQueries({ queryKey: washerKeys.menu });
+      }
+    },
   });
 }
 
@@ -172,6 +187,12 @@ export function useCreateProfile() {
       void client.invalidateQueries({ queryKey: washerKeys.profile });
       void client.invalidateQueries({ queryKey: washerKeys.menu });
     },
+    onError: (error) => {
+      if (classifyFailure(error) === 'outdated') {
+        void client.invalidateQueries({ queryKey: washerKeys.profile });
+        void client.invalidateQueries({ queryKey: washerKeys.menu });
+      }
+    },
   });
 }
 
@@ -183,6 +204,11 @@ export function useSubmitDocuments() {
       submitDocuments(input, intent),
     onSuccess: (profile) => {
       client.setQueryData(washerKeys.profile, profile);
+    },
+    onError: (error) => {
+      if (classifyFailure(error) === 'outdated') {
+        void client.invalidateQueries({ queryKey: washerKeys.profile });
+      }
     },
   });
 }

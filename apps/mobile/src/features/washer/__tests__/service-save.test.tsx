@@ -1,6 +1,7 @@
 import type { UpsertWashService } from '@parkease/contracts/washer';
 import { act } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ZodError } from 'zod';
 
 import { render } from '../../shared/__tests__/render-native';
 import { useServiceSave, type ServiceSave } from '../hooks/useServiceSave';
@@ -43,7 +44,12 @@ const INPUT = {
 } as UpsertWashService;
 
 const OFFLINE = new Error('Network Error');
-const REFUSED = { response: { status: 400, data: { error: { code: 'VALIDATION_ERROR' } } } };
+const REFUSED = {
+  response: {
+    status: 400,
+    data: { error: { code: 'VALIDATION_FAILED', message: 'Invalid request body', traceId: 't' } },
+  },
+};
 
 const intentOf = (call: number) =>
   (mocks.mutateAsync.mock.calls[call]?.[0] as { intent: { idempotencyKey: string } } | undefined)
@@ -146,5 +152,35 @@ describe('what a failed save leaves on screen', () => {
     });
     expect(saver.isSaving('premium_wash')).toBe(false);
     expect(saver.failureFor('premium_wash')).toBeNull();
+  });
+});
+
+/** G1: the two classes that mean the same thing everywhere are said truthfully. */
+describe('an out-of-date app and a save still in flight', () => {
+  const OUTDATED = new ZodError([]);
+  const IN_FLIGHT = {
+    response: { status: 409, data: { error: { code: 'REQUEST_IN_FLIGHT', message: 'm' } } },
+  };
+
+  it('says "Update the app" for a 2xx this build could not read, and drops the intent', async () => {
+    mocks.mutateAsync.mockRejectedValueOnce(OUTDATED).mockResolvedValueOnce({ services: [] });
+
+    await act(() => saver.save('premium_wash', INPUT));
+    expect(saver.failureFor('premium_wash')).toMatch(/Update the app to continue/);
+    expect(saver.failureFor('premium_wash')).not.toMatch(/connection/i);
+
+    await act(() => saver.save('premium_wash', INPUT));
+    expect(intentOf(1)).not.toBe(intentOf(0));
+  });
+
+  it('says the first attempt is still being processed, and keeps the intent', async () => {
+    mocks.mutateAsync.mockRejectedValueOnce(IN_FLIGHT).mockResolvedValueOnce({ services: [] });
+
+    await act(() => saver.save('premium_wash', INPUT));
+    expect(saver.failureFor('premium_wash')).toMatch(/still being processed/);
+    expect(saver.failureFor('premium_wash')).not.toMatch(/connection/i);
+
+    await act(() => saver.save('premium_wash', INPUT));
+    expect(intentOf(1)).toBe(intentOf(0));
   });
 });
