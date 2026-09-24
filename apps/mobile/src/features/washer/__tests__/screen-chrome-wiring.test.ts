@@ -62,3 +62,30 @@ describe('the profile screen', () => {
     expect(screen).toMatch(/maxWidth:\s*layout\.contentMaxWidth|<ReadableColumn/);
   });
 });
+
+/** M13: copy and consistency on the washer screens. */
+describe('washer copy and consistency (M13)', () => {
+  const screens = [...TABS.map((tab) => tab.file), ['profile', 'index.tsx']] as const;
+
+  it('sizes every skeleton from the tokens', () => {
+    for (const file of screens) {
+      expect(read(...file), file.join('/')).not.toMatch(/<Skeleton[^>]*height=\{\d+\}/);
+    }
+  });
+
+  it('writes the profile actions in sentence case, with icon chevrons', () => {
+    const profile = read('profile', 'index.tsx');
+
+    expect(profile).toContain('Switch role');
+    expect(profile).toContain('Sign out');
+    expect(profile).not.toMatch(/Switch Role|Sign Out/);
+    expect(profile).not.toContain("'›'");
+    expect(profile).toMatch(/name="chevron-right"/);
+  });
+
+  it('types no font weight as a literal', () => {
+    for (const file of screens) {
+      expect(read(...file), file.join('/')).not.toMatch(/fontWeight: '\d+'/);
+    }
+  });
+});

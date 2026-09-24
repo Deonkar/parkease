@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { WashJobOffer } from '@parkease/contracts/washer';
-import { colors, fontSize, fontWeight, radius, spacing } from '@parkease/tokens';
+import { colors, fontSize, fontWeight, layout, radius, spacing } from '@parkease/tokens';
 import { EmptyState, ErrorState, Skeleton } from '@parkease/ui-native';
 import { FlashList } from '@shopify/flash-list';
 import { useQueryClient } from '@tanstack/react-query';
@@ -104,8 +104,8 @@ function EmptyIcon({ name }: { readonly name: keyof typeof MaterialCommunityIcon
 function OfferSkeletons() {
   return (
     <View style={styles.skeletons} testID="offers-skeleton">
-      <Skeleton width="100%" height={260} borderRadius={radius.lg} />
-      <Skeleton width="100%" height={260} borderRadius={radius.lg} />
+      <Skeleton width="100%" height={layout.skeleton.tall} borderRadius={radius.lg} />
+      <Skeleton width="100%" height={layout.skeleton.tall} borderRadius={radius.lg} />
     </View>
   );
 }
@@ -406,8 +406,8 @@ export default function WasherOffersScreen() {
     if (resolveScreenState(profile) === 'loading') {
       return (
         <View style={styles.skeletons}>
-          <Skeleton width="100%" height={56} borderRadius={radius.lg} />
-          <Skeleton width="100%" height={260} borderRadius={radius.lg} />
+          <Skeleton width="100%" height={layout.skeleton.row} borderRadius={radius.lg} />
+          <Skeleton width="100%" height={layout.skeleton.tall} borderRadius={radius.lg} />
         </View>
       );
     }

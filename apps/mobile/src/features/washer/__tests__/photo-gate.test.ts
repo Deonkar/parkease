@@ -7,7 +7,7 @@ describe('primaryActionFor', () => {
   it('gives en_route no photo gate — nothing has happened to the car yet', () => {
     expect(primaryActionFor(['en_route'])).toEqual({
       event: 'en_route',
-      label: 'On My Way',
+      label: 'On my way',
       requiresSlot: null,
     });
   });
@@ -15,7 +15,7 @@ describe('primaryActionFor', () => {
   it('gates start_washing on the before photo', () => {
     expect(primaryActionFor(['start_washing'])).toEqual({
       event: 'start_washing',
-      label: 'Start Washing',
+      label: 'Start washing',
       requiresSlot: 'before',
     });
   });
@@ -23,7 +23,7 @@ describe('primaryActionFor', () => {
   it('gates complete on the after photo', () => {
     expect(primaryActionFor(['complete'])).toEqual({
       event: 'complete',
-      label: 'Mark Complete',
+      label: 'Mark complete',
       requiresSlot: 'after',
     });
   });

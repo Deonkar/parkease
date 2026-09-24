@@ -1,4 +1,4 @@
-import { colors, radius, spacing } from '@parkease/tokens';
+import { colors, layout, radius, spacing } from '@parkease/tokens';
 import { ErrorState, Skeleton } from '@parkease/ui-native';
 import type { ReactNode } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
@@ -18,7 +18,7 @@ function MenuSkeleton() {
   return (
     <View style={styles.body} testID="menu-skeleton">
       {[0, 1, 2].map((index) => (
-        <Skeleton key={index} width="100%" height={196} borderRadius={radius.lg} />
+        <Skeleton key={index} width="100%" height={layout.skeleton.card} borderRadius={radius.lg} />
       ))}
     </View>
   );

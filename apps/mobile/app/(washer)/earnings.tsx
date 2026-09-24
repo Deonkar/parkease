@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { WasherEarningsLine, WasherEarningsPeriod } from '@parkease/contracts/washer';
-import { colors, fontSize, fontWeight, radius, spacing } from '@parkease/tokens';
+import { colors, fontSize, fontWeight, layout, radius, spacing } from '@parkease/tokens';
 import { ErrorState, Skeleton } from '@parkease/ui-native';
 import { FlashList } from '@shopify/flash-list';
 import { useState, type ReactNode } from 'react';
@@ -21,9 +21,9 @@ import { assertNever } from '@/lib/assert-never';
 function EarningsSkeleton() {
   return (
     <View style={styles.skeletons} testID="earnings-skeleton">
-      <Skeleton width="100%" height={112} borderRadius={radius.lg} />
+      <Skeleton width="100%" height={layout.skeleton.block} borderRadius={radius.lg} />
       {[0, 1, 2].map((index) => (
-        <Skeleton key={index} width="100%" height={168} borderRadius={radius.lg} />
+        <Skeleton key={index} width="100%" height={layout.skeleton.card} borderRadius={radius.lg} />
       ))}
     </View>
   );

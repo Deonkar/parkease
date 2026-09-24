@@ -63,14 +63,14 @@ function ActiveSkeleton() {
     <View style={styles.skeleton} testID="active-skeleton">
       <View style={styles.skeletonPair}>
         <View style={styles.skeletonHalf}>
-          <Skeleton width="100%" height={120} borderRadius={radius.lg} />
+          <Skeleton width="100%" height={layout.skeleton.block} borderRadius={radius.lg} />
         </View>
         <View style={styles.skeletonHalf}>
-          <Skeleton width="100%" height={120} borderRadius={radius.lg} />
+          <Skeleton width="100%" height={layout.skeleton.block} borderRadius={radius.lg} />
         </View>
       </View>
-      <Skeleton width="100%" height={48} borderRadius={radius.md} />
-      <Skeleton width="100%" height={96} borderRadius={radius.lg} />
+      <Skeleton width="100%" height={layout.skeleton.line} borderRadius={radius.md} />
+      <Skeleton width="100%" height={layout.skeleton.short} borderRadius={radius.lg} />
     </View>
   );
 }

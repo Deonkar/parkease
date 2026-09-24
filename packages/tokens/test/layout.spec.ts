@@ -18,4 +18,10 @@ describe('layout', () => {
     expect(layout.contentMaxWidth).toBeGreaterThan(412);
     expect(layout.contentMaxWidth).toBeLessThan(1024);
   });
+
+  it('orders the skeleton steps smallest to largest', () => {
+    const steps = Object.values(layout.skeleton);
+    expect(steps).toEqual([...steps].sort((a, b) => a - b));
+    expect(layout.skeleton.line).toBe(touchTarget);
+  });
 });

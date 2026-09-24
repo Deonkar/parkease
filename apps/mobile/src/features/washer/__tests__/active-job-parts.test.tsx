@@ -137,7 +137,7 @@ describe('the primary action', () => {
     );
     const button = byTestId(tree, 'wash-primary-action');
 
-    expect(text(tree)).toContain('Mark Complete');
+    expect(text(tree)).toContain('Mark complete');
     expect(button && Number(style(button)['minHeight'])).toBeGreaterThanOrEqual(52);
     expect(button?.props['disabled']).toBe(false);
   });

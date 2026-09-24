@@ -1,5 +1,5 @@
-# A verified washer's first job, end to end: online -> accept -> On My Way ->
-# before photo -> Start Washing -> after photo -> Mark Complete -> Earnings.
+# A verified washer's first job, end to end: online -> accept -> On my way ->
+# before photo -> Start washing -> after photo -> Mark complete -> Earnings.
 #
 # NOT YET EXECUTED. Preconditions and how to run: see README.md.
 # Every selector below is a testID or visible string read from the screens:
@@ -64,7 +64,7 @@ tags:
     id: 'offer-accept'
     index: 0
 
-# Accept pushes the Active tab. Status `accepted`: first action is On My Way.
+# Accept pushes the Active tab. Status `accepted`: first action is On my way.
 - extendedWaitUntil:
     visible:
       id: 'wash-primary-action'
@@ -73,9 +73,9 @@ tags:
 - assertVisible: 'On the way, current step'
 - tapOn:
     id: 'wash-primary-action'
-    text: 'On My Way'
+    text: 'On my way'
 
-# en_route: Start Washing is locked until the before photo is attached.
+# en_route: Start washing is locked until the before photo is attached.
 - extendedWaitUntil:
     visible: 'Take the before photo to unlock'
     timeout: 15000
@@ -106,7 +106,7 @@ tags:
 
 - tapOn:
     id: 'wash-primary-action'
-    text: 'Start Washing'
+    text: 'Start washing'
 - extendedWaitUntil:
     visible: 'Washing, current step'
     timeout: 15000
@@ -127,7 +127,7 @@ tags:
 
 - tapOn:
     id: 'wash-primary-action'
-    text: 'Mark Complete'
+    text: 'Mark complete'
 - extendedWaitUntil:
     visible: 'Job complete. Nice work.'
     timeout: 15000

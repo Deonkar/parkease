@@ -138,7 +138,7 @@ export const WashOfferCard = memo(function WashOfferCard({
             <MaterialCommunityIcons name="lock-outline" size={18} color={colors.textSecondary} />
           ) : null}
           <Text style={[styles.acceptLabel, locked && styles.acceptLabelLocked]}>
-            {accepting ? 'Accepting…' : 'Accept Job'}
+            {accepting ? 'Accepting…' : 'Accept job'}
           </Text>
         </Pressable>
       </View>

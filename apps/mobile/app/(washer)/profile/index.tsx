@@ -41,9 +41,9 @@ const CAMERA_REASON = 'ParkEase needs the camera to photograph your ID.';
 function ProfileSkeleton() {
   return (
     <View style={styles.skeleton} testID="profile-skeleton">
-      <Skeleton width="100%" height={72} borderRadius={radius.md} />
-      <Skeleton width="100%" height={140} borderRadius={radius.lg} />
-      <Skeleton width="100%" height={96} borderRadius={radius.lg} />
+      <Skeleton width="100%" height={layout.skeleton.row} borderRadius={radius.md} />
+      <Skeleton width="100%" height={layout.skeleton.block} borderRadius={radius.lg} />
+      <Skeleton width="100%" height={layout.skeleton.short} borderRadius={radius.lg} />
     </View>
   );
 }
@@ -89,9 +89,9 @@ export default function WasherProfileScreen() {
   useAnnounce(notice);
 
   const handleSignOut = () => {
-    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
+    Alert.alert('Sign out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign Out', style: 'destructive', onPress: () => void auth.signOut() },
+      { text: 'Sign out', style: 'destructive', onPress: () => void auth.signOut() },
     ]);
   };
 
@@ -311,8 +311,8 @@ export default function WasherProfileScreen() {
             accessibilityRole="button"
             accessibilityLabel="Switch role"
           >
-            <Text style={styles.itemText}>Switch Role</Text>
-            <Text style={styles.chevron}>{'›'}</Text>
+            <Text style={styles.itemText}>Switch role</Text>
+            <MaterialCommunityIcons name="chevron-right" size={24} color={colors.textTertiary} />
           </Pressable>
 
           <Pressable
@@ -324,7 +324,7 @@ export default function WasherProfileScreen() {
             accessibilityLabel="Settings"
           >
             <Text style={styles.itemText}>Settings</Text>
-            <Text style={styles.chevron}>{'›'}</Text>
+            <MaterialCommunityIcons name="chevron-right" size={24} color={colors.textTertiary} />
           </Pressable>
 
           <Pressable
@@ -333,7 +333,7 @@ export default function WasherProfileScreen() {
             accessibilityRole="button"
             accessibilityLabel="Sign out"
           >
-            <Text style={styles.signOutText}>Sign Out</Text>
+            <Text style={styles.signOutText}>Sign out</Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -413,10 +413,6 @@ const styles = StyleSheet.create({
     fontSize: fontSize.base,
     color: colors.text,
   },
-  chevron: {
-    fontSize: fontSize.xl,
-    color: colors.textTertiary,
-  },
   signOut: {
     marginTop: spacing['2xl'],
     borderBottomWidth: 0,
@@ -425,6 +421,6 @@ const styles = StyleSheet.create({
   signOutText: {
     fontSize: fontSize.base,
     color: colors.error,
-    fontWeight: '500',
+    fontWeight: fontWeight.medium,
   },
 });

@@ -314,3 +314,11 @@ describe('the countdown styling', () => {
     expect(fill && style(fill)['height']).toBe(spacing.sm);
   });
 });
+
+/** M13: actions in sentence case, as Material writes them. */
+describe('the accept label', () => {
+  it('reads "Accept job"', () => {
+    expect(text(card())).toContain('Accept job');
+    expect(text(card())).not.toContain('Accept Job');
+  });
+});

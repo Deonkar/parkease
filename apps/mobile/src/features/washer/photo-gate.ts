@@ -30,9 +30,9 @@ export interface PrimaryAction {
 const DRIVEN_BY_THIS_SCREEN = ['en_route', 'start_washing', 'complete'] as const;
 
 const ACTIONS: Record<(typeof DRIVEN_BY_THIS_SCREEN)[number], Omit<PrimaryAction, 'event'>> = {
-  en_route: { label: 'On My Way', requiresSlot: null },
-  start_washing: { label: 'Start Washing', requiresSlot: 'before' },
-  complete: { label: 'Mark Complete', requiresSlot: 'after' },
+  en_route: { label: 'On my way', requiresSlot: null },
+  start_washing: { label: 'Start washing', requiresSlot: 'before' },
+  complete: { label: 'Mark complete', requiresSlot: 'after' },
 };
 
 export function primaryActionFor(availableEvents: readonly string[]): PrimaryAction | null {
