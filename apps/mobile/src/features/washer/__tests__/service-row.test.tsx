@@ -1,3 +1,4 @@
+import { toPaise } from '@parkease/contracts/primitives';
 import {
   MAX_SERVICE_DURATION_MINUTES,
   MIN_SERVICE_DURATION_MINUTES,
@@ -29,8 +30,8 @@ vi.mock('@expo/vector-icons', () => ({
 
 const row = (overrides: Partial<MenuRow> = {}): MenuRow => ({
   serviceName: 'premium_wash',
-  carPricePaise: 39900,
-  bikePricePaise: 14900,
+  carPricePaise: toPaise(39900),
+  bikePricePaise: toPaise(14900),
   durationMinutes: 40,
   isActive: true,
   ...overrides,
@@ -136,7 +137,12 @@ describe('saving a service', () => {
     press('save-premium_wash');
 
     expect(saved).toEqual([
-      { carPricePaise: 44900, bikePricePaise: 17900, durationMinutes: 40, isActive: true },
+      {
+        carPricePaise: toPaise(44900),
+        bikePricePaise: toPaise(17900),
+        durationMinutes: 40,
+        isActive: true,
+      },
     ]);
   });
 
@@ -147,7 +153,12 @@ describe('saving a service', () => {
     press('save-premium_wash');
 
     expect(saved).toEqual([
-      { carPricePaise: 39900, bikePricePaise: 14900, durationMinutes: 55, isActive: true },
+      {
+        carPricePaise: toPaise(39900),
+        bikePricePaise: toPaise(14900),
+        durationMinutes: 55,
+        isActive: true,
+      },
     ]);
   });
 
@@ -212,7 +223,12 @@ describe('a price the contract would refuse', () => {
 
     expect(node('price-car-error-premium_wash')).toBeUndefined();
     expect(saved).toEqual([
-      { carPricePaise: 1000, bikePricePaise: 14900, durationMinutes: 40, isActive: true },
+      {
+        carPricePaise: toPaise(1000),
+        bikePricePaise: toPaise(14900),
+        durationMinutes: 40,
+        isActive: true,
+      },
     ]);
   });
 
@@ -244,7 +260,12 @@ describe('the Active switch (T8-I1)', () => {
     toggle('active-premium_wash', false);
 
     expect(saved).toEqual([
-      { carPricePaise: 39900, bikePricePaise: 14900, durationMinutes: 40, isActive: false },
+      {
+        carPricePaise: toPaise(39900),
+        bikePricePaise: toPaise(14900),
+        durationMinutes: 40,
+        isActive: false,
+      },
     ]);
   });
 
@@ -257,7 +278,12 @@ describe('the Active switch (T8-I1)', () => {
     toggle('active-premium_wash', true);
 
     expect(saved).toEqual([
-      { carPricePaise: 39900, bikePricePaise: 14900, durationMinutes: 40, isActive: true },
+      {
+        carPricePaise: toPaise(39900),
+        bikePricePaise: toPaise(14900),
+        durationMinutes: 40,
+        isActive: true,
+      },
     ]);
   });
 
@@ -268,7 +294,12 @@ describe('the Active switch (T8-I1)', () => {
     toggle('active-premium_wash', false);
 
     expect(saved).toEqual([
-      { carPricePaise: 39900, bikePricePaise: 14900, durationMinutes: 40, isActive: false },
+      {
+        carPricePaise: toPaise(39900),
+        bikePricePaise: toPaise(14900),
+        durationMinutes: 40,
+        isActive: false,
+      },
     ]);
     expect(node('price-car-error-premium_wash')).toBeUndefined();
   });
@@ -324,7 +355,7 @@ describe('the Active switch (T8-I1)', () => {
   it('says why it cannot send a stored price the contract no longer accepts', () => {
     // The read schema is looser than the write schema, so a stored ₹5 can
     // reach the screen. The switch cannot send it; it must not just do nothing.
-    const { saved, toggle, readable } = setup({ row: row({ carPricePaise: 500 }) });
+    const { saved, toggle, readable } = setup({ row: row({ carPricePaise: toPaise(500) }) });
 
     toggle('active-premium_wash', false);
 
@@ -360,7 +391,12 @@ describe('a service this partner has never priced', () => {
     press('save-premium_wash');
 
     expect(saved).toEqual([
-      { carPricePaise: 44900, bikePricePaise: 17900, durationMinutes: 40, isActive: true },
+      {
+        carPricePaise: toPaise(44900),
+        bikePricePaise: toPaise(17900),
+        durationMinutes: 40,
+        isActive: true,
+      },
     ]);
   });
 
@@ -419,12 +455,12 @@ describe('after a save', () => {
     type('price-car-premium_wash', '449');
 
     rerender(() => {
-      server.setRow(row({ carPricePaise: 44900 }));
+      server.setRow(row({ carPricePaise: toPaise(44900) }));
     });
 
     expect(node('price-car-premium_wash')?.props['value']).toBe('449');
     rerender(() => {
-      server.setRow(row({ carPricePaise: 45000 }));
+      server.setRow(row({ carPricePaise: toPaise(45000) }));
     });
     expect(node('price-car-premium_wash')?.props['value']).toBe('450');
   });

@@ -1,12 +1,13 @@
+import { toPaise, type Paise } from '@parkease/contracts/primitives';
 import {
   MAX_SERVICE_DURATION_MINUTES,
   MAX_SERVICE_PRICE_PAISE,
   MIN_SERVICE_DURATION_MINUTES,
   MIN_SERVICE_PRICE_PAISE,
 } from '@parkease/contracts/washer';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 
-import { paiseToRupees, parseMinutes, rupeesToPaise, toMenuRows } from '../menu-rows';
+import { paiseToRupees, parseMinutes, rupeesToPaise, toMenuRows, type MenuRow } from '../menu-rows';
 
 const service = (serviceName: string, vehicleType: string, pricePaise: number, isActive = true) =>
   ({ serviceName, vehicleType, pricePaise, durationMinutes: 40, isActive }) as never;
@@ -100,7 +101,7 @@ describe('rupeesToPaise', () => {
 describe('paiseToRupees', () => {
   it('round-trips through rupeesToPaise', () => {
     for (const paise of [1000, 1003, 1050, 31920, 44900, 999900]) {
-      expect(rupeesToPaise(paiseToRupees(paise))).toBe(paise);
+      expect(rupeesToPaise(paiseToRupees(toPaise(paise)))).toBe(paise);
     }
   });
 });
@@ -121,5 +122,22 @@ describe('parseMinutes', () => {
     for (const input of ['', 'abc', '-5', '40.5', '1e2']) {
       expect(parseMinutes(input)).toBeNull();
     }
+  });
+});
+
+/** I4: a price in a menu row is `Paise`, branded by the contract, never a bare number. */
+describe('the menu row money types', () => {
+  it('carries Paise | null for both prices', () => {
+    expectTypeOf<MenuRow['carPricePaise']>().toEqualTypeOf<Paise | null>();
+    expectTypeOf<MenuRow['bikePricePaise']>().toEqualTypeOf<Paise | null>();
+  });
+
+  it('returns Paise from rupeesToPaise, through toPaise', () => {
+    expectTypeOf(rupeesToPaise).returns.toEqualTypeOf<Paise | null>();
+    expect(rupeesToPaise('449')).toBe(44900);
+  });
+
+  it('takes Paise into paiseToRupees', () => {
+    expectTypeOf(paiseToRupees).parameter(0).toEqualTypeOf<Paise>();
   });
 });

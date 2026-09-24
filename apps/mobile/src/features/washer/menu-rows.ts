@@ -1,4 +1,5 @@
 import { CARWASH_SERVICE_NAME_VALUES, type CarwashServiceName } from '@parkease/contracts/enums';
+import { toPaise, type Paise } from '@parkease/contracts/primitives';
 import {
   MAX_SERVICE_DURATION_MINUTES,
   MAX_SERVICE_PRICE_PAISE,
@@ -21,9 +22,9 @@ import {
 
 export interface MenuRow {
   readonly serviceName: CarwashServiceName;
-  /** Null when this partner has never priced this combination. */
-  readonly carPricePaise: number | null;
-  readonly bikePricePaise: number | null;
+  /** Null when this partner has never priced this combination. Branded (I4). */
+  readonly carPricePaise: Paise | null;
+  readonly bikePricePaise: Paise | null;
   readonly durationMinutes: number;
   readonly isActive: boolean;
 }
@@ -64,7 +65,7 @@ const RUPEES = /^\d{1,5}(?:\.\d{0,2})?$/;
  * 1002.9999999999999 in floating point and a systematic one-paise error across
  * every price is a ledger that never balances.
  */
-export function rupeesToPaise(input: string): number | null {
+export function rupeesToPaise(input: string): Paise | null {
   const trimmed = input.trim();
   if (!RUPEES.test(trimmed)) return null;
 
@@ -72,11 +73,12 @@ export function rupeesToPaise(input: string): number | null {
   const paise = Number(rupees) * 100 + Number(decimals.padEnd(2, '0'));
 
   if (paise < MIN_SERVICE_PRICE_PAISE || paise > MAX_SERVICE_PRICE_PAISE) return null;
-  return paise;
+  // Through the contract's own constructor (I4): an integer, never negative.
+  return toPaise(paise);
 }
 
 /** Paise → what goes in the text input. Whole rupees carry no decimals. */
-export function paiseToRupees(paise: number): string {
+export function paiseToRupees(paise: Paise): string {
   const rupees = Math.trunc(paise / 100);
   const remainder = paise % 100;
   return remainder === 0
