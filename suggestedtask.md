@@ -1065,3 +1065,200 @@ land in all of them) is the R-ARCH-07 extraction trigger.
 - **Done means:** one `tabIcon` and one tab-bar `screenOptions` factory in `features/shared/`
   (never `utils/`), used by all four role layouts; `tab-icons.test.ts` updated to follow it;
   each role's bar checked at 375x812 and at desktop width.
+
+### S-54 — An admin-only account lands on choose-role, where every choice fails
+
+- **Status:** `open`
+- **Found in:** task 14 whole-branch spec review (task 11c, role routing)
+- **Surface:** mobile
+
+An account whose only role is `admin` signs in to the mobile app and lands on the choose-role
+screen. Every role offered there is one the account does not hold, so each tap calls
+`POST /me/roles/active`, gets a 403, and the screen says "please try again". Nothing the user
+does from there can work. The admin surface is the web admin panel, not the app.
+
+- **Why deferred:** the task 14 fix wave covers the partner surfaces; an admin-only landing is a
+  new screen in the shared auth flow with its own design gate.
+- **Done means:** an admin-only session lands on a screen that says to use the admin panel and
+  offers sign-out, never on choose-role. A test signs in with `roles: ['admin']` and asserts
+  that screen, and that choose-role is not reachable.
+
+### S-55 — `owner_payable` by partner has no covering index
+
+- **Status:** `open`
+- **Found in:** task 14 final review, database lens M2
+- **Surface:** database
+
+The washer earnings summary (`washer-earnings.query.ts`) and the valet and owner balances all
+ask for `owner_payable` rows by `counterparty_user_id`, bounded by `occurred_at`, and sum
+`amount_paise` by `direction`. No index has that shape. The candidate is
+`ledger_entries (counterparty_user_id, account, occurred_at) INCLUDE (direction, amount_paise)`,
+which would make the summary an index-only scan.
+
+- **Why deferred:** the need is unmeasured. The ledger is small, and an index on the
+  append-only, highest-write table has a write cost that should be paid for a measured read.
+- **Done means:** an `EXPLAIN (ANALYZE, BUFFERS)` of the summary query against a
+  production-sized ledger shows the sequential scan or heap cost. Then a
+  `CREATE INDEX CONCURRENTLY` migration, alone in its file and reviewed SAFE, adds the index,
+  and the plan is re-run to show it used.
+
+### S-56 — `washer_profiles.capabilities` is unchecked, and is a second source of truth
+
+- **Status:** `open`
+- **Found in:** task 14 final review, database lens L4
+- **Surface:** database, api
+
+`washer_profiles.capabilities` is a `text[]`. The contract limits it to the closed catalogue at
+registration (ruling T10-S1), but the database accepts any string. It is also a second answer to
+the question `wash_services.is_active` already answers ("which services does this partner
+offer"). Registration writes both, and a menu toggle updates only `is_active`, so the two
+disagree after the first edit.
+
+- **Why deferred:** choosing which one is the truth is a design decision, and it touches the
+  menu, the profile view and dispatch. A CHECK alone would harden a column that may be dropped.
+- **Done means:** either `capabilities` is dropped (expand-contract) and the profile view derives
+  it from active menu rows, or a CHECK (`capabilities <@ ARRAY[...catalogue]`, NOT VALID then
+  VALIDATE, reviewed SAFE) is added and the menu toggle keeps it in step. A test toggles a
+  service and reads both.
+
+### S-57 — No database check on a business's photo count or a blank `business_name`
+
+- **Status:** `open`
+- **Found in:** task 14 final review, database lens L5
+- **Surface:** database
+
+The contract requires a business to register with 1–10 photos, and every partner to have a
+non-blank `business_name` (rulings T10-C1, T10-C2). `washer_profiles` enforces neither, so a
+console fix or a future write path can leave a business with no photos under review, or a
+partner whose washer card has only whitespace for a name.
+
+- **Why deferred:** rows written before T10-C2 have a NULL `business_name`. The CHECK needs a
+  backfill decision first, and a migration reviewed on its own.
+- **Done means:** existing rows are audited. Then a migration adds
+  `CHECK (partner_type <> 'business' OR cardinality(business_photo_ids) BETWEEN 1 AND 10)` and
+  `CHECK (business_name IS NULL OR btrim(business_name) <> '')`, both NOT VALID then VALIDATE
+  and reviewed SAFE, and a test shows each direct write refused.
+
+### S-58 — The earnings lines have no index and no stable order
+
+- **Status:** `open`
+- **Found in:** task 14 final review, database lens L6
+- **Surface:** database, api
+
+The earnings lines query filters `wash_jobs` by `washer_user_id` and `status = 'completed'` and
+orders by `completed_at DESC`. `wash_jobs_washer_user_id_idx` serves only the equality, so the
+sort covers every job the partner has done. Two jobs completed in the same instant also have no
+tiebreak, so their order can change between two reads of the same page.
+
+- **Why deferred:** a partner has few jobs today, so the cost is unmeasured. The index is a
+  `CONCURRENTLY` migration of its own.
+- **Done means:** a partial index
+  `wash_jobs (washer_user_id, completed_at DESC, id) WHERE status = 'completed'` is added (alone
+  in its file, reviewed SAFE), the query orders by `completed_at DESC, id DESC`, and a test with
+  two equal `completed_at` values asserts a stable order.
+
+### S-59 — ID images are `private`, but transformed renditions can still be public
+
+- **Status:** `open`
+- **Found in:** task 14 final review, security lens M3
+- **Surface:** api, infrastructure (Cloudinary account)
+
+`CloudinaryService` uploads `documents` with `type: 'private'`. Cloudinary's `private` delivery
+protects the original, but a derived rendition (a resize, a crop) is publicly deliverable
+unless Strict Transformations is enabled on the account. An ID image is exactly what must never
+be reachable by a guessable transformation URL. The `authenticated` delivery type closes this
+for every rendition.
+
+- **Why deferred:** the choice between `authenticated` and `private` plus Strict
+  Transformations is an account-level setting and a delivery decision for task 18's admin
+  review screen, which has to render the image.
+- **Done means:** either `documents` uploads use `type: 'authenticated'` and task 18 renders them
+  through signed delivery URLs, or Strict Transformations is recorded as enabled on the account
+  (with the date and who checked). A test pins the upload type for `documents`.
+
+### S-60 — The name a driver sees is chosen by the partner, unreviewed
+
+- **Status:** `open`
+- **Found in:** task 14 final review, security lens L3
+- **Surface:** api, admin
+
+The washer card shows the driver `business_name`, which the partner types at registration
+(ruling T10-C2). Nothing reviews it, so a partner can show drivers an impersonating or abusive
+name ("ParkEase Support", a competitor's brand) from the moment they are verified.
+
+- **Why deferred:** review is task 18's admin surface. Until it exists, verification itself is
+  manual, so no partner reaches a driver without an admin having looked at the account.
+- **Done means:** task 18's verification view shows the display name as part of what is
+  approved. A name change after verification returns the partner to `pending` (or holds the new
+  name until approved), and an HTTP test covers the change.
+
+### S-61 — `washJobViewSchema.availableEvents` is `z.array(z.string())`
+
+- **Status:** `open`
+- **Found in:** task 14 final review, TypeScript lens L7
+- **Surface:** contracts, mobile
+
+`availableEvents` in `packages/contracts/src/washer/job-view.ts` lists the events the partner may
+fire next, but it is typed as plain strings rather than `carwashJobEventSchema`. A typo or a
+renamed event passes the parse and reaches the app, where a `switch` on it falls through to its
+default without a compile error. This is the same shape as S-10's `verificationStatus`.
+
+- **Why deferred:** narrowing it changes the type every consumer reads, and the mobile half
+  belongs to part B of the fix wave.
+- **Done means:** the field is `z.array(carwashJobEventSchema)`, the mobile consumers typecheck
+  against the enum, and a contract test refuses an unknown event.
+
+### S-62 — `grossPaise` means two things in one earnings response
+
+- **Status:** `open`
+- **Found in:** task 14 whole-branch spec review (task 3 / task 9, earnings)
+- **Surface:** contracts, api, mobile, docs
+
+In `GET /washer/earnings`, `summary.grossPaise` is what the ledger credited the partner, net of
+commission. `lines[].grossPaise` is the driver-facing service price. The same name in one
+response means the partner's money in one place and the driver's price in another. The task
+file's Demo also expects `{grossPaise: 39900, commissionPaise: 7980, netPaise: 31920}` for the
+summary, which the contract deliberately does not produce.
+
+- **Why deferred:** a rename is a contract change for both consumers, and the mobile consumer is
+  part B's surface.
+- **Done means:** one of the two fields is renamed (for example `summary.creditedPaise` or
+  `lines[].pricePaise`) in the contract, the API and the app. The task file's Demo is corrected
+  to the shape the endpoint returns, and a contract test pins the new name.
+
+### S-63 — R-FE-11's ≤1MB upload ceiling is asserted nowhere
+
+- **Status:** `open`
+- **Found in:** task 14 whole-branch spec review (preflight ruling R1 removed an unenforced
+  constant)
+- **Surface:** mobile
+
+R-FE-11 says an upload is ≤1MB after compression. Preflight ruling R1 removed the constant that
+claimed to enforce it, because nothing did: `expo-image-manipulator` returns no byte size. So the
+rule is now stated and checked nowhere, and a camera that produces a large file after
+compression would upload it.
+
+- **Why deferred:** a real size probe needs a file-system read of the compressed output, which
+  is a mobile change with its own device testing.
+- **Done means:** either the compressed file's size is read (for example with `expo-file-system`)
+  and an over-limit file is recompressed or refused, with a test, or the ceiling is recorded as a
+  device-test check in `docs/testcases.md` with the device and the measured size.
+
+### S-64 — Nothing bounds how long an API handler may run
+
+- **Status:** `open`
+- **Found in:** task 14 final fix wave (C1, choosing `IDEMPOTENCY_IN_FLIGHT_STALE_MS`)
+- **Surface:** api
+
+`IdempotencyService` treats an unfinished claim older than five minutes as stale and lets a
+retry take it over. That is only safe if no live attempt runs longer. Nothing in the API
+guarantees it: Fastify has no `requestTimeout`, the API's database connection has no
+`statement_timeout`, and the Razorpay client call has no timeout of its own. So the five minutes
+is a judgement rather than a derived bound. A handler that stalls longer than that (a hung
+gateway call) can run twice.
+
+- **Why deferred:** request, statement and gateway timeouts are cross-cutting settings for every
+  endpoint, and each needs its own value argued. The fix wave only needed the stuck-key recovery.
+- **Done means:** a Fastify `requestTimeout`, a pool `statement_timeout` and a gateway client
+  timeout are set, each below `IDEMPOTENCY_IN_FLIGHT_STALE_MS`. A comment on the constant names
+  them as the bound it is derived from, and a unit test asserts the ordering.
