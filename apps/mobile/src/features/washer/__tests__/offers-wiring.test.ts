@@ -112,3 +112,17 @@ describe('the offers screen, per second and per tap', () => {
     expect(offers).toMatch(/testID="offers-refresh-notice"[\s\S]{0,300}offers\.refetch\(\)/);
   });
 });
+
+/**
+ * M8: a failed go-online is said on the rail (presence state). The Alert is
+ * kept only where it adds something the rail cannot: a button to Settings.
+ */
+describe('a failed go-online on the offers screen', () => {
+  it('raises an Alert only when it can open Settings', () => {
+    const offers = readFileSync(join(process.cwd(), 'app', '(washer)', 'offers.tsx'), 'utf8');
+
+    expect(offers).toMatch(
+      /if \(started\.ok\) return;[\s\S]{0,400}if \(!copy\.settings\) return;\s*Alert\.alert\(/,
+    );
+  });
+});

@@ -194,17 +194,14 @@ export default function WasherOffersScreen() {
 
       const started = await presence.goOnline();
       if (started.ok) return;
+      // M8: the rail already says why, from presence state, and announces it.
+      // An Alert adds something only when it can open Settings.
       const copy = GO_ONLINE_COPY[started.reason];
-      Alert.alert(
-        copy.title,
-        copy.body,
-        copy.settings
-          ? [
-              { text: 'Not now', style: 'cancel' },
-              { text: 'Enable in Settings', onPress: () => void Linking.openSettings() },
-            ]
-          : undefined,
-      );
+      if (!copy.settings) return;
+      Alert.alert(copy.title, copy.body, [
+        { text: 'Not now', style: 'cancel' },
+        { text: 'Enable in Settings', onPress: () => void Linking.openSettings() },
+      ]);
     },
     [presence],
   );
