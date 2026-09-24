@@ -14,3 +14,4 @@ export {
   type Easing,
   type Spring,
 } from './motion.js';
+export { touchTarget, layout, type Layout } from './layout.js';
