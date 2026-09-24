@@ -26,7 +26,7 @@ import { WashCamera } from '@/features/washer/components/WashCamera';
 import { useCameraGate } from '@/features/washer/hooks/useCameraGate';
 import { useHeldUploads } from '@/features/washer/hooks/useHeldUploads';
 import { useRegistration } from '@/features/washer/hooks/useRegistration';
-import { useWasherProfile } from '@/features/washer/hooks/useWasherQueries';
+import { useHeldIdUpload, useWasherProfile } from '@/features/washer/hooks/useWasherQueries';
 import { profileScreenState, registrationNotice } from '@/features/washer/profile-state';
 import { describeHours } from '@/features/washer/registration';
 import { describeWasherVerification } from '@/features/washer/verification-copy';
@@ -71,6 +71,8 @@ export default function WasherProfileScreen() {
   const idPhoto = useHeldUploads('documents', 1);
   const camera = useCameraGate<'ID'>(CAMERA_REASON);
   const registration = useRegistration();
+  // An ID registration uploaded whose documents call failed (G9).
+  const heldId = useHeldIdUpload();
   const [sendFailure, setSendFailure] = useState<string | null>(null);
 
   const handleSignOut = () => {
@@ -80,12 +82,16 @@ export default function WasherProfileScreen() {
     ]);
   };
 
+  // A fresh photo taken here wins; otherwise the one registration uploaded.
+  const idToSend = idPhoto.uploadIds[0] ?? heldId.id;
+
   const sendId = async () => {
-    const idDocumentId = idPhoto.uploadIds[0];
-    if (idDocumentId === undefined) return;
+    const idDocumentId = idPhoto.uploadIds[0] ?? heldId.id;
+    if (idDocumentId === null) return;
     setSendFailure(null);
     // One intent per image, replayed if this same image is retried (R-FE-05).
     const failure = await registration.sendDocument({ idDocumentId });
+    if (failure === null) heldId.release();
     setSendFailure(failure);
   };
 
@@ -110,7 +116,12 @@ export default function WasherProfileScreen() {
           addLabel="Take photo"
           onAdd={() => void camera.open('ID')}
         />
-        {idPhoto.uploadIds.length > 0 || idPhoto.busy ? (
+        {heldId.id !== null && idPhoto.items.length === 0 ? (
+          <Text style={styles.heldNote} testID="id-document-held">
+            Your ID photo from sign-up is uploaded. Send it for review, or take a new one.
+          </Text>
+        ) : null}
+        {idToSend !== null || idPhoto.busy ? (
           <SubmitBlock
             label="Send for review"
             waitingForUploads={idPhoto.busy}
@@ -354,6 +365,7 @@ const styles = StyleSheet.create({
   docRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 32 },
   docText: { flex: 1, fontSize: fontSize.base, color: colors.text },
   docMissing: { gap: spacing.md },
+  heldNote: { fontSize: fontSize.sm, color: colors.textSecondary },
   account: { marginTop: spacing.base },
   item: {
     flexDirection: 'row',

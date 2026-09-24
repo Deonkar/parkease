@@ -25,6 +25,9 @@ export const MAX_BUSINESS_PHOTOS = 6;
 const DEFAULT_OPENS = '07:00';
 const DEFAULT_CLOSES = '20:00';
 
+/** G9: a failed photo blocks the submit rather than being left out of it. */
+const PHOTO_NOT_SENT = "A photo didn't upload. Retry it or remove it, then submit.";
+
 export interface BusinessFormProps {
   readonly photos: HeldUploads;
   readonly onTakePhoto: () => void;
@@ -58,6 +61,12 @@ export function BusinessForm({
   };
 
   const submit = () => {
+    // Sending the photos that arrived and quietly leaving out the one that did
+    // not is a registration the partner did not make (G9).
+    if (photos.items.some((item) => item.error !== null)) {
+      setErrors((current) => ({ ...current, photos: PHOTO_NOT_SENT }));
+      return;
+    }
     const built = buildBusinessProfile({
       businessName,
       gstin,

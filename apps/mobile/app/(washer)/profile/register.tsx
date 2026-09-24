@@ -24,6 +24,7 @@ import { WashCamera } from '@/features/washer/components/WashCamera';
 import { useCameraGate } from '@/features/washer/hooks/useCameraGate';
 import { useHeldUploads } from '@/features/washer/hooks/useHeldUploads';
 import { useRegistration } from '@/features/washer/hooks/useRegistration';
+import { useHeldIdUpload } from '@/features/washer/hooks/useWasherQueries';
 
 /** What the camera is photographing here, named in its shutter label. */
 type RegistrationPhoto = 'business' | 'ID';
@@ -51,6 +52,7 @@ export default function WasherRegisterScreen() {
   const idPhoto = useHeldUploads('documents', 1);
   const camera = useCameraGate<RegistrationPhoto>(CAMERA_REASON);
   const registration = useRegistration();
+  const heldId = useHeldIdUpload();
   const [failure, setFailure] = useState<string | null>(null);
 
   // Android's back from a form returns to the picker, as the header's does,
@@ -72,6 +74,12 @@ export default function WasherRegisterScreen() {
     if (outcome.kind === 'failed') {
       setFailure(outcome.message);
       return;
+    }
+    // The ID image is on Cloudinary; only its call failed. Held, so the
+    // profile re-sends the call rather than asking for a second photo (G9).
+    const uploaded = documents?.idDocumentId;
+    if (outcome.kind === 'document-not-sent' && uploaded !== undefined) {
+      heldId.hold(uploaded);
     }
     router.dismissTo({
       pathname: '/(washer)/profile',

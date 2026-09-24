@@ -115,3 +115,19 @@ describe('R-FE-06 in the registration code', () => {
     }
   });
 });
+
+/** G9: an uploaded ID outlives registration when only the documents call failed. */
+describe('the ID upload held across screens', () => {
+  it('is held by registration when the ID call did not land', () => {
+    const register = read('profile', 'register.tsx');
+    expect(register).toContain('useHeldIdUpload()');
+    expect(register).toMatch(/outcome\.kind === 'document-not-sent'[\s\S]{0,300}heldId\.hold\(/);
+  });
+
+  it('is sent by the profile without a second photograph, and released once sent', () => {
+    const screen = read('profile', 'index.tsx');
+    expect(screen).toContain('useHeldIdUpload()');
+    expect(screen).toMatch(/idPhoto\.uploadIds\[0\] \?\? heldId\.id/);
+    expect(screen).toMatch(/heldId\.release\(\)/);
+  });
+});

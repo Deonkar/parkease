@@ -31,9 +31,18 @@ export function WashCamera<S extends string>({ slot, onCaptured, onClose }: Wash
 
   // The browser preview under a dev-mock session has no camera to open, so a
   // placeholder photo stands in (ruling T11-W1). Never on a device.
-  const [standIn, setStandIn] = useState(false);
+  //
+  // Three states (J4): `null` until the answer is in, when NEITHER camera is
+  // mounted and the shutter does nothing — defaulting to `false` mounted the
+  // real camera for the first frame under the dev mock.
+  const [standIn, setStandIn] = useState<boolean | null>(null);
+  // H7: one photo per press, however fast the second tap lands. Read through a
+  // function, because TypeScript cannot see an await change a ref.
+  const shooting = useRef(false);
+  const isShooting = () => shooting.current;
   useEffect(() => {
     if (slot === null) return undefined;
+    setStandIn(null);
     let current = true;
     // Never rejects: `isWasherDevMock()` logs and answers false instead.
     void usesDevCamera().then((answer) => {
@@ -45,17 +54,20 @@ export function WashCamera<S extends string>({ slot, onCaptured, onClose }: Wash
   }, [slot]);
 
   const shoot = async () => {
-    if (slot === null) return;
+    if (slot === null || standIn === null || isShooting()) return;
     if (standIn) {
       onClose();
       onCaptured(slot, DEV_PLACEHOLDER_PHOTO_URI);
       return;
     }
+    shooting.current = true;
     try {
       const shot = await camera.current?.takePictureAsync({ quality: 0.85 });
       onClose();
       if (shot === undefined) {
+        // Said, not only logged (G9): the camera closed and nothing arrived.
         warn(`washer.WashCamera: the camera returned no ${slot} photo`);
+        Alert.alert('No photo was taken', 'The camera did not return a photo. Please try again.');
         return;
       }
       onCaptured(slot, shot.uri);
@@ -63,13 +75,17 @@ export function WashCamera<S extends string>({ slot, onCaptured, onClose }: Wash
       warn(`washer.WashCamera: could not take the ${slot} photo`, error);
       onClose();
       Alert.alert("Couldn't take the photo", 'Please try again.');
+    } finally {
+      shooting.current = false;
     }
   };
 
   return (
     <Modal visible={slot !== null} animationType="slide" onRequestClose={onClose}>
       <View style={styles.root}>
-        {standIn ? (
+        {standIn === null ? (
+          <View style={styles.camera} />
+        ) : standIn ? (
           <View style={[styles.camera, styles.standIn]}>
             <Text style={styles.standInText}>
               Dev preview: no camera here. The shutter takes a placeholder photo.

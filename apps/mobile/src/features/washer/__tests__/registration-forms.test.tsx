@@ -346,3 +346,50 @@ describe('the business form', () => {
     );
   });
 });
+
+/**
+ * G9: a held photo is never dropped silently. Two photos taken, one failed:
+ * submitting used to send the one that arrived, and the other simply was not
+ * there. The submit now stops and says why, under the photos.
+ */
+describe('a business photo that did not upload', () => {
+  const HALF_FAILED = heldUploads({
+    items: [
+      {
+        key: '1',
+        uri: 'file:///shop.jpg',
+        uploadId: 'parkease/spaces/1',
+        uploading: false,
+        error: null,
+      },
+      {
+        key: '2',
+        uri: 'file:///bay.jpg',
+        uploadId: null,
+        uploading: false,
+        error: "Couldn't upload the photo. Check your connection.",
+      },
+    ],
+    uploadIds: ['parkease/spaces/1'],
+  });
+
+  it('blocks the submit and says to retry or remove it, under the photos', () => {
+    const onSubmit = vi.fn();
+    const view = mount(
+      <BusinessForm
+        photos={HALF_FAILED}
+        onTakePhoto={vi.fn()}
+        submitting={false}
+        failure={null}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    type(view, 'name-control', 'SparkleWash');
+    press(view, 'service-premium_wash');
+    press(view, 'submit-registration');
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expectErrorBelow(view.tree(), 'photos', /retry|remove/i);
+  });
+});

@@ -7,7 +7,7 @@ import type {
   WasherProfileView,
 } from '@parkease/contracts/washer';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 
 import type { Intent } from '@/lib/api';
 
@@ -32,7 +32,48 @@ export const washerKeys = {
   earnings: (period: WasherEarningsPeriod) => ['washer', 'earnings', period] as const,
   profile: ['washer', 'profile'] as const,
   menu: ['washer', 'menu'] as const,
+  /** An uploaded ID whose documents call has not landed yet (G9). Never fetched. */
+  heldIdUpload: ['washer', 'held-id-upload'] as const,
 };
+
+export interface HeldIdUpload {
+  /** The upload id of an ID image that is on Cloudinary but not yet sent, or `null`. */
+  readonly id: string | null;
+  readonly hold: (uploadId: string) => void;
+  readonly release: () => void;
+}
+
+/**
+ * An ID image already on Cloudinary, held across screens when only the
+ * documents CALL failed, so the profile re-sends the call instead of asking
+ * for a second photograph (G9).
+ *
+ * In the query cache rather than a module variable: sign-out clears the cache,
+ * so one partner's upload can never be sent under the next account. Never
+ * fetched — the cache entry is the whole store — and never collected while the
+ * app runs.
+ */
+export function useHeldIdUpload(): HeldIdUpload {
+  const client = useQueryClient();
+  const { data } = useQuery({
+    queryKey: washerKeys.heldIdUpload,
+    queryFn: () => null,
+    initialData: null as string | null,
+    enabled: false,
+    staleTime: Infinity,
+    gcTime: Infinity,
+  });
+  const hold = useCallback(
+    (uploadId: string) => {
+      client.setQueryData<string | null>(washerKeys.heldIdUpload, uploadId);
+    },
+    [client],
+  );
+  const release = useCallback(() => {
+    client.setQueryData<string | null>(washerKeys.heldIdUpload, null);
+  }, [client]);
+  return useMemo(() => ({ id: data, hold, release }), [data, hold, release]);
+}
 
 /**
  * `enabled` stops the poll while offline — an offline partner has no offers to
