@@ -1,6 +1,5 @@
 import type { CarwashJobEvent, CarwashServiceName, VehicleType } from '@parkease/contracts/enums';
 import {
-  IllegalCarwashTransitionError,
   LIVE_CARWASH_STATUSES,
   PHOTO_SLOT_OPEN_STATUSES,
   WASHER_EARNINGS_PERIOD_VALUES,
@@ -293,6 +292,30 @@ export interface WasherDevStore {
 }
 
 /**
+ * A refusal shaped like the API's (I7): an axios-style error carrying the
+ * envelope `{error: {code, message, traceId}}` with the server's own status and
+ * code (`apps/api/src/domains/carwash/errors.ts`). The preview then takes the
+ * same paths as production — the classifier, the outcome copy, the refetch —
+ * instead of a plain `Error` that every screen reads as "no connection".
+ */
+class DevRefusal extends Error {
+  readonly isAxiosError = true;
+  readonly response: {
+    readonly status: number;
+    readonly data: { readonly error: { code: string; message: string; traceId: string } };
+  };
+
+  constructor(status: number, code: string, message: string) {
+    super(`dev-fixtures: ${code}`);
+    this.name = 'DevRefusal';
+    this.response = { status, data: { error: { code, message, traceId: 'dev-mock' } } };
+  }
+}
+
+const refusal = (status: number, code: string, message: string) =>
+  new DevRefusal(status, code, message);
+
+/**
  * A fresh store. `now` is injected so a test can walk expiry; the app uses the
  * one shared store below. In memory only: a reload starts the walk again.
  */
@@ -334,7 +357,7 @@ export function createWasherDevStore(now: () => number = Date.now): WasherDevSto
   const current = (jobId: string) => {
     const held = live();
     if (held?.view.id !== jobId) {
-      throw new Error(`dev-fixtures: ${jobId} is not the partner's live wash`);
+      throw refusal(404, 'ERROR', 'Not Found');
     }
     return held;
   };
@@ -374,9 +397,17 @@ export function createWasherDevStore(now: () => number = Date.now): WasherDevSto
     },
 
     accept(jobId) {
-      if (live() !== null) throw new Error('dev-fixtures: the partner already has a live wash');
+      if (live() !== null) {
+        throw refusal(409, 'ERROR', 'Finish your current job before taking another.');
+      }
       const seed = openSeeds().find((candidate) => candidate.jobId === jobId);
-      if (seed === undefined) throw new Error(`dev-fixtures: no open offer ${jobId}`);
+      if (seed === undefined) {
+        throw refusal(
+          409,
+          'WASH_JOB_TAKEN',
+          'This job was taken by another partner. More jobs coming!',
+        );
+      }
       taken.add(seed.jobId);
       job = null;
       return write(seed, {
@@ -401,13 +432,23 @@ export function createWasherDevStore(now: () => number = Date.now): WasherDevSto
       const to = eventsFrom(view.status).includes(event)
         ? nextCarwashStatus(view.status, event)
         : null;
-      if (to === null) throw new IllegalCarwashTransitionError(view.status, event);
+      if (to === null) {
+        throw refusal(
+          409,
+          'ILLEGAL_CARWASH_TRANSITION',
+          "This job can't be moved there from where it is now.",
+        );
+      }
       // The server's photo gate (§13.8), so the preview cannot skip a photo either.
       if (event === 'start_washing' && view.beforePhotoId === null) {
-        throw new Error('dev-fixtures: BEFORE_PHOTO_REQUIRED');
+        throw refusal(400, 'BEFORE_PHOTO_REQUIRED', 'Take a photo of the car before you start.');
       }
       if (event === 'complete' && view.afterPhotoId === null) {
-        throw new Error('dev-fixtures: AFTER_PHOTO_REQUIRED');
+        throw refusal(
+          400,
+          'AFTER_PHOTO_REQUIRED',
+          'Add a photo of the finished car before you close the job.',
+        );
       }
 
       const stamped =
@@ -424,7 +465,11 @@ export function createWasherDevStore(now: () => number = Date.now): WasherDevSto
     attach(jobId, slot, photoId) {
       const { view, seed } = current(jobId);
       if (!PHOTO_SLOT_OPEN_STATUSES[slot].includes(view.status)) {
-        throw new Error(`dev-fixtures: PHOTO_SLOT_CLOSED for the ${slot} photo`);
+        throw refusal(
+          409,
+          'PHOTO_SLOT_CLOSED',
+          "This photo can't be changed at this stage of the job.",
+        );
       }
       return write(
         seed,

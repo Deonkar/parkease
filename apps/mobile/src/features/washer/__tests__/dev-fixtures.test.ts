@@ -17,6 +17,7 @@ import {
   createWasherDevStore,
   devProofUploadId,
 } from '../api/dev-fixtures';
+import { apiErrorCodeOf, classifyFailure, httpStatusOf, serverMessageOf } from '../api/errors';
 import { toMenuRows } from '../menu-rows';
 
 /**
@@ -253,5 +254,67 @@ describe('the stand-ins for hardware the preview has not got', () => {
     expect(DEV_WASHER_FIX.lat).toBeLessThan(14);
     expect(DEV_WASHER_FIX.lng).toBeGreaterThan(77);
     expect(DEV_WASHER_FIX.lng).toBeLessThan(78);
+  });
+});
+
+/**
+ * I7: the dev-mock store refuses the way the API does — the error envelope,
+ * with the server's status and code — so the preview walks the SAME failure
+ * paths as production: the classifier, the outcome copy, the refetch.
+ */
+describe('the store s refusals', () => {
+  const caught = (run: () => unknown): unknown => {
+    try {
+      run();
+    } catch (error) {
+      return error;
+    }
+    throw new Error('expected the store to refuse');
+  };
+
+  const expectRefusal = (error: unknown, status: number, code: string) => {
+    expect(apiErrorCodeOf(error)).toBe(code);
+    expect(httpStatusOf(error)).toBe(status);
+    expect(classifyFailure(error)).toBe('refused');
+    expect(serverMessageOf(error)).not.toBeNull();
+    expect(error).toBeInstanceOf(Error);
+  };
+
+  it('refuses a start without the before photo as 400 BEFORE_PHOTO_REQUIRED', () => {
+    const store = fresh();
+    const job = store.advance(store.accept(firstOffer(store).jobId).id, 'en_route');
+    expectRefusal(
+      caught(() => store.advance(job.id, 'start_washing')),
+      400,
+      'BEFORE_PHOTO_REQUIRED',
+    );
+  });
+
+  it('refuses an event the table does not allow as 409 ILLEGAL_CARWASH_TRANSITION', () => {
+    const store = fresh();
+    const job = store.accept(firstOffer(store).jobId);
+    expectRefusal(
+      caught(() => store.advance(job.id, 'complete')),
+      409,
+      'ILLEGAL_CARWASH_TRANSITION',
+    );
+  });
+
+  it('refuses a closed slot as 409 PHOTO_SLOT_CLOSED', () => {
+    const store = fresh();
+    const job = store.accept(firstOffer(store).jobId);
+    expectRefusal(
+      caught(() => store.attach(job.id, 'after', devProofUploadId('after'))),
+      409,
+      'PHOTO_SLOT_CLOSED',
+    );
+  });
+
+  it('refuses an offer that is gone as 409 WASH_JOB_TAKEN', () => {
+    expectRefusal(
+      caught(() => fresh().accept('0192f2a1-0000-7000-8000-0000000000ff')),
+      409,
+      'WASH_JOB_TAKEN',
+    );
   });
 });
