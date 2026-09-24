@@ -1,7 +1,7 @@
 import type { VerificationStatus } from '@parkease/contracts/enums';
 import { describe, expect, expectTypeOf, it } from 'vitest';
 
-import { describeWasherVerification } from '../verification-copy';
+import { bannerActionRoute, describeWasherVerification } from '../verification-copy';
 
 /**
  * A status the contract cannot produce today — the drift the fail-closed
@@ -50,11 +50,13 @@ describe('describeWasherVerification', () => {
     expect(body.toLowerCase()).not.toContain('vehicle details');
   });
 
-  it('points a rejected washer at support, as an error', () => {
+  it('tells a rejected washer, as an error, with no action that leads nowhere (M10)', () => {
     const banner = describeWasherVerification('rejected').banner;
 
     expect(banner?.tone).toBe('error');
-    expect(banner?.action).toBe('Contact support');
+    // The app has no support surface yet (a suggestedtask row), so a
+    // "Contact support" button would route to a profile with no support row.
+    expect(banner?.action).toBeNull();
   });
 });
 
@@ -71,5 +73,34 @@ describe('the washer verification types and copy', () => {
 
     expect(body).toMatch(/ID/);
     expect(body).not.toMatch(/photos/i);
+  });
+});
+
+/**
+ * M10 (impeccable P4): a banner action is routed by what it says. Every action
+ * the copy offers has a destination, and an action with none is not drawn.
+ */
+describe('where a banner action goes', () => {
+  it('sends the documents and ID actions to the profile, where the documents are', () => {
+    expect(bannerActionRoute('View my documents')).toBe('/(washer)/profile');
+    expect(bannerActionRoute('Add ID photo')).toBe('/(washer)/profile');
+  });
+
+  it('routes nothing it does not know, rather than routing it somewhere wrong', () => {
+    expect(bannerActionRoute('Contact support')).toBeNull();
+    expect(bannerActionRoute(null)).toBeNull();
+  });
+
+  it.each(['pending', 'unverified', 'rejected', 'verified'] as const)(
+    'offers no dead action for a %s washer',
+    (status) => {
+      const action = describeWasherVerification(status).banner?.action ?? null;
+      if (action !== null) expect(bannerActionRoute(action)).not.toBeNull();
+    },
+  );
+
+  it('offers no dead action for a status this build does not know', () => {
+    const action = describeWasherVerification(drifted('some_future_status')).banner?.action ?? null;
+    if (action !== null) expect(bannerActionRoute(action)).not.toBeNull();
   });
 });

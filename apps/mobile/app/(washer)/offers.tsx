@@ -28,7 +28,11 @@ import {
 } from '@/features/washer/hooks/useWasherQueries';
 import type { PresenceError } from '@/features/washer/presence';
 import { usePresence } from '@/features/washer/presence-context';
-import { describeWasherVerification } from '@/features/washer/verification-copy';
+import {
+  bannerActionRoute,
+  describeWasherVerification,
+  type WasherBannerRoute,
+} from '@/features/washer/verification-copy';
 import { newIntent, type Intent } from '@/lib/api';
 import { assertNever } from '@/lib/assert-never';
 
@@ -76,6 +80,16 @@ const GO_ONLINE_COPY: Readonly<Record<PresenceError, GoOnlineCopy>> = {
 
 /** H7: while one Accept is pending, every other card says why it cannot be pressed. */
 const ANOTHER_ACCEPTING = 'Wait: another job is being accepted';
+
+/** The banner's button, only when its action has somewhere to go (M10). */
+const routeFor = (route: WasherBannerRoute | null): { onAction?: () => void } =>
+  route === null
+    ? {}
+    : {
+        onAction: () => {
+          router.push(route);
+        },
+      };
 
 /** Module-level, so the list never sees a new key function (H5). */
 const offerKey = (item: WashJobOffer) => item.jobId;
@@ -413,9 +427,9 @@ export default function WasherOffersScreen() {
         {verification?.banner ? (
           <VerificationNotice
             banner={verification.banner}
-            onAction={() => {
-              router.push('/(washer)/profile');
-            }}
+            // M10: routed by what the action says; one with nowhere to go
+            // draws no button.
+            {...routeFor(bannerActionRoute(verification.banner.action))}
           />
         ) : null}
 

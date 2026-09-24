@@ -137,3 +137,15 @@ describe('a won accept', () => {
     );
   });
 });
+
+/** M10: the offers banner's action goes where its words say, or is not drawn. */
+describe('the verification banner action', () => {
+  it('is routed by banner.action through the one tested function', () => {
+    const offers = readFileSync(join(process.cwd(), 'app', '(washer)', 'offers.tsx'), 'utf8');
+
+    expect(offers).toContain('bannerActionRoute(verification.banner.action)');
+    expect(offers).not.toMatch(
+      /<VerificationNotice[\s\S]{0,200}router\.push\('\/\(washer\)\/profile'\)/,
+    );
+  });
+});

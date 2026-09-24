@@ -7,6 +7,28 @@ import {
 } from '@/features/shared/verification';
 import { assertNever } from '@/lib/assert-never';
 
+/** The actions this copy offers, each with somewhere to go (M10). */
+const VIEW_DOCUMENTS = 'View my documents';
+const ADD_ID_PHOTO = 'Add ID photo';
+
+/** Where a banner action leads. The documents both actions name are on the profile. */
+export type WasherBannerRoute = '/(washer)/profile';
+
+/**
+ * Routes a banner action by what it says (M10, impeccable P4). An action with
+ * nowhere to go returns `null`, and the banner then draws no button: before,
+ * every action (including "Contact support") opened the profile, which has no
+ * support row, so the button promised something the screen did not have.
+ */
+export function bannerActionRoute(action: string | null): WasherBannerRoute | null {
+  return action === null ? null : (BANNER_ROUTES.get(action) ?? null);
+}
+
+const BANNER_ROUTES: ReadonlyMap<string, WasherBannerRoute> = new Map([
+  [VIEW_DOCUMENTS, '/(washer)/profile'],
+  [ADD_ID_PHOTO, '/(washer)/profile'],
+]);
+
 export interface WasherVerificationView {
   readonly canAccept: boolean;
   readonly banner: VerificationBanner | null;
@@ -36,7 +58,7 @@ export function describeWasherVerification(status: VerificationStatus): WasherVe
           tone: 'info',
           title: 'Verification in progress',
           body: "We're checking your documents. You'll be able to accept jobs once approved.",
-          action: 'View my documents',
+          action: VIEW_DOCUMENTS,
         },
       };
 
@@ -49,7 +71,7 @@ export function describeWasherVerification(status: VerificationStatus): WasherVe
           // Only a gig partner can be `unverified` — a business lands
           // `pending` with its photos — so this asks for the ID photo alone (J2).
           body: 'Add a photo of your ID proof so we can verify you and send you jobs.',
-          action: 'Add ID photo',
+          action: ADD_ID_PHOTO,
         },
       };
 
@@ -60,7 +82,9 @@ export function describeWasherVerification(status: VerificationStatus): WasherVe
           tone: 'error',
           title: 'Your documents were not approved',
           body: 'Contact support to find out what to change and submit them again.',
-          action: 'Contact support',
+          // No button (M10): the app has no support surface yet, and one that
+          // opened the profile would lead nowhere. A suggestedtask row adds it.
+          action: null,
         },
       };
 
@@ -71,7 +95,7 @@ export function describeWasherVerification(status: VerificationStatus): WasherVe
           tone: 'info',
           title: 'Verification in progress',
           body: "We're checking your account. Contact support if this does not clear.",
-          action: 'Contact support',
+          action: null,
         },
       };
 
