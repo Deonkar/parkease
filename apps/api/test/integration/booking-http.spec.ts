@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { windowFromNow } from './booking-harness.js';
 import {
@@ -92,6 +92,16 @@ describe('booking HTTP', () => {
       const idempotencyKey = key();
 
       const first = await post('/api/v1/driver/bookings', body, idempotencyKey);
+      // The stored response is written after the answer goes out, by design,
+      // so a retry fired the same instant can land first and correctly get
+      // REQUEST_IN_FLIGHT — which made this test flaky under full-suite load.
+      // Wait for the store, as any real retry after a real response does.
+      await vi.waitFor(async () => {
+        const [row] = await h.sql<{ response_status: number | null }[]>`
+          SELECT response_status FROM idempotency_keys WHERE key = ${idempotencyKey}
+        `;
+        expect(row?.response_status).not.toBeNull();
+      });
       const second = await post('/api/v1/driver/bookings', body, idempotencyKey);
 
       expect(first.status).toBe(201);
