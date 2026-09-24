@@ -81,7 +81,7 @@ export function describeWasherVerification(status: VerificationStatus): WasherVe
         banner: {
           tone: 'error',
           title: 'Your documents were not approved',
-          body: 'Contact support to find out what to change and submit them again.',
+          body: 'Your documents were not approved. Please review and resubmit them.',
           // No button (M10): the app has no support surface yet, and one that
           // opened the profile would lead nowhere. A suggestedtask row adds it.
           action: null,
@@ -94,7 +94,7 @@ export function describeWasherVerification(status: VerificationStatus): WasherVe
         banner: {
           tone: 'info',
           title: 'Verification in progress',
-          body: "We're checking your account. Contact support if this does not clear.",
+          body: "We're checking your account. You'll be told what to do next.",
           action: null,
         },
       };

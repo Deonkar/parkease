@@ -74,7 +74,7 @@ export const WashOfferCard = memo(function WashOfferCard({
   const markExpired = useCallback(() => {
     setExpiredJobId(jobId);
   }, [jobId]);
-  const expired = expiredJobId === jobId;
+  const expired = expiredJobId === jobId || Date.parse(offer.expiresAt) <= Date.now();
   const lockedReason = givenLock ?? (expired ? EXPIRED : undefined);
   const locked = lockedReason !== undefined;
   const disabled = locked || accepting;

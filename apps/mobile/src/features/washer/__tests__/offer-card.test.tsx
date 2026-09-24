@@ -218,6 +218,21 @@ describe('the countdown', () => {
     expect(byTestId(view.tree(), 'offer-accept')?.props['disabled']).toBe(true);
   });
 
+  it('disables Accept on re-render when the new offer is already expired', () => {
+    const view = mount(cardElement());
+    const now = Date.now();
+    const alreadyExpired = offer({
+      jobId: '0192f2a1-0000-7000-8000-000000000010' as WashJobOffer['jobId'],
+      offeredAt: new Date(now - 300_000).toISOString(),
+      expiresAt: new Date(now - 60_000).toISOString(),
+    });
+
+    view.update(cardElement({ offer: alreadyExpired }));
+
+    expect(text(view.tree())).toContain('This offer has expired');
+    expect(byTestId(view.tree(), 'offer-accept')?.props['disabled']).toBe(true);
+  });
+
   it('is a memoised card, so an unchanged offer is not re-rendered by its list', () => {
     expect((WashOfferCard as unknown as { $$typeof: symbol }).$$typeof).toBe(
       Symbol.for('react.memo'),
@@ -226,11 +241,11 @@ describe('the countdown', () => {
 });
 
 describe('accepting', () => {
-  it('gives the accept button a 44dp minimum target', () => {
+  it('gives the accept button a touchTarget minimum height', () => {
     const accept = byTestId(card(), 'offer-accept');
     const minHeight = accept ? Number(style(accept)['minHeight']) : 0;
 
-    expect(minHeight).toBeGreaterThanOrEqual(44);
+    expect(minHeight).toBeGreaterThanOrEqual(48);
   });
 
   it('calls onAccept with its own job id, so the screen can pass one stable callback (H5)', () => {
