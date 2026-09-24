@@ -1,9 +1,12 @@
 import { colors, fontSize, radius, spacing } from '@parkease/tokens';
 import { CameraView } from 'expo-camera';
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { warn } from '@/lib/log';
+
+import { DEV_PLACEHOLDER_PHOTO_URI } from '../api/dev-fixtures';
+import { usesDevCamera } from '../dev-camera';
 
 export interface WashCameraProps<S extends string> {
   /**
@@ -26,8 +29,28 @@ export interface WashCameraProps<S extends string> {
 export function WashCamera<S extends string>({ slot, onCaptured, onClose }: WashCameraProps<S>) {
   const camera = useRef<CameraView>(null);
 
+  // The browser preview under a dev-mock session has no camera to open, so a
+  // placeholder photo stands in (ruling T11-W1). Never on a device.
+  const [standIn, setStandIn] = useState(false);
+  useEffect(() => {
+    if (slot === null) return undefined;
+    let current = true;
+    // Never rejects: `isWasherDevMock()` logs and answers false instead.
+    void usesDevCamera().then((answer) => {
+      if (current) setStandIn(answer);
+    });
+    return () => {
+      current = false;
+    };
+  }, [slot]);
+
   const shoot = async () => {
     if (slot === null) return;
+    if (standIn) {
+      onClose();
+      onCaptured(slot, DEV_PLACEHOLDER_PHOTO_URI);
+      return;
+    }
     try {
       const shot = await camera.current?.takePictureAsync({ quality: 0.85 });
       onClose();
@@ -46,7 +69,15 @@ export function WashCamera<S extends string>({ slot, onCaptured, onClose }: Wash
   return (
     <Modal visible={slot !== null} animationType="slide" onRequestClose={onClose}>
       <View style={styles.root}>
-        <CameraView ref={camera} style={styles.camera} facing="back" />
+        {standIn ? (
+          <View style={[styles.camera, styles.standIn]}>
+            <Text style={styles.standInText}>
+              Dev preview: no camera here. The shutter takes a placeholder photo.
+            </Text>
+          </View>
+        ) : (
+          <CameraView ref={camera} style={styles.camera} facing="back" />
+        )}
         <View style={styles.bar}>
           <Pressable
             accessibilityRole="button"
@@ -61,6 +92,7 @@ export function WashCamera<S extends string>({ slot, onCaptured, onClose }: Wash
             accessibilityLabel={`Take the ${slot ?? ''} photo`}
             onPress={() => void shoot()}
             style={styles.shutter}
+            testID="wash-camera-shutter"
           >
             <View style={styles.shutterInner} />
           </Pressable>
@@ -74,6 +106,8 @@ export function WashCamera<S extends string>({ slot, onCaptured, onClose }: Wash
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.text },
   camera: { flex: 1 },
+  standIn: { alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
+  standInText: { fontSize: fontSize.base, color: colors.textInverse, textAlign: 'center' },
   bar: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -4,7 +4,9 @@ import { newIntent, type Intent } from '@/lib/api';
 import { warn } from '@/lib/log';
 import { defaultUploadDeps, uploadImage } from '@/lib/uploads';
 
+import { devProofUploadId } from '../api/dev-fixtures';
 import { apiErrorCodeOf } from '../api/errors';
+import { isWasherDevMock } from '../dev-mock';
 import type { PhotoSlot } from '../photo-gate';
 
 import { useAttachPhoto } from './useWasherQueries';
@@ -94,7 +96,11 @@ export function usePhotoSlot(jobId: string | null, slot: PhotoSlot): PhotoSlotCa
       });
 
       if (capture.uploadId === null) {
-        const uploaded = await uploadImage(capture.uri, 'proofs', defaultUploadDeps());
+        // A dev-mock session (`__DEV__` only) has no Cloudinary to sign with,
+        // so the fixture store takes a fixture id instead (ruling T11-W1).
+        const uploaded = (await isWasherDevMock())
+          ? { ok: true as const, uploadId: devProofUploadId(slot) }
+          : await uploadImage(capture.uri, 'proofs', defaultUploadDeps());
         if (!current()) return;
         if (!uploaded.ok) {
           // `uploadImage` has already logged the cause at warn (R-FAIL-01).

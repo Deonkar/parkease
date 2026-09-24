@@ -48,7 +48,6 @@ maestro test apps/mobile/.maestro/washer-first-job.yaml         # one flow
   documented way to grant runtime permissions at launch. Location and camera dialogs
   therefore shouldn't appear. `optional: true` taps on the Android dialog buttons catch a
   device that shows one anyway.
-- **The shutter has no `testID`.** `WashCamera`'s shutter is found by its accessibility label
-  ("Take the before photo"). The empty evidence frame under the modal carries the same label,
-  so the tap is anchored `rightOf: Cancel`. The flows can't change app code. Adding
-  `testID="wash-camera-shutter"` would make this selector exact.
+- **The shutter is selected by `testID="wash-camera-shutter"`.** Its accessibility label
+  ("Take the before photo") is shared with the empty evidence frame under the modal, so a
+  label selector would be ambiguous.

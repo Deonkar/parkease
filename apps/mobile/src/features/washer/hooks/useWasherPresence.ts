@@ -5,8 +5,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { newIntent } from '@/lib/api';
 import { warn } from '@/lib/log';
 
+import { DEV_WASHER_FIX } from '../api/dev-fixtures';
 import { apiErrorCodeOf } from '../api/errors';
 import { setAvailability } from '../api/washer';
+import { isWasherDevMock } from '../dev-mock';
 import {
   startPresence,
   type BeatResult,
@@ -67,6 +69,13 @@ async function locate(): Promise<LocateOutcome> {
 }
 
 /**
+ * The dev-mock preview's location: the browser pane refuses `expo-location`
+ * outright (learnings.md), so a fixture coordinate stands in (ruling T11-W1).
+ */
+const locateAtDevFixture = (): Promise<LocateOutcome> =>
+  Promise.resolve({ ok: true, fix: DEV_WASHER_FIX });
+
+/**
  * The real dependencies for `startPresence`, and the state the washer tabs read.
  *
  * Mounted ONCE, by `WasherPresenceProvider` in `app/(washer)/_layout.tsx`, so the
@@ -97,16 +106,22 @@ export function useWasherPresence(): WasherPresence {
       setError(null);
 
       try {
-        const permission = prompt
-          ? await Location.requestForegroundPermissionsAsync()
-          : await Location.getForegroundPermissionsAsync();
-        if (permission.status !== Location.PermissionStatus.GRANTED) {
-          warn('washer.presence: cannot go online without location permission');
-          return { ok: false, reason: 'permission_denied' };
+        // Under a dev-mock session (`__DEV__` only) nothing is asked of the
+        // browser: the fixture stands in for the fix, and the PATCH is the
+        // fixture store's (`api/washer.ts`).
+        const devMock = await isWasherDevMock();
+        if (!devMock) {
+          const permission = prompt
+            ? await Location.requestForegroundPermissionsAsync()
+            : await Location.getForegroundPermissionsAsync();
+          if (permission.status !== Location.PermissionStatus.GRANTED) {
+            warn('washer.presence: cannot go online without location permission');
+            return { ok: false, reason: 'permission_denied' };
+          }
         }
 
         const deps: PresenceDeps = {
-          locate,
+          locate: devMock ? locateAtDevFixture : locate,
           send: (online, fix) => setAvailability(online, newIntent(), fix),
           onBeat: (result) => {
             setError(result.ok ? null : toPresenceError(result));
@@ -125,7 +140,8 @@ export function useWasherPresence(): WasherPresence {
         void client.invalidateQueries({ queryKey: washerKeys.profile });
         return { ok: true };
       } catch (cause) {
-        // Only the permission call can land here; `startPresence` never rejects.
+        // Only the permission call (or, in dev, the session read) can land
+        // here; `startPresence` never rejects.
         warn('washer.presence: could not read location permission', cause);
         return { ok: false, reason: 'location_failed' };
       } finally {

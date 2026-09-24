@@ -25,21 +25,33 @@ import { z } from 'zod';
 
 import { api, type Intent } from '@/lib/api';
 
+import { isWasherDevMock } from '../dev-mock';
+
+import { washerDevStore } from './dev-fixtures';
+
 /**
  * Every washer call goes through `lib/api.ts` (R-FE-03), which inherits auth,
  * single-flight refresh and the retry policy.
  *
  * Every response is parsed, never asserted (R-VAL-01). Money fields are read
  * and displayed; nothing here computes one (R-FE-06).
+ *
+ * Under a dev-mock session — `__DEV__` only, never a release build — each call
+ * is answered by the in-memory store in `dev-fixtures.ts` instead of the
+ * network, so the screens above stay exactly as they are (ruling T11-W1).
+ * Registration and document upload are not served: the fixture partner is
+ * already verified.
  */
 const envelope = <T extends z.ZodTypeAny>(data: T) => z.object({ data });
 
 export async function fetchOffers(signal?: AbortSignal): Promise<WashJobOffer[]> {
+  if (await isWasherDevMock()) return washerDevStore().offers();
   const response = await api.get<unknown>('/washer/jobs/offers', { signal });
   return envelope(z.array(washJobOfferSchema)).parse(response.data).data;
 }
 
 export async function fetchActiveJob(signal?: AbortSignal): Promise<WashJobView | null> {
+  if (await isWasherDevMock()) return washerDevStore().active();
   const response = await api.get<unknown>('/washer/jobs/active', { signal });
   return envelope(washJobViewSchema.nullable()).parse(response.data).data;
 }
@@ -48,21 +60,25 @@ export async function fetchEarnings(
   period: WasherEarningsPeriod,
   signal?: AbortSignal,
 ): Promise<WasherEarningsView> {
+  if (await isWasherDevMock()) return washerDevStore().earnings(period);
   const response = await api.get<unknown>('/washer/earnings', { params: { period }, signal });
   return envelope(washerEarningsViewSchema).parse(response.data).data;
 }
 
 export async function fetchMenu(signal?: AbortSignal): Promise<WashServiceMenu> {
+  if (await isWasherDevMock()) return washerDevStore().menu();
   const response = await api.get<unknown>('/washer/services', { signal });
   return envelope(washServiceMenuSchema).parse(response.data).data;
 }
 
 export async function fetchProfile(signal?: AbortSignal): Promise<WasherProfileView> {
+  if (await isWasherDevMock()) return washerDevStore().profile();
   const response = await api.get<unknown>('/washer/profile', { signal });
   return envelope(washerProfileViewSchema).parse(response.data).data;
 }
 
 export async function acceptOffer(jobId: string, intent: Intent): Promise<WashJobView> {
+  if (await isWasherDevMock()) return washerDevStore().accept(jobId);
   const response = await api.post<unknown>(
     `/washer/jobs/${jobId}/accept`,
     {},
@@ -76,6 +92,7 @@ export async function advanceJob(
   event: CarwashJobEvent,
   intent: Intent,
 ): Promise<WashJobView> {
+  if (await isWasherDevMock()) return washerDevStore().advance(jobId, event);
   const response = await api.post<unknown>(
     `/washer/jobs/${jobId}/status`,
     advanceWashJobSchema.parse({ event }),
@@ -96,6 +113,7 @@ export async function attachPhoto(
   photoId: string,
   intent: Intent,
 ): Promise<WashJobView> {
+  if (await isWasherDevMock()) return washerDevStore().attach(jobId, slot, photoId);
   const response = await api.post<unknown>(
     `/washer/jobs/${jobId}/${slot}-photo`,
     attachWashPhotoSchema.parse({ photoId }),
@@ -116,6 +134,11 @@ export async function setAvailability(
     ...(fix === undefined ? {} : { location: { lat: fix.lat, lng: fix.lng } }),
   });
 
+  if (await isWasherDevMock()) {
+    washerDevStore().setOnline(body.isOnline);
+    return;
+  }
+
   await api.patch('/washer/availability', body, {
     headers: { 'Idempotency-Key': intent.idempotencyKey },
   });
@@ -126,6 +149,9 @@ export async function upsertService(
   input: UpsertWashService,
   intent: Intent,
 ): Promise<WashServiceMenu> {
+  if (await isWasherDevMock()) {
+    return washerDevStore().upsert(serviceName, upsertWashServiceSchema.parse(input));
+  }
   const response = await api.put<unknown>(
     `/washer/services/${serviceName}`,
     upsertWashServiceSchema.parse(input),

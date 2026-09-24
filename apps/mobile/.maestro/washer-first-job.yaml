@@ -86,14 +86,11 @@ tags:
 - extendedWaitUntil:
     visible: 'Cancel'
     timeout: 10000
-# Shutter: WashCamera's shutter has no testID, only the accessibility label
-# "Take the before photo" — the same label as the frame under the modal. The
-# `rightOf: Cancel` anchor picks the shutter, which sits beside Cancel in the
-# camera bar (Maestro orders relative matches by distance to the anchor).
+# Shutter, by WashCamera's testID. Its accessibility label ("Take the before
+# photo") is shared with the frame under the modal, so a label selector would
+# be ambiguous.
 - tapOn:
-    text: 'Take the before photo'
-    rightOf:
-      text: 'Cancel'
+    id: 'wash-camera-shutter'
 # Compress + signed upload + attach; can take a while on an emulator network.
 - extendedWaitUntil:
     visible: 'Before · done'
@@ -113,11 +110,9 @@ tags:
 - extendedWaitUntil:
     visible: 'Cancel'
     timeout: 10000
-# Shutter by label, anchored to Cancel as above.
+# Shutter, by testID as above.
 - tapOn:
-    text: 'Take the after photo'
-    rightOf:
-      text: 'Cancel'
+    id: 'wash-camera-shutter'
 - extendedWaitUntil:
     visible: 'After · done'
     timeout: 45000

@@ -1016,3 +1016,23 @@ their switch reads online. A separate background task has already been raised fo
 - **Done means:** that task lands. `postFix` sends a UUID key (one per fix, stable across that
   fix's retries), and an HTTP-level test posts a fix through the real idempotency guard and
   gets a 2xx.
+
+### S-52 — The dev-mock preview does not reach washer registration or the gig ID upload
+
+- **Status:** `open`
+- **Found in:** task 14 task-11b (dev-mock fixtures, ruling T11-W1)
+- **Surface:** mobile (washer)
+
+Under a dev-mock session the washer fixtures serve a partner who is already **verified**,
+so the walk-through covers offers, the active job, the menu, earnings and the profile, but
+not `profile/register.tsx` or the gig partner's "send your ID" step. `createProfile` and
+`submitDocuments` in `apps/mobile/src/features/washer/api/washer.ts` still go to the network,
+and `useHeldUploads` / `useCameraGate` (registration photos) still call `uploadImage` and ask
+for a real camera permission, which the browser preview refuses. On web that refusal is
+silent, because react-native-web's `Alert.alert` is a no-op (`learnings.md`).
+
+- **Why deferred:** the brief asked for a verified partner and the job walk; registration
+  needs a second fixture mode (unregistered, then pending) and a way to pick it.
+- **Done means:** a dev-mock session can start unregistered (404 `WASHER_PROFILE_NOT_FOUND`
+  from the store), register as business and as gig, send an ID with the stand-in camera,
+  and land in `pending`; `dev-fixtures.test.ts` walks it; nothing reaches the network.

@@ -16,6 +16,7 @@ import { RefreshNotice } from '@/features/washer/components/RefreshNotice';
 import { StepRail } from '@/features/washer/components/StepRail';
 import { WashActionBar } from '@/features/washer/components/WashActionBar';
 import { WashCamera } from '@/features/washer/components/WashCamera';
+import { usesDevCamera } from '@/features/washer/dev-camera';
 import { usePhotoSlot, type PhotoSlotCapture } from '@/features/washer/hooks/usePhotoSlot';
 import {
   useActiveWash,
@@ -105,6 +106,12 @@ export default function WasherActiveScreen() {
 
   const askForCamera = useCallback(
     async (slot: PhotoSlot) => {
+      // The dev-mock browser preview has no camera to grant; its stand-in needs
+      // no permission (ruling T11-W1). Never true on a device.
+      if (await usesDevCamera()) {
+        setCameraSlot(slot);
+        return;
+      }
       if (permission?.granted !== true) {
         const next = await requestPermission();
         if (!next.granted) {
