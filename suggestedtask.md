@@ -703,6 +703,12 @@ from, so the number is the partner's own quote; it is dropped when the menu has 
   The active-job header (`app/(washer)/active/index.tsx`, task 7) has the same gap:
   `WashJobView` carries no address either, so it shows "Your active job" where mockup B2 names
   the space; the same change should add `spaceAddress` to the job view.
+- **Extended by the task 14 UI audit (M, job identity):** a partner walking up to a car needs
+  to know it is the right one. The active job's header now names the tab ("Active") with
+  "service · vehicle" as its subtitle; it should also carry the space's name, the car's plate
+  and when the car leaves. None of those is on `WashJobView`. Done also means the job view
+  gains `spaceName`, `vehiclePlate` and `bookingEndsAt` (plate masked per the privacy
+  rules), and the active header's subtitle shows them.
 
 ### S-35 — Shared client error matching expects a `NOT_FOUND` code the API never sends
 
@@ -1466,3 +1472,73 @@ into its `catch`, releases the key, and Razorpay's redelivery re-runs `dispatch`
 - **Done means:** `WebhookService` mints a `claimedAt`, passes it to `claim`, `store` and
   `release`, and logs a `false` from either at warn with the event id; a test in
   `payment-webhook-http.spec.ts` shows a zombie delivery's store landing on nothing.
+
+### S-76 — A 2xx the app cannot parse is retried twice before "Update the app" shows
+
+- **Status:** `open`
+- **Found in:** task 14 fix wave B1 scoped re-review (section N row)
+- **Surface:** mobile
+
+`apps/mobile/src/lib/query.ts`'s default `retry` stops on a 4xx but retries anything else up
+to twice, and a `ZodError` (a 2xx body this build cannot read) is "anything else". G1 made the
+classifier call that "outdated" and the copy say "Update the app to continue", but every query
+fetches the same unreadable body two more times first, with the skeleton on screen meanwhile.
+
+- **Why deferred:** `lib/query.ts` is every role's query client, older than task 14, and B2's
+  scope was the washer UI audit.
+- **Done means:** the default `retry` returns `false` for a `ZodError` (and for anything the
+  shared classifier calls final), with a test that an unparseable 2xx is fetched once and lands
+  on the error state's "Update the app" copy.
+
+### S-77 — The app has no support surface, so "Contact support" can go nowhere
+
+- **Status:** `open`
+- **Found in:** task 14 UI audit, impeccable P4 (fix wave B2, M10)
+- **Surface:** mobile (washer and valet), product
+
+The washer verification banner offered "Contact support" to a rejected (or unrecognised)
+partner, and its button opened the profile, which has no support row. M10 removed that button:
+the banner keeps its words and draws no action, because a button that leads nowhere is worse
+than none. Valet has the same dead action: `features/valet/profile-status.ts` offers "Contact
+support" and `app/(valet)/offers.tsx` routes every banner action to the valet profile.
+
+- **Why deferred:** a support channel (in-app form, phone line, email, WhatsApp) is a product
+  decision with an operational owner, not a screen fix, and valet was outside B2's scope.
+- **Done means:** a support entry exists (a Profile row at least) with a real destination;
+  `bannerActionRoute` in `features/washer/verification-copy.ts` routes "Contact support" to it
+  and the rejected/unknown banners get their action back; valet routes its banner actions by
+  what they say the same way.
+
+### S-78 — The earnings hero is a period total, not settled money with a payout date
+
+- **Status:** `open`
+- **Found in:** task 14 UI audit (fix wave B2, section M rows)
+- **Surface:** contracts, api, mobile
+
+The washer earnings screen's headline is `summary.netPaise` for the chosen period. A partner's
+real question is "what is coming to me, and when": money that has settled into their payable
+balance, and the date of the next payout. Neither is on `WasherEarningsView`, and the period
+total mixes settled and not-yet-settled jobs.
+
+- **Why deferred:** needs contract fields and a ledger query (payable balance, next payout
+  date from the payout schedule), which is server work and task 16's payout surface.
+- **Done means:** the earnings view carries a settled balance and the next payout date from the
+  server, the hero shows them (no client arithmetic, R-FE-06), and the period total becomes the
+  secondary figure.
+
+### S-79 — Icon sizes, and the shared empty and error states' shapes, are still literals
+
+- **Status:** `open`
+- **Found in:** task 14 fix wave B2 (M1, M3, M13)
+- **Surface:** tokens, ui-native, mobile
+
+B2 moved touch targets, the content width, the tab bar height and skeleton heights into
+`packages/tokens` (`touchTarget`, `layout`). Two groups of sizes are still typed where they are
+used: every `MaterialCommunityIcons size={16|18|20|24|28|48}` across the washer screens and
+components, and in `packages/ui-native` the EmptyState's 120px illustration circle and the
+ErrorState's 56px "!" badge (with its hand-computed radius and line height).
+
+- **Why deferred:** B2's brief allowed new tokens for what section M named; an icon-size scale
+  touches every role's screens and wants one decision on the steps.
+- **Done means:** an `iconSize` scale in `packages/tokens`, the washer surface and ui-native
+  reading it, and a scan test like `touch-targets.test.ts` that fails on a literal icon size.
