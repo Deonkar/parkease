@@ -1542,3 +1542,45 @@ ErrorState's 56px "!" badge (with its hand-computed radius and line height).
   touches every role's screens and wants one decision on the steps.
 - **Done means:** an `iconSize` scale in `packages/tokens`, the washer surface and ui-native
   reading it, and a scan test like `touch-targets.test.ts` that fails on a literal icon size.
+- **Extended in task 14 final fix wave (B2):** `WashOfferCard.tsx` line 196 and `WashActionBar.tsx`
+  line 60 both use `minHeight: 52`, which escapes the touch-target scan because 52 is neither 44 nor 48. This is `touchTarget` (48) plus `spacing.xs` (4), and should be `touchTarget + spacing.xs` or
+  a named token.
+
+### S-80 — `IdempotencyService.claim()` returns `proceed` when the row vanished
+
+- **Status:** `open`
+- **Found in:** task 14 final fix wave, server review
+- **Surface:** api
+
+`IdempotencyService.claim` (`apps/api/src/platform/idempotency/idempotency.service.ts` line 103)
+inserts a new claim row and then selects it back. If the row vanishes between the insert and
+select (for example, a reaper job deletes stale claims from multiple threads at once), the
+select returns `undefined`, and later `store` matches no row. This is now logged at warn ("or
+the key is gone"), not silent, but the caller still treats `claim === undefined` as a fresh
+attempt and has two paths to a re-run: a zombie that stored its answer after the key aged past
+the reaper's window, and a legitimate retry whose claim was cleaned up while it was committing.
+
+- **Why deferred:** the fix is either to treat a vanished row as a fresh claim (insert and select
+  again, accept the reaper race), or to answer 409 and let the API retry. Both need the reaper's
+  window time and a replay decision.
+- **Done means:** the claim logic handles a vanished row (either by re-inserting or by returning a
+  409), and a unit test covers the race by mocking `claim()` to return `undefined` after a successful
+  insert.
+
+### S-81 — Empty and error states inside an outer ScrollView are top-aligned, not centred
+
+- **Status:** `open`
+- **Found in:** task 14 final fix wave (M1 inner-scroll fix), design audit
+- **Surface:** mobile
+
+M1 fixed `EmptyState` and `ErrorState` to scroll when short and centre when there is room. But
+the washer profile, owner index, valet earnings and valet profile all render these states
+inside their own `ScrollView`, and a zero flex basis collapses the state to nothing, so the
+fix only takes effect at a size where the outer scroll is already scrolling. The state sits
+top-aligned with no vertical breathing room. The screens pass no centring prop.
+
+- **Why deferred:** the screens are outside task 14's file list. The fix is either a `flex` prop
+  the screens can pass to override the grow-only layout, or dropping the outer `ScrollView` for
+  the empty/error state and using `flex: 1` with the centring.
+- **Done means:** one of those screens shows its empty state both top-aligned (when it overflows)
+  and centred (when there is room), asserted in a test at 375px and at 812px tall.
