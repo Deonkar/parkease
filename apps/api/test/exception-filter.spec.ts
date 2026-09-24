@@ -121,6 +121,24 @@ describe('AllExceptionsFilter', () => {
     expect(body).not.toContain('Key (phone)');
   });
 
+  /**
+   * 23514 is a CHECK violation, and migration 0031's evidence-freeze trigger
+   * raises it too. It is deliberately NOT in the PG map: every such row rule
+   * has an application guard in front of it that answers the caller first
+   * (`PHOTO_SLOT_CLOSED`, `BEFORE_PHOTO_REQUIRED`), so reaching the database's
+   * refusal means that guard was bypassed — our bug, alerted as a 5xx, never
+   * a 4xx the partner is told to fix.
+   */
+  it('answers 500 INTERNAL_ERROR for a CHECK or evidence-freeze violation (23514)', () => {
+    const statusFn = vi.fn();
+    const err = Object.assign(new Error('frozen'), { code: '23514' });
+    filter.catch(new Error('wrapped', { cause: err }), mockHost(sendFn, statusFn));
+
+    expect(statusFn).toHaveBeenCalledWith(500);
+    const call = sendFn.mock.calls[0] as [{ error: { code: string } }];
+    expect(call[0].error.code).toBe('INTERNAL_ERROR');
+  });
+
   it('maps unknown errors to 500 INTERNAL_ERROR', () => {
     filter.catch(new Error('some internal thing'), mockHost(sendFn));
 

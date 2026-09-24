@@ -1,6 +1,7 @@
 import { uuidv7 } from '@parkease/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
+import { pgConstraintName, pgSqlState } from '../../src/platform/db/errors.js';
 import {
   hashCanonicalBody,
   IdempotencyService,
@@ -684,6 +685,137 @@ describe('photo slots close with the step they evidence', () => {
     const res = await attachPhoto(uuidv7(), washerId, 'before');
 
     expect(res.status).toBe(404);
+  });
+});
+
+/**
+ * Database M1 + L9 (task 14 final fix wave). The attach guard above is the
+ * application half of "evidence stops changing"; migration 0031 is the row
+ * half, so a console fix, a backfill or a future second write path cannot edit
+ * a photo the job has moved past (rule 5, learnings.md "A photo gate belongs in
+ * the CHECK constraint as well as the command").
+ *
+ * Driven to each state through HTTP, then written to directly — the only way to
+ * reach the trigger, because the API refuses first. If it ever did fire behind
+ * the API, SQLSTATE 23514 is not in the filter's PG map, so the caller gets
+ * `500 INTERNAL_ERROR` (pinned in `exception-filter.spec.ts`): reaching it means
+ * the application guard was bypassed, which is our fault, not the partner's.
+ */
+describe('the database freezes wash evidence (migration 0031)', () => {
+  const directWrite = async (jobId: string, column: 'before' | 'after', value: string) => {
+    try {
+      if (column === 'before') {
+        await h.sql`UPDATE wash_jobs SET before_photo_id = ${value} WHERE id = ${jobId}`;
+      } else {
+        await h.sql`UPDATE wash_jobs SET after_photo_id = ${value} WHERE id = ${jobId}`;
+      }
+      return { refused: false as const };
+    } catch (error: unknown) {
+      return {
+        refused: true as const,
+        sqlState: pgSqlState(error),
+        constraint: pgConstraintName(error),
+      };
+    }
+  };
+
+  const photosOf = async (jobId: string) => {
+    const [row] = await h.sql<{ before: string | null; after: string | null }[]>`
+      SELECT before_photo_id AS before, after_photo_id AS after FROM wash_jobs WHERE id = ${jobId}
+    `;
+    return row;
+  };
+
+  /** Accepted, en route, before photo attached, washing. */
+  const washingJob = async (washerId: string) => {
+    const jobId = await openJob();
+    expect((await accept(jobId, washerId)).status).toBe(200);
+    expect((await advance(jobId, washerId, 'en_route')).status).toBe(200);
+    expect(
+      (await attachPhoto(jobId, washerId, 'before', 'parkease/proofs/before-original')).status,
+    ).toBe(200);
+    expect((await advance(jobId, washerId, 'start_washing')).status).toBe(200);
+    return jobId;
+  };
+
+  it('still lets a direct write change the before photo while the slot is open', async () => {
+    // The control: without it, a trigger that refused every UPDATE would pass
+    // every refusal below.
+    const washerId = await seedWasher();
+    const jobId = await openJob();
+    await accept(jobId, washerId);
+    await advance(jobId, washerId, 'en_route');
+
+    expect(await directWrite(jobId, 'before', 'parkease/proofs/before-console')).toEqual({
+      refused: false,
+    });
+    expect((await photosOf(jobId))?.before).toBe('parkease/proofs/before-console');
+  });
+
+  it('refuses a direct write to the before photo once washing has started', async () => {
+    const washerId = await seedWasher();
+    const jobId = await washingJob(washerId);
+
+    const result = await directWrite(jobId, 'before', 'parkease/proofs/before-forged');
+
+    expect(result).toMatchObject({ refused: true, sqlState: '23514' });
+    expect((await photosOf(jobId))?.before).toBe('parkease/proofs/before-original');
+  });
+
+  it('refuses a direct write to either photo once the job is completed', async () => {
+    const washerId = await seedWasher();
+    const jobId = await washingJob(washerId);
+    await attachPhoto(jobId, washerId, 'after', 'parkease/proofs/after-original');
+    expect((await advance(jobId, washerId, 'complete')).status).toBe(200);
+
+    expect(await directWrite(jobId, 'before', 'parkease/proofs/before-forged')).toMatchObject({
+      refused: true,
+      sqlState: '23514',
+    });
+    expect(await directWrite(jobId, 'after', 'parkease/proofs/after-forged')).toMatchObject({
+      refused: true,
+      sqlState: '23514',
+    });
+    expect(await photosOf(jobId)).toEqual({
+      before: 'parkease/proofs/before-original',
+      after: 'parkease/proofs/after-original',
+    });
+  });
+
+  it('refuses a direct write to either photo once the job is cancelled', async () => {
+    const washerId = await seedWasher();
+    const jobId = await openJob();
+    await accept(jobId, washerId);
+    await attachPhoto(jobId, washerId, 'before', 'parkease/proofs/before-original');
+    asUser(h.driverId, ['driver']);
+    const cancelled = await http.request({
+      method: 'POST',
+      url: `/api/v1/driver/carwash/requests/${jobId}/cancel`,
+      headers: key(),
+      payload: {},
+    });
+    expect(cancelled.status).toBe(200);
+
+    expect(await directWrite(jobId, 'before', 'parkease/proofs/before-forged')).toMatchObject({
+      refused: true,
+      sqlState: '23514',
+    });
+    expect(await directWrite(jobId, 'after', 'parkease/proofs/after-forged')).toMatchObject({
+      refused: true,
+      sqlState: '23514',
+    });
+  });
+
+  it('refuses an after photo that is the before photo again', async () => {
+    // One image cannot be evidence of two moments.
+    const washerId = await seedWasher();
+    const jobId = await washingJob(washerId);
+
+    expect(await directWrite(jobId, 'after', 'parkease/proofs/before-original')).toMatchObject({
+      refused: true,
+      sqlState: '23514',
+      constraint: 'wash_jobs_photos_distinct_check',
+    });
   });
 });
 

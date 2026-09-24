@@ -249,6 +249,15 @@ export const washJobs = pgTable(
           AND (${t.status} <> 'completed' OR (${t.beforePhotoId} IS NOT NULL
                                           AND ${t.afterPhotoId} IS NOT NULL))`,
     ),
+    /**
+     * Migration 0031. One image cannot be evidence of two moments. The other half
+     * of 0031 — a photo freezing once its moment has passed — is a trigger
+     * (`wash_jobs_evidence_freeze`), because a CHECK cannot see the old row.
+     */
+    check(
+      'wash_jobs_photos_distinct_check',
+      sql`${t.afterPhotoId} IS NULL OR ${t.afterPhotoId} <> ${t.beforePhotoId}`,
+    ),
   ],
 );
 
