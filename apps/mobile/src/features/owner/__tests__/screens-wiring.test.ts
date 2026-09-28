@@ -16,6 +16,7 @@ const read = (...path: string[]) =>
 const dashboard = read('index.tsx');
 const earnings = read('earnings', 'index.tsx');
 const listing = read('listings', '[id].tsx');
+const scan = read('scan.tsx');
 
 describe('owner screens', () => {
   it('dashboard: shared state resolution, skeleton, retrying error, empty', () => {
@@ -28,6 +29,20 @@ describe('owner screens', () => {
 
   it('dashboard shows the date and greeting header even with no spaces yet (M6)', () => {
     expect(dashboard.match(/header\(data\.greetingName\)/g)?.length).toBe(2);
+  });
+
+  it('dashboard says a failed refresh over cached data, with or without spaces (m1, R-FAIL-01)', () => {
+    expect(dashboard.match(/\{refreshNotice\}/g)?.length).toBe(2);
+  });
+
+  it('scan checks in through the hook that refreshes the owner screens (I2)', () => {
+    expect(scan).toContain('useOwnerCheckIn()');
+    expect(scan).not.toContain('useMutation(');
+  });
+
+  it('listing detail dates a booking by weekday, day and month, like the statement (m3)', () => {
+    expect(listing).toContain('formatDayMonthIST(new Date(row.startsAt), { weekday: true })');
+    expect(listing).not.toContain('formatDateIST');
   });
 
   it('dashboard keeps the scanner, and See all goes to earnings', () => {

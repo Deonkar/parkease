@@ -8,7 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSpaceBookings } from '@/features/owner/hooks/useOwnerQueries';
 import { useSpaceDetail } from '@/features/owner/hooks/useSpaceDetail';
 import { useToggleSpace } from '@/features/owner/hooks/useToggleSpace';
-import { formatDateIST, formatTimeIST } from '@/lib/format';
+import { formatDayMonthIST, formatTimeIST } from '@/lib/format';
 import { formatPaise } from '@/lib/money';
 
 const STATUS_DISPLAY: Record<string, { label: string; color: string; glyph: string }> = {
@@ -251,7 +251,7 @@ function BookingGroup({
               {`${row.driverName} · ${row.vehicleType === 'car' ? 'Car' : 'Bike'}${row.slotIndex === null ? '' : ` · Slot ${String(row.slotIndex + 1)}`}`}
             </Text>
             <Text style={styles.subvalue}>
-              {`${formatDateIST(new Date(row.startsAt))} ${formatTimeIST(new Date(row.startsAt))} – ${formatTimeIST(new Date(row.endsAt))}`}
+              {`${formatDayMonthIST(new Date(row.startsAt), { weekday: true })} · ${formatTimeIST(new Date(row.startsAt))} – ${formatTimeIST(new Date(row.endsAt))}`}
             </Text>
             <Text
               style={styles.subvalue}

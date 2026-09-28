@@ -106,17 +106,21 @@ export default function OwnerDashboardScreen() {
     </View>
   );
 
+  // A failed refetch over cached data says so in both ready branches — the
+  // no-spaces one included — or the owner reads stale figures as current (R-FAIL-01).
+  const refreshNotice: ReactNode = dashboard.isError ? (
+    <RefreshNotice
+      testID="dashboard-refresh-notice"
+      retryLabel="Refresh your dashboard"
+      onRetry={() => void dashboard.refetch()}
+    />
+  ) : null;
+
   const body = (data: OwnerDashboard): ReactNode => (
     <>
       {header(data.greetingName)}
 
-      {dashboard.isError ? (
-        <RefreshNotice
-          testID="dashboard-refresh-notice"
-          retryLabel="Refresh your dashboard"
-          onRetry={() => void dashboard.refetch()}
-        />
-      ) : null}
+      {refreshNotice}
 
       <KpiCard
         hero
@@ -198,6 +202,7 @@ export default function OwnerDashboardScreen() {
           return (
             <>
               {header(data.greetingName)}
+              {refreshNotice}
               <ScanButton />
               <EmptyState
                 title="List your first space"

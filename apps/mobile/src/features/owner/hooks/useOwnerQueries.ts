@@ -4,6 +4,8 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { fetchDashboard, fetchEarnings, fetchSpaceBookings, fetchTransactions } from '../api/owner';
 
 export const ownerKeys = {
+  /** Every owner query — listings and space detail included — shares this prefix. */
+  all: ['owner'] as const,
   dashboard: ['owner', 'dashboard'] as const,
   earnings: (period: OwnerEarningsPeriod) => ['owner', 'earnings', period] as const,
   transactions: (period: OwnerEarningsPeriod) => ['owner', 'transactions', period] as const,
