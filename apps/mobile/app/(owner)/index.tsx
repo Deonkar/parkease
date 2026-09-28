@@ -183,6 +183,9 @@ export default function OwnerDashboardScreen() {
           />
         );
       case 'empty':
+        // Unreachable: OwnerDashboard is non-nullable, so resolveScreenState
+        // never returns 'empty' for this query — the no-spaces case below is
+        // ready state with a zero-length list, not an absent response.
         return null;
       case 'ready': {
         const data = dashboard.data;

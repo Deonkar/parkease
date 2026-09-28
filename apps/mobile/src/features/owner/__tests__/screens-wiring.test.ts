@@ -67,6 +67,14 @@ describe('owner screens', () => {
     expect(listing).toContain("useSpaceBookings(id, 'upcoming')");
   });
 
+  it('listing detail keeps cached bookings on screen through a transient refetch failure (F8, R-FAIL-01)', () => {
+    // Who is parked right now must not vanish just because the latest
+    // background refetch failed — only the absence of any cached data at
+    // all may block the group behind the full retry link.
+    expect(listing).toMatch(/query\.isError && query\.data === undefined/);
+    expect(listing).toContain("Couldn't refresh. Tap to retry.");
+  });
+
   it('no screen does arithmetic on paise or names a rate (R-FE-06)', () => {
     for (const source of [dashboard, earnings, listing]) {
       expect(source).not.toMatch(/0\.15|PLATFORM_COMMISSION|Paise\s*[-+*/]\s*\w/);

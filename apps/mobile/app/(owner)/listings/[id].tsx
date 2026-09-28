@@ -207,7 +207,9 @@ function BookingGroup({
   readonly query: ReturnType<typeof useSpaceBookings>;
 }) {
   if (query.isPending) return <ListSkeleton count={1} itemHeight={56} />;
-  if (query.isError) {
+  // A refetch failure with no rows on hand yet is the only case that blocks:
+  // there is nothing to show, so the retry link replaces the group entirely.
+  if (query.isError && query.data === undefined) {
     return (
       <Pressable
         accessibilityRole="button"
@@ -220,10 +222,26 @@ function BookingGroup({
       </Pressable>
     );
   }
+  // TanStack Query's discriminated union has already narrowed `data` to
+  // defined here: `isPending` returned above, and the one `isError` branch
+  // with `data === undefined` returned above it too.
   const rows = query.data;
   return (
     <View style={styles.bookingGroup}>
       <Text style={styles.bookingGroupTitle}>{`${title} (${String(rows.length)})`}</Text>
+      {/* R-FAIL-01: a transient refetch failure must not blank who is parked
+          right now just because the latest request failed — the cached rows
+          from the last success stay on screen, with a small non-blocking
+          notice rather than the full-width RefreshNotice banner. */}
+      {query.isError ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => void query.refetch()}
+          style={styles.bookingRetry}
+        >
+          <Text style={styles.subvalue}>{`Couldn't refresh. Tap to retry.`}</Text>
+        </Pressable>
+      ) : null}
       {rows.length === 0 ? (
         <Text style={styles.subvalue}>{`No ${title.toLowerCase()} bookings.`}</Text>
       ) : (

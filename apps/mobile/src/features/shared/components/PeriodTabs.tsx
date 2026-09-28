@@ -13,8 +13,9 @@ export interface PeriodTabsProps<P extends string> {
  * One period at a time (spec §4.3), rather than the wireframe's three side
  * by side.
  *
- * Real tabs: a `tablist` of `tab`s with `selected` state, so TalkBack says
- * "This week, tab, selected, 2 of 4". The selection is marked by an indicator
+ * Real tabs: a `tablist` of `tab`s with `selected` state, so TalkBack
+ * announces the label, that it is selected, and its position among the rest
+ * (e.g. "Week, tab, selected, 2 of 4"). The selection is marked by an indicator
  * bar and a heavier weight as well as colour (R-FE-12). The order comes from
  * the caller's own tuple, so a new period cannot be silently left off.
  *

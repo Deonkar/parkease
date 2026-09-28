@@ -16,7 +16,7 @@ import {
 import { ErrorState, Skeleton } from '@parkease/ui-native';
 import { FlashList } from '@shopify/flash-list';
 import { router } from 'expo-router';
-import { useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { EarningsBars } from '@/features/owner/components/EarningsBars';
@@ -61,7 +61,10 @@ export default function OwnerEarningsScreen() {
     });
   };
 
-  const lines = transactions.data?.pages.flatMap((page) => page.data) ?? [];
+  const lines = useMemo(
+    () => transactions.data?.pages.flatMap((page) => page.data) ?? [],
+    [transactions.data],
+  );
   const screen = resolveScreenState(earnings);
 
   const tabs = (
