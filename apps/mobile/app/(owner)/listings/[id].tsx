@@ -8,6 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSpaceBookings } from '@/features/owner/hooks/useOwnerQueries';
 import { useSpaceDetail } from '@/features/owner/hooks/useSpaceDetail';
 import { useToggleSpace } from '@/features/owner/hooks/useToggleSpace';
+import { ReadableColumn } from '@/features/shared/components/ReadableColumn';
 import { formatDayMonthIST, formatTimeIST } from '@/lib/format';
 import { formatPaise } from '@/lib/money';
 
@@ -80,111 +81,115 @@ export default function ListingDetailScreen() {
     <SafeAreaView style={styles.container}>
       <Stack.Screen options={{ title: space.title }} />
       <ScrollView contentContainerStyle={styles.content}>
-        {space.photos.length > 0 ? (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photos}>
-            {space.photos.map((photo) => (
-              <Image
-                key={photo.publicId}
-                source={{ uri: photo.url }}
-                style={styles.photo}
-                resizeMode="cover"
-              />
-            ))}
-          </ScrollView>
-        ) : (
-          <View style={styles.noPhotos}>
-            <Text style={styles.noPhotosText}>No photos yet</Text>
-          </View>
-        )}
-
-        <View style={styles.statusBadge}>
-          <Text style={[styles.statusText, { color: status.color }]}>
-            {status.glyph} {status.label}
-          </Text>
-        </View>
-
-        {space.rejectionReason ? (
-          <View style={styles.rejectionBox}>
-            <Text style={styles.rejectionLabel}>Reason:</Text>
-            <Text style={styles.rejectionText}>{space.rejectionReason}</Text>
-          </View>
-        ) : null}
-
-        <Section title="Address">
-          <Text style={styles.value}>{space.addressLine}</Text>
-          {space.landmark ? <Text style={styles.subvalue}>{space.landmark}</Text> : null}
-          <Text style={styles.subvalue}>
-            {space.city} — {space.pincode}
-          </Text>
-        </Section>
-
-        <Section title="Slots">
-          <View style={styles.slotRow}>
-            {space.slots.car > 0 && <Text style={styles.value}>{String(space.slots.car)} car</Text>}
-            {space.slots.twoWheeler > 0 && (
-              <Text style={styles.value}>{String(space.slots.twoWheeler)} two-wheeler</Text>
-            )}
-          </View>
-        </Section>
-
-        <Section title="Bookings">
-          <BookingGroup title="Active" query={active} />
-          <BookingGroup title="Upcoming" query={upcoming} />
-        </Section>
-
-        <Section title="Pricing">
-          {space.pricing.car ? (
-            <Text style={styles.value}>
-              Car: {formatPaise(space.pricing.car.hourlyPaise)}/hr
-              {space.pricing.car.dailyPaise
-                ? ` · ${formatPaise(space.pricing.car.dailyPaise)}/day`
-                : ''}
-            </Text>
-          ) : null}
-          {space.pricing.twoWheeler ? (
-            <Text style={styles.value}>
-              Two-wheeler: {formatPaise(space.pricing.twoWheeler.hourlyPaise)}/hr
-              {space.pricing.twoWheeler.dailyPaise
-                ? ` · ${formatPaise(space.pricing.twoWheeler.dailyPaise)}/day`
-                : ''}
-            </Text>
-          ) : null}
-        </Section>
-
-        <Section title="Schedule">
-          <Text style={styles.value}>
-            {space.schedule.is24x7 ? 'Available 24/7' : 'Custom hours'}
-          </Text>
-        </Section>
-
-        {space.amenities.length > 0 && (
-          <Section title="Amenities">
-            <View style={styles.amenityList}>
-              {space.amenities.map((a) => (
-                <View key={a} style={styles.amenityTag}>
-                  <Text style={styles.amenityTagText}>{a.replace('_', ' ')}</Text>
-                </View>
+        <ReadableColumn>
+          {space.photos.length > 0 ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photos}>
+              {space.photos.map((photo) => (
+                <Image
+                  key={photo.publicId}
+                  source={{ uri: photo.url }}
+                  style={styles.photo}
+                  resizeMode="cover"
+                />
               ))}
+            </ScrollView>
+          ) : (
+            <View style={styles.noPhotos}>
+              <Text style={styles.noPhotosText}>No photos yet</Text>
+            </View>
+          )}
+
+          <View style={styles.statusBadge}>
+            <Text style={[styles.statusText, { color: status.color }]}>
+              {status.glyph} {status.label}
+            </Text>
+          </View>
+
+          {space.rejectionReason ? (
+            <View style={styles.rejectionBox}>
+              <Text style={styles.rejectionLabel}>Reason:</Text>
+              <Text style={styles.rejectionText}>{space.rejectionReason}</Text>
+            </View>
+          ) : null}
+
+          <Section title="Address">
+            <Text style={styles.value}>{space.addressLine}</Text>
+            {space.landmark ? <Text style={styles.subvalue}>{space.landmark}</Text> : null}
+            <Text style={styles.subvalue}>
+              {space.city} — {space.pincode}
+            </Text>
+          </Section>
+
+          <Section title="Slots">
+            <View style={styles.slotRow}>
+              {space.slots.car > 0 && (
+                <Text style={styles.value}>{String(space.slots.car)} car</Text>
+              )}
+              {space.slots.twoWheeler > 0 && (
+                <Text style={styles.value}>{String(space.slots.twoWheeler)} two-wheeler</Text>
+              )}
             </View>
           </Section>
-        )}
 
-        {space.accessInstructions ? (
-          <Section title="Access Instructions">
-            <Text style={styles.value}>{space.accessInstructions}</Text>
+          <Section title="Bookings">
+            <BookingGroup title="Active" query={active} />
+            <BookingGroup title="Upcoming" query={upcoming} />
           </Section>
-        ) : null}
 
-        {canToggle && (
-          <View style={styles.actions}>
-            <Button
-              label={space.approvalStatus === ApprovalStatus.ACTIVE ? 'Deactivate' : 'Activate'}
-              variant={space.approvalStatus === ApprovalStatus.ACTIVE ? 'secondary' : 'primary'}
-              onPress={handleToggle}
-              loading={toggle.isPending}
-            />
-          </View>
-        )}
+          <Section title="Pricing">
+            {space.pricing.car ? (
+              <Text style={styles.value}>
+                Car: {formatPaise(space.pricing.car.hourlyPaise)}/hr
+                {space.pricing.car.dailyPaise
+                  ? ` · ${formatPaise(space.pricing.car.dailyPaise)}/day`
+                  : ''}
+              </Text>
+            ) : null}
+            {space.pricing.twoWheeler ? (
+              <Text style={styles.value}>
+                Two-wheeler: {formatPaise(space.pricing.twoWheeler.hourlyPaise)}/hr
+                {space.pricing.twoWheeler.dailyPaise
+                  ? ` · ${formatPaise(space.pricing.twoWheeler.dailyPaise)}/day`
+                  : ''}
+              </Text>
+            ) : null}
+          </Section>
+
+          <Section title="Schedule">
+            <Text style={styles.value}>
+              {space.schedule.is24x7 ? 'Available 24/7' : 'Custom hours'}
+            </Text>
+          </Section>
+
+          {space.amenities.length > 0 && (
+            <Section title="Amenities">
+              <View style={styles.amenityList}>
+                {space.amenities.map((a) => (
+                  <View key={a} style={styles.amenityTag}>
+                    <Text style={styles.amenityTagText}>{a.replace('_', ' ')}</Text>
+                  </View>
+                ))}
+              </View>
+            </Section>
+          )}
+
+          {space.accessInstructions ? (
+            <Section title="Access Instructions">
+              <Text style={styles.value}>{space.accessInstructions}</Text>
+            </Section>
+          ) : null}
+
+          {canToggle && (
+            <View style={styles.actions}>
+              <Button
+                label={space.approvalStatus === ApprovalStatus.ACTIVE ? 'Deactivate' : 'Activate'}
+                variant={space.approvalStatus === ApprovalStatus.ACTIVE ? 'secondary' : 'primary'}
+                onPress={handleToggle}
+                loading={toggle.isPending}
+              />
+            </View>
+          )}
+        </ReadableColumn>
       </ScrollView>
     </SafeAreaView>
   );

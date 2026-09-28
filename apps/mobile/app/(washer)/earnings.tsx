@@ -11,12 +11,12 @@ import { useState, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { PeriodTabs } from '@/features/shared/components/PeriodTabs';
+import { ReadableColumn } from '@/features/shared/components/ReadableColumn';
 import { RefreshNotice } from '@/features/shared/components/RefreshNotice';
 import { resolveScreenState } from '@/features/shared/screen-state';
 import { loadFailureCopy } from '@/features/washer/api/errors';
 import { EarningsLine } from '@/features/washer/components/EarningsLine';
 import { EarningsSummary } from '@/features/washer/components/EarningsSummary';
-import { ReadableColumn } from '@/features/washer/components/ReadableColumn';
 import { WasherHeader } from '@/features/washer/components/WasherHeader';
 import { useWasherEarnings } from '@/features/washer/hooks/useWasherQueries';
 import { PERIOD_LABELS } from '@/features/washer/labels';

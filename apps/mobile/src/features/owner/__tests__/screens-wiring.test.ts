@@ -111,4 +111,19 @@ describe('owner screens', () => {
       expect(source).not.toMatch(/0\.15|PLATFORM_COMMISSION|Paise\s*[-+*/]\s*\w/);
     }
   });
+
+  it('dashboard dates its header like every other owner date, not the long form (fix wave 4, W3)', () => {
+    expect(dashboard).toContain('formatDayMonthIST(new Date(), { weekday: true })');
+    expect(dashboard).not.toContain('formatDateIST');
+  });
+
+  it('dashboard does not nest the statement lines inside a bordered card (fix wave 4, W2)', () => {
+    expect(dashboard).not.toContain('style={styles.card}');
+  });
+
+  it('every owner screen reads at a readable measure on a wide viewport (fix wave 4, W4)', () => {
+    for (const source of [dashboard, earnings, listing]) {
+      expect(source).toContain('<ReadableColumn');
+    }
+  });
 });

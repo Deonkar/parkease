@@ -8,13 +8,13 @@ import { router } from 'expo-router';
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Alert, Linking, StyleSheet, Text, View } from 'react-native';
 
+import { ReadableColumn } from '@/features/shared/components/ReadableColumn';
 import { RefreshNotice } from '@/features/shared/components/RefreshNotice';
 import { useAnnounce } from '@/features/shared/hooks/useAnnounce';
 import { resolveScreenState } from '@/features/shared/screen-state';
 import { acceptOutcomeFor } from '@/features/washer/action-outcomes';
 import { isUnregisteredWasher, loadFailureCopy } from '@/features/washer/api/errors';
 import { OnlineRail } from '@/features/washer/components/OnlineRail';
-import { ReadableColumn } from '@/features/washer/components/ReadableColumn';
 import { VerificationNotice } from '@/features/washer/components/VerificationNotice';
 import { WasherHeader } from '@/features/washer/components/WasherHeader';
 import { WashOfferCard } from '@/features/washer/components/WashOfferCard';

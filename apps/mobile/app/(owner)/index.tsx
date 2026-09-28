@@ -19,10 +19,11 @@ import { KpiCard } from '@/features/owner/components/KpiCard';
 import { StatementLine } from '@/features/owner/components/StatementLine';
 import { greeting, growthCaption } from '@/features/owner/greeting';
 import { useOwnerDashboard } from '@/features/owner/hooks/useOwnerQueries';
+import { ReadableColumn } from '@/features/shared/components/ReadableColumn';
 import { RefreshNotice } from '@/features/shared/components/RefreshNotice';
 import { resolveScreenState } from '@/features/shared/screen-state';
 import { assertNever } from '@/lib/assert-never';
-import { formatDateIST } from '@/lib/format';
+import { formatDayMonthIST } from '@/lib/format';
 import { formatPaise } from '@/lib/money';
 
 const money = (paise: OwnerDashboard['owedPaise']) => formatPaise(paise, { alwaysDecimals: true });
@@ -30,7 +31,7 @@ const pct = (bp: number) => `${String(Math.round(bp / 100))}%`;
 
 function DashboardSkeleton() {
   return (
-    <View style={styles.content} testID="dashboard-skeleton">
+    <View style={styles.skeletonGroup} testID="dashboard-skeleton">
       <Skeleton width="100%" height={layout.skeleton.block} borderRadius={radius.md} />
       <Skeleton width="100%" height={layout.skeleton.card} borderRadius={radius.md} />
       <Skeleton width="100%" height={layout.skeleton.card} borderRadius={radius.md} />
@@ -99,7 +100,7 @@ export default function OwnerDashboardScreen() {
 
   const header = (greetingName: string | null): ReactNode => (
     <View>
-      <Text style={styles.muted}>{formatDateIST(new Date())}</Text>
+      <Text style={styles.muted}>{formatDayMonthIST(new Date(), { weekday: true })}</Text>
       <Text style={styles.h1} accessibilityRole="header">
         {greetingName ? `${greeting()}, ${greetingName}` : greeting()}
       </Text>
@@ -146,27 +147,29 @@ export default function OwnerDashboardScreen() {
 
       <ScanButton />
 
-      <View style={styles.card}>
-        <View style={styles.cardHead}>
-          <Text style={styles.h2} accessibilityRole="header">
-            Statement
-          </Text>
-          <Pressable
-            accessibilityRole="link"
-            onPress={() => {
-              router.push('/(owner)/earnings');
-            }}
-            style={styles.link}
-          >
-            <Text style={styles.linkText}>See all</Text>
-          </Pressable>
-        </View>
-        {data.statement.length === 0 ? (
-          <Text style={styles.muted}>Paid bookings appear here with what you earned on each.</Text>
-        ) : (
-          data.statement.map((line) => <StatementLine key={line.bookingId} line={line} />)
-        )}
+      <View style={styles.cardHead}>
+        <Text style={styles.h2} accessibilityRole="header">
+          Statement
+        </Text>
+        <Pressable
+          accessibilityRole="link"
+          onPress={() => {
+            router.push('/(owner)/earnings');
+          }}
+          style={styles.link}
+        >
+          <Text style={styles.linkText}>See all</Text>
+        </Pressable>
       </View>
+      {data.statement.length === 0 ? (
+        <Text style={styles.muted}>Paid bookings appear here with what you earned on each.</Text>
+      ) : (
+        <View style={styles.statementList}>
+          {data.statement.map((line) => (
+            <StatementLine key={line.bookingId} line={line} />
+          ))}
+        </View>
+      )}
 
       <Text style={styles.h2} accessibilityRole="header">
         Spaces
@@ -234,7 +237,7 @@ export default function OwnerDashboardScreen() {
       contentContainerStyle={styles.content}
       refreshControl={<RefreshControl refreshing={pulling} onRefresh={onPull} />}
     >
-      {content()}
+      <ReadableColumn style={styles.column}>{content()}</ReadableColumn>
     </ScrollView>
   );
 }
@@ -242,22 +245,18 @@ export default function OwnerDashboardScreen() {
 const styles = StyleSheet.create({
   content: {
     flexGrow: 1,
-    padding: spacing.base,
-    gap: spacing.lg,
     backgroundColor: colors.surfaceSecondary,
   },
+  column: {
+    padding: spacing.base,
+    gap: spacing.lg,
+  },
+  skeletonGroup: { gap: spacing.lg },
   h1: { fontSize: fontSize['2xl'], fontWeight: fontWeight.bold, color: colors.text },
   h2: { fontSize: fontSize.lg, fontWeight: fontWeight.bold, color: colors.text },
   muted: { fontSize: fontSize.sm, color: colors.textSecondary },
   kpiRow: { flexDirection: 'row', gap: spacing.md },
-  card: {
-    gap: spacing.md,
-    padding: spacing.base,
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
+  statementList: { gap: spacing.md },
   cardHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   link: { minHeight: touchTarget, justifyContent: 'center', paddingHorizontal: spacing.sm },
   linkText: { fontSize: fontSize.sm, fontWeight: fontWeight.semibold, color: colors.primary },

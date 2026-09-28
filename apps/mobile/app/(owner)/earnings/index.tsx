@@ -24,6 +24,7 @@ import { KpiCard } from '@/features/owner/components/KpiCard';
 import { StatementLine } from '@/features/owner/components/StatementLine';
 import { useOwnerEarnings, useOwnerTransactions } from '@/features/owner/hooks/useOwnerQueries';
 import { PeriodTabs } from '@/features/shared/components/PeriodTabs';
+import { ReadableColumn } from '@/features/shared/components/ReadableColumn';
 import { RefreshNotice } from '@/features/shared/components/RefreshNotice';
 import { resolveScreenState } from '@/features/shared/screen-state';
 import { formatPaise } from '@/lib/money';
@@ -207,13 +208,22 @@ export default function OwnerEarningsScreen() {
   return (
     <View style={styles.root}>
       <View style={styles.titleBlock}>
-        <Text style={styles.title} accessibilityRole="header">
-          Earnings
-        </Text>
-        <Text style={styles.subtitle}>Your share, after the ParkEase fee</Text>
+        <ReadableColumn>
+          <Text style={styles.title} accessibilityRole="header">
+            Earnings
+          </Text>
+          <Text style={styles.subtitle}>Your share, after the ParkEase fee</Text>
+        </ReadableColumn>
       </View>
-      <View style={styles.tabsRow}>{tabs}</View>
-      <View style={styles.body}>{content()}</View>
+      {/* The strip stays full width (it carries the border); only the tabs
+          inside it are held to the readable column, so they align with the
+          statement lines below on a wide viewport. */}
+      <View style={styles.tabsRow}>
+        <ReadableColumn>{tabs}</ReadableColumn>
+      </View>
+      <View style={styles.body}>
+        <ReadableColumn style={styles.bodyColumn}>{content()}</ReadableColumn>
+      </View>
     </View>
   );
 }
@@ -235,6 +245,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   body: { flex: 1 },
+  bodyColumn: { flex: 1 },
   skeletons: { padding: spacing.base, gap: spacing.md },
   list: { padding: spacing.base, paddingBottom: spacing.xl },
   header: { gap: spacing.base, marginBottom: spacing.md },

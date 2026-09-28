@@ -2,8 +2,8 @@ import { fontSize, fontWeight, layout, touchTarget } from '@parkease/tokens';
 import { describe, expect, it, vi } from 'vitest';
 
 import { byTestId, nodes, render, style, text } from '../../shared/__tests__/render-native';
+import { ReadableColumn } from '../../shared/components/ReadableColumn';
 import { AccountButton } from '../components/AccountButton';
-import { ReadableColumn } from '../components/ReadableColumn';
 import { WasherHeader } from '../components/WasherHeader';
 
 const push = vi.hoisted(() => vi.fn());
