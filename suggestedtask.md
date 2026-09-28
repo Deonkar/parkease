@@ -1784,3 +1784,18 @@ which is exactly the booking the owner is looking for at the gate. This follows 
 - **Why deferred:** a product decision about the group's meaning, not a defect in the code as specified.
 - **Done means:** Upcoming (or a new "Arriving" group) includes confirmed bookings whose window has
   started and not ended, with an HTTP test.
+
+### S-94 — Two pre-existing owner-listing a11y misses: rejection reason contrast, 36dp action button
+
+- **Status:** `open`
+- **Found in:** task 15 fix wave 5 (while extracting the shared approval-status map)
+- **Surface:** mobile
+
+(1) `(owner)/listings/[id].tsx` renders the rejection reason with `colors.error` text on
+`colors.errorLight` — 4.41:1, under AA (the token file documents the pair as failing). (2)
+`features/owner/components/ListingCard.tsx`'s Activate/Deactivate `actionButton` has `minHeight: 36`,
+under the 48dp `touchTarget` token.
+
+- **Why deferred:** both pre-date task 15 (task 6) and sit outside the screens this task changed.
+- **Done means:** the rejection reason uses `errorInk` (or a surface background) with a contrast test,
+  and the action button uses `touchTarget`, covered by the owner touch-target audit.
