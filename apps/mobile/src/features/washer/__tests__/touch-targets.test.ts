@@ -14,6 +14,11 @@ const sources = [
   ...readdirSync(join(root, 'src', 'features', 'washer', 'components')).map((file) =>
     join('src', 'features', 'washer', 'components', file),
   ),
+  // PeriodTabs and RefreshNotice moved to features/shared/components (task 15,
+  // R-ARCH-07) — named explicitly rather than readdir'd, so this audit does not
+  // also sweep in unrelated shared controls that were never in scope for it.
+  join('src', 'features', 'shared', 'components', 'PeriodTabs.tsx'),
+  join('src', 'features', 'shared', 'components', 'RefreshNotice.tsx'),
   join('app', '(washer)', 'active', 'index.tsx'),
   join('app', '(washer)', 'offers.tsx'),
   join('app', '(washer)', 'menu.tsx'),
