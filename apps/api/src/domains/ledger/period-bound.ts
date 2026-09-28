@@ -41,3 +41,11 @@ export function istDays(period: 'today' | 'week' | 'month', now = new Date()): s
   for (let t = start; t <= end; t += DAY_MS) days.push(new Date(t).toISOString().slice(0, 10));
   return days;
 }
+
+/** Midnight IST today, as an instant. */
+export function istStartOfToday(now = new Date()): Date {
+  const ist = new Date(now.getTime() + IST_OFFSET_MS);
+  return new Date(
+    Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate()) - IST_OFFSET_MS,
+  );
+}

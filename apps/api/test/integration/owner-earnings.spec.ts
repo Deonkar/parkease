@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { istDays } from '../../src/domains/ledger/period-bound.js';
+import { istDays, istStartOfToday } from '../../src/domains/ledger/period-bound.js';
 import { OwnerBalanceQuery } from '../../src/domains/ledger/queries/owner-balance.js';
 
 import { type BookingStack, buildBookingStack, windowFromNow, zoneOf } from './booking-harness.js';
@@ -187,5 +187,9 @@ describe('owner earnings reads', () => {
     expect(istDays('month', wed)[0]).toBe('2026-09-01');
     // 20:00 UTC on the 9th is already the 10th in IST.
     expect(istDays('today', new Date('2026-09-09T20:00:00.000Z'))).toEqual(['2026-09-10']);
+    // Same instant, as an instant: IST midnight of the 10th.
+    expect(istStartOfToday(new Date('2026-09-09T20:00:00.000Z'))).toEqual(
+      new Date('2026-09-09T18:30:00.000Z'),
+    );
   });
 });
