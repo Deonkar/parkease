@@ -1,5 +1,4 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { ApprovalStatus } from '@parkease/contracts/enums';
 import type { OwnerDashboard } from '@parkease/contracts/owner';
 import {
   colors,
@@ -16,6 +15,7 @@ import { useState, type ReactNode } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { KpiCard } from '@/features/owner/components/KpiCard';
+import { SpaceRow } from '@/features/owner/components/SpaceRow';
 import { StatementLine } from '@/features/owner/components/StatementLine';
 import { greeting, growthCaption } from '@/features/owner/greeting';
 import { useOwnerDashboard } from '@/features/owner/hooks/useOwnerQueries';
@@ -27,7 +27,6 @@ import { formatDayMonthIST } from '@/lib/format';
 import { formatPaise } from '@/lib/money';
 
 const money = (paise: OwnerDashboard['owedPaise']) => formatPaise(paise, { alwaysDecimals: true });
-const pct = (bp: number) => `${String(Math.round(bp / 100))}%`;
 
 function DashboardSkeleton() {
   return (
@@ -48,37 +47,6 @@ function ScanButton() {
         router.push('/(owner)/scan');
       }}
     />
-  );
-}
-
-function SpaceRow({ space }: { readonly space: OwnerDashboard['spaces'][number] }) {
-  const live = space.approvalStatus === ApprovalStatus.ACTIVE;
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${space.title}, ${live ? 'live' : 'paused, not in search'}, occupancy ${pct(space.occupancyBp)} today`}
-      onPress={() => {
-        router.push(`/(owner)/listings/${space.id}`);
-      }}
-      style={styles.spaceRow}
-    >
-      <View style={styles.spaceText}>
-        <Text style={styles.spaceTitle} numberOfLines={1}>
-          {space.title}
-        </Text>
-        <Text style={styles.muted}>{`Occupancy ${pct(space.occupancyBp)} today`}</Text>
-      </View>
-      {live ? (
-        <View style={styles.pill}>
-          <View style={styles.dot} />
-          <Text style={styles.liveText}>Live</Text>
-        </View>
-      ) : (
-        <View style={[styles.pill, styles.pausedPill]}>
-          <Text style={styles.pausedText}>Paused · not in search</Text>
-        </View>
-      )}
-    </Pressable>
   );
 }
 
@@ -260,36 +228,4 @@ const styles = StyleSheet.create({
   cardHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   link: { minHeight: touchTarget, justifyContent: 'center', paddingHorizontal: spacing.sm },
   linkText: { fontSize: fontSize.sm, fontWeight: fontWeight.semibold, color: colors.primary },
-  spaceRow: {
-    minHeight: touchTarget,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    padding: spacing.base,
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
-  spaceText: { flex: 1, gap: spacing.xs },
-  spaceTitle: { fontSize: fontSize.base, fontWeight: fontWeight.semibold, color: colors.text },
-  pill: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  dot: {
-    width: spacing.sm,
-    height: spacing.sm,
-    borderRadius: radius.full,
-    backgroundColor: colors.availableVivid,
-  },
-  liveText: { fontSize: fontSize.xs, fontWeight: fontWeight.semibold, color: colors.available },
-  pausedPill: {
-    backgroundColor: colors.mutedSoft,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs / 2,
-  },
-  pausedText: {
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.semibold,
-    color: colors.textSecondary,
-  },
 });

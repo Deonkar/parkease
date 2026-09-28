@@ -35,7 +35,11 @@ const LABELS: Record<OwnerEarningsPeriod, { tab: string; heading: string; empty:
   month: { tab: 'Month', heading: 'This month', empty: 'No paid bookings this month' },
 };
 
-const renderLine = ({ item }: { readonly item: Line }) => <StatementLine line={item} />;
+const renderLine = ({ item }: { readonly item: Line }) => (
+  <View style={styles.columnInset}>
+    <StatementLine line={item} />
+  </View>
+);
 const Separator = () => <View style={styles.separator} />;
 
 /**
@@ -117,7 +121,10 @@ export default function OwnerEarningsScreen() {
   );
 
   const footer = (
-    <>
+    // Same `columnInset` the header and each statement line use (V2, fix
+    // wave 5): the FlashList's own `contentContainerStyle` no longer carries
+    // a horizontal inset, so every section that needs one names it itself.
+    <View style={styles.columnInset}>
       {transactions.isFetchNextPageError ? (
         <Pressable
           accessibilityRole="button"
@@ -137,7 +144,7 @@ export default function OwnerEarningsScreen() {
         <Text style={styles.payoutsText}>Payouts</Text>
         <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textSecondary} />
       </Pressable>
-    </>
+    </View>
   );
 
   const content = (): ReactNode => {
@@ -247,8 +254,13 @@ const styles = StyleSheet.create({
   body: { flex: 1 },
   bodyColumn: { flex: 1 },
   skeletons: { padding: spacing.base, gap: spacing.md },
-  list: { padding: spacing.base, paddingBottom: spacing.xl },
-  header: { gap: spacing.base, marginBottom: spacing.md },
+  // Vertical only: a horizontal inset here wraps the header (an ordinary
+  // child) and each recycled item cell differently enough at a wide
+  // viewport to visibly misalign them (V2, fix wave 5) — `columnInset`
+  // below is the one inset every section applies to itself instead.
+  list: { paddingTop: spacing.base, paddingBottom: spacing.xl },
+  columnInset: { paddingHorizontal: spacing.base },
+  header: { gap: spacing.base, marginBottom: spacing.md, paddingHorizontal: spacing.base },
   section: {
     fontSize: fontSize.xs,
     fontWeight: fontWeight.bold,

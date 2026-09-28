@@ -1,3 +1,4 @@
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ApprovalStatus } from '@parkease/contracts/enums';
 import { colors, fontSize, fontWeight, spacing, touchTarget } from '@parkease/tokens';
 import { Button, ErrorState, ListSkeleton } from '@parkease/ui-native';
@@ -5,20 +6,13 @@ import { Stack, useLocalSearchParams } from 'expo-router';
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { APPROVAL_STATUS_DISPLAY } from '@/features/owner/approval-status';
 import { useSpaceBookings } from '@/features/owner/hooks/useOwnerQueries';
 import { useSpaceDetail } from '@/features/owner/hooks/useSpaceDetail';
 import { useToggleSpace } from '@/features/owner/hooks/useToggleSpace';
 import { ReadableColumn } from '@/features/shared/components/ReadableColumn';
 import { formatDayMonthIST, formatTimeIST } from '@/lib/format';
 import { formatPaise } from '@/lib/money';
-
-const STATUS_DISPLAY: Record<string, { label: string; color: string; glyph: string }> = {
-  active: { label: 'Active', color: colors.success, glyph: '✓' },
-  pending_approval: { label: 'Pending Approval', color: colors.warning, glyph: '◷' },
-  inactive: { label: 'Inactive', color: colors.textTertiary, glyph: '⊘' },
-  changes_requested: { label: 'Changes Requested', color: colors.warning, glyph: '△' },
-  rejected: { label: 'Not Approved', color: colors.error, glyph: '✕' },
-};
 
 export default function ListingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -51,8 +45,7 @@ export default function ListingDetailScreen() {
     );
   }
 
-  const fallbackStatus = { label: 'Unknown', color: colors.textTertiary, glyph: '?' };
-  const status = STATUS_DISPLAY[space.approvalStatus] ?? fallbackStatus;
+  const status = APPROVAL_STATUS_DISPLAY[space.approvalStatus];
   const canToggle =
     space.approvalStatus === ApprovalStatus.ACTIVE ||
     space.approvalStatus === ApprovalStatus.INACTIVE;
@@ -100,9 +93,8 @@ export default function ListingDetailScreen() {
           )}
 
           <View style={styles.statusBadge}>
-            <Text style={[styles.statusText, { color: status.color }]}>
-              {status.glyph} {status.label}
-            </Text>
+            <MaterialCommunityIcons name={status.icon} size={16} color={status.color} />
+            <Text style={[styles.statusText, { color: status.color }]}>{status.label}</Text>
           </View>
 
           {space.rejectionReason ? (
@@ -291,6 +283,9 @@ const styles = StyleSheet.create({
   },
   noPhotosText: { color: colors.textTertiary, fontSize: fontSize.sm },
   statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
     paddingHorizontal: spacing.base,
     paddingVertical: spacing.sm,
   },

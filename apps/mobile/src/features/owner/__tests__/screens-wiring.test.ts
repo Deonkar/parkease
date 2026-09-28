@@ -126,4 +126,17 @@ describe('owner screens', () => {
       expect(source).toContain('<ReadableColumn');
     }
   });
+
+  it('earnings: the headline, the transactions and the footer share one horizontal inset (fix wave 5, V2)', () => {
+    // FlashList's own `contentContainerStyle` must not carry horizontal
+    // padding: that padding wraps the header and the recycled item cells
+    // differently, which is what put the headline's right edge ~14px
+    // outside the transaction cards' at a wide viewport. Every section that
+    // needs an inset declares `paddingHorizontal: spacing.base` itself
+    // instead, so the header, each statement line and the footer are all
+    // inset from the readable column by the same literal amount.
+    expect(earnings).not.toMatch(/list:\s*{\s*padding:\s*spacing\.base/);
+    const insets = earnings.match(/paddingHorizontal:\s*spacing\.base/g) ?? [];
+    expect(insets.length).toBeGreaterThanOrEqual(3);
+  });
 });
