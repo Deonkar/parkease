@@ -1584,3 +1584,26 @@ top-aligned with no vertical breathing room. The screens pass no centring prop.
   the empty/error state and using `flex: 1` with the centring.
 - **Done means:** one of those screens shows its empty state both top-aligned (when it overflows)
   and centred (when there is room), asserted in a test at 375px and at 812px tall.
+
+### S-82 — Owner occupancy assumes 24h opening, ignoring the space's own schedule
+
+- **Status:** `open`
+- **Found in:** task 15 (owner dashboard), task 3 — `SpaceOccupancyQuery.forOwner`
+- **Surface:** api
+
+`apps/api/src/domains/space/queries/occupancy.ts` computes each space's available hours as
+`slots × windowHours`, where `windowHours` is the wall-clock span of the requested window with
+no reference to `spaces.schedule` (`SpaceSchedule`, which can carry `is24x7: false` and explicit
+open/close times). An owner whose space closes overnight gets a denominator inflated by the
+closed hours, so `occupancyBp` reads lower than it should — a space fully booked during its own
+open hours would not show 10,000 bp.
+
+- **Why deferred:** task 3's brief scopes the query to slots × window only; intersecting the
+  window with the schedule is its own piece of interval arithmetic (a schedule can have
+  per-weekday open/close pairs) and its own test matrix (24x7, a single daily window, a window
+  spanning a midnight close). Doing it inline would have grown task 3 past a single grouped
+  query.
+- **Done means:** `forOwner` intersects `[window.from, window.to)` with the space's own open
+  hours (falling back to the full window when `is24x7` is true) before computing `available`,
+  with a test asserting a space that closes overnight reports 10,000 bp when every open hour in
+  the window is booked.
