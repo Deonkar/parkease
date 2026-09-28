@@ -5,7 +5,6 @@ export interface KpiCardProps {
   readonly label: string;
   readonly value: string;
   readonly caption?: string | null;
-  readonly captionTone?: 'neutral';
   readonly testID: string;
   readonly hero?: boolean;
 }

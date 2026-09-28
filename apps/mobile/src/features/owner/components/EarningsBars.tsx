@@ -23,15 +23,22 @@ const dayLabel = (date: string) => formatDateIST(new Date(`${date}T00:00:00Z`));
  */
 export function EarningsBars({ days }: { readonly days: OwnerEarningsView['days'] }) {
   if (days.length < 2) return null;
+  // Floored at 0: `netPaise` is signed (a refund-heavy period can make every
+  // day zero or negative), and a loss is never "the best day" — an empty
+  // period gets a neutral summary instead of announcing its smallest loss.
   const peak = Math.max(...days.map((d) => d.netPaise), 0);
   const best = days.reduce((a, b) => (b.netPaise > a.netPaise ? b : a));
+  const summary =
+    peak > 0
+      ? `Best day ${dayLabel(best.date)}, ${formatPaise(best.netPaise, { alwaysDecimals: true })}.`
+      : 'No earnings in this period.';
 
   return (
     <View
       style={styles.root}
       accessible
       accessibilityRole="image"
-      accessibilityLabel={`Daily earnings, ${String(days.length)} days. Best day ${dayLabel(best.date)}, ${formatPaise(best.netPaise, { alwaysDecimals: true })}.`}
+      accessibilityLabel={`Daily earnings, ${String(days.length)} days. ${summary}`}
       testID="earnings-bars"
     >
       {days.map((day) => (
