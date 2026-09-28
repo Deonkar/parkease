@@ -40,6 +40,28 @@ describe('owner screens', () => {
     expect(earnings).toMatch(/<ErrorState[\s\S]{0,300}refetch\(\)/);
   });
 
+  it('earnings: keeps the period tabs mounted through loading, error and ready (fix round 1)', () => {
+    // The tab bar must render from the screen's own top-level return, right
+    // beside the loading/error/ready content — not only from inside
+    // `ListHeaderComponent`, which the loading and error branches never reach.
+    // A tab bar wired only into the FlashList header vanishes the moment a tap
+    // lands on a period with no cached data, because that branch returns a
+    // bare skeleton and never mounts the header at all.
+    expect(earnings).toMatch(/(<PeriodTabs|\{tabs\})[\s\S]{0,400}\{content\(\)\}/);
+  });
+
+  it('earnings: a failed transaction refresh or next page never goes silent (R-FAIL-01, fix round 1)', () => {
+    // Pages already on screen must not swallow a failed background refetch,
+    // pull, or next-page fetch just because `ListEmptyComponent` only fires
+    // when there are zero rows.
+    expect(earnings).toMatch(/transactions\.isError[\s\S]{0,300}transactions-refresh-notice/);
+    expect(earnings).toContain('Refresh your transactions');
+    expect(earnings).toContain('isFetchNextPageError');
+    expect(earnings).toMatch(/isFetchNextPageError[\s\S]{0,300}fetchNextPage\(\)/);
+    // The Payouts row stays in the footer alongside the new retry state.
+    expect(earnings).toContain("router.push('/(owner)/earnings/payouts')");
+  });
+
   it('listing detail shows active and upcoming bookings', () => {
     expect(listing).toContain("useSpaceBookings(id, 'active')");
     expect(listing).toContain("useSpaceBookings(id, 'upcoming')");
