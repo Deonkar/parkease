@@ -1,4 +1,4 @@
-import { ApprovalStatus } from '@parkease/contracts/enums';
+import { APPROVAL_STATUS_VALUES, ApprovalStatus } from '@parkease/contracts/enums';
 import { colors } from '@parkease/tokens';
 import { describe, expect, it } from 'vitest';
 
@@ -65,5 +65,45 @@ describe('SpaceRow pill text clears AA on the surface it actually renders on', (
     // documents for `error` on `errorLight`.
     expect(contrast(colors.error, colors.mutedSoft)).toBeLessThan(AA_NORMAL);
     expect(APPROVAL_STATUS_DISPLAY[ApprovalStatus.REJECTED].color).toBe(colors.errorInk);
+  });
+});
+
+/**
+ * Round 3 (fix wave 5): round 2 only checked the map's `color` against
+ * `colors.mutedSoft` (the dashboard pill). The same `color` also renders as
+ * plain text on `colors.surface` in the listing detail badge
+ * (`app/(owner)/listings/[id].tsx`) and `ListingCard.tsx` — a surface round 2
+ * never asserted against. This table covers every `APPROVAL_STATUS_VALUES`
+ * member against both call sites' backgrounds in one place, so a future
+ * colour swap that passes on one surface and fails on the other cannot ship
+ * unnoticed.
+ *
+ * `active` is included here even though `SpaceRow` never renders the map's
+ * colour for it (it renders the Live dot instead) — `listings/[id].tsx` and
+ * `ListingCard.tsx` DO render `APPROVAL_STATUS_DISPLAY['active'].color` as
+ * plain text, and it was `colors.success` (#16A34A): 3.30:1 on `surface`,
+ * 3.01:1 on `mutedSoft` — both well under AA. Fixed to `colors.available`
+ * (#047857), the same availability-green token `SpaceRow`'s own Live text
+ * already uses and the one Wayfinder reserves for "free/live right now" —
+ * `colors.success` was never the right token for this status semantically,
+ * and it was also the AA failure this table exists to catch.
+ */
+const CALL_SITES: ReadonlyArray<{ readonly name: string; readonly background: string }> = [
+  { name: 'dashboard pill (SpaceRow, mutedSoft)', background: colors.mutedSoft },
+  { name: 'listing detail badge / listing card (surface)', background: colors.surface },
+];
+
+describe('every approval status colour clears AA on every background it renders on', () => {
+  const table = CALL_SITES.flatMap(({ name, background }) =>
+    APPROVAL_STATUS_VALUES.map((status) => ({
+      callSite: name,
+      background,
+      status,
+      color: APPROVAL_STATUS_DISPLAY[status].color,
+    })),
+  );
+
+  it.each(table)('$status on $callSite', ({ background, color }) => {
+    expect(contrast(color, background)).toBeGreaterThanOrEqual(AA_NORMAL);
   });
 });

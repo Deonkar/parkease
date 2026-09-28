@@ -10,17 +10,16 @@ type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 export interface ApprovalStatusDisplay {
   readonly label: string;
   /**
-   * Text (and icon) tint. Every value here is checked against BOTH surfaces
-   * it actually renders on: the listing detail badge's plain `surface`, and
-   * the dashboard pill's `colors.mutedSoft` (round 2, fix wave 5) —
-   * `mutedSoft` (#F1F5F9) is close to white but not white, and `colors.error`
-   * on it measures 4.41:1, under the 4.5:1 AA floor, the same failure
-   * `colors.ts` already documents for `error` on `errorLight`. `rejected`
-   * uses `errorInk` instead (5.91:1 on `mutedSoft`, 6.47:1 on `surface` —
-   * clears both). `warning` clears both surfaces already (5.02:1 on
-   * `surface`, 4.58:1 on `mutedSoft`) so `pending_approval` and
-   * `changes_requested` are unchanged.
-   * `approval-status-contrast.test.ts` is the guard against this regressing.
+   * Text (and icon) tint. Every value here clears 4.5:1 against BOTH
+   * surfaces it actually renders on: the listing detail badge / listing
+   * card's plain `colors.surface`, and the dashboard pill's
+   * `colors.mutedSoft` (#F1F5F9 — close to white but not white; `mutedSoft`
+   * is where round 2 caught `error` failing at 4.41:1, and `surface` is
+   * where round 3 caught `success` failing at 3.30:1 for `active`).
+   * `approval-status-contrast.test.ts` asserts every
+   * `APPROVAL_STATUS_VALUES` member against both surfaces in one table, so a
+   * future colour swap that passes one and fails the other cannot ship
+   * unnoticed.
    */
   readonly color: string;
   readonly icon: IconName;
@@ -49,7 +48,14 @@ export const APPROVAL_STATUS_DISPLAY: Readonly<Record<ApprovalStatusValue, Appro
   {
     [ApprovalStatus.ACTIVE]: {
       label: 'Active',
-      color: colors.success,
+      // Not `colors.success` (round 3, fix wave 5): it measured 3.30:1 on
+      // `surface` and 3.01:1 on `mutedSoft`, both well under AA, and it was
+      // never the right token semantically either — Wayfinder reserves the
+      // availability green for "free/live right now" (`colors.ts`), which is
+      // exactly what an active space is. `colors.available` is the same
+      // token `SpaceRow`'s own Live dot text already uses, and clears both
+      // surfaces (5.48:1 / 5.01:1).
+      color: colors.available,
       icon: 'check-circle-outline',
     },
     [ApprovalStatus.PENDING_APPROVAL]: {
