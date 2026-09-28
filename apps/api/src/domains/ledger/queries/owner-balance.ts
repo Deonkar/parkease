@@ -50,7 +50,8 @@ const net = (debits: number, credits: number) =>
  * with the washer or valet as the row's counterparty, so an account-and-space
  * filter hands the partner's money to the space owner. Every owner-side
  * posting — create, extend, cancel/refund reversals, expiry — stamps the
- * driver (learnings.md, "Booking postings stamp the DRIVER…").
+ * driver, while washer and valet legs post `owner_payable` under the same
+ * parking `booking_id` with the partner as counterparty.
  */
 const ownerSide = () =>
   and(

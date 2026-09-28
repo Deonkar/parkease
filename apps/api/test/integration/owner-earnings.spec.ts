@@ -192,7 +192,9 @@ describe('owner earnings reads', () => {
     const seen: string[] = [];
     let cursor: string | undefined;
     for (let guard = 0; guard < 10; guard += 1) {
-      const page = await earnings.statementPage(h.ownerId, { period: 'month', limit: 1, cursor });
+      // 'all', not 'month': the rows sit a minute in the past, which is last
+      // month during the first minute of an IST month.
+      const page = await earnings.statementPage(h.ownerId, { period: 'all', limit: 1, cursor });
       seen.push(...page.items.map((row) => row.bookingId));
       if (page.nextCursor === null) break;
       cursor = page.nextCursor;
