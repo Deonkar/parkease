@@ -3,7 +3,7 @@ import { colors, elevation, fontSize, fontWeight, radius, spacing } from '@parke
 import { StyleSheet, Text, View } from 'react-native';
 
 import { AmountRow } from '@/features/shared/components/AmountRow';
-import { formatDateIST, formatTimeIST } from '@/lib/format';
+import { formatDayMonthIST, formatTimeIST } from '@/lib/format';
 import { formatPaise, MINUS_SIGN } from '@/lib/money';
 
 const money = (paise: Line['basePaise'] | Line['netPaise']) =>
@@ -19,7 +19,9 @@ export function StatementLine({ line }: { readonly line: Line }) {
   const at = new Date(line.occurredAt);
   return (
     <View style={styles.root} testID="statement-line">
-      <Text style={styles.when}>{`${formatDateIST(at)} · ${formatTimeIST(at)}`}</Text>
+      <Text
+        style={styles.when}
+      >{`${formatDayMonthIST(at, { weekday: true })} · ${formatTimeIST(at)}`}</Text>
       <Text style={styles.who} testID="line-who">
         {`${line.driverName} · ${line.durationLabel} · ${line.spaceName}`}
       </Text>

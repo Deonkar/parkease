@@ -52,8 +52,9 @@ describe('every fixture parses through its contract schema', () => {
 
   it('space bookings, for every group', () => {
     for (const group of OWNER_BOOKING_GROUP_VALUES) {
-      const bookings = devSpaceBookings('0192f2c0-0000-7000-8000-000000000001', group, NOW);
-      expect(() => ownerBookingSchema.array().parse(bookings)).not.toThrow();
+      const page = devSpaceBookings('0192f2c0-0000-7000-8000-000000000001', group, NOW);
+      expect(() => ownerBookingSchema.array().parse(page.data)).not.toThrow();
+      expect(() => cursorPageMetaSchema.parse(page.meta)).not.toThrow();
     }
   });
 });
@@ -180,20 +181,30 @@ describe('transactions paging', () => {
 
 describe('a space’s bookings', () => {
   it('has two active, one upcoming and two past', () => {
-    expect(devSpaceBookings('space-1', 'active', NOW)).toHaveLength(2);
-    expect(devSpaceBookings('space-1', 'upcoming', NOW)).toHaveLength(1);
-    expect(devSpaceBookings('space-1', 'past', NOW)).toHaveLength(2);
+    expect(devSpaceBookings('space-1', 'active', NOW).data).toHaveLength(2);
+    expect(devSpaceBookings('space-1', 'upcoming', NOW).data).toHaveLength(1);
+    expect(devSpaceBookings('space-1', 'past', NOW).data).toHaveLength(2);
   });
 
   it('has not earned anything yet on a booking that has not started', () => {
-    const [upcoming] = devSpaceBookings('space-1', 'upcoming', NOW);
+    const [upcoming] = devSpaceBookings('space-1', 'upcoming', NOW).data;
     expect(upcoming?.earnedPaise).toBe(0);
   });
 
   it('shows a cancelled booking that never got a slot', () => {
-    const past = devSpaceBookings('space-1', 'past', NOW);
+    const past = devSpaceBookings('space-1', 'past', NOW).data;
     expect(
       past.some((booking) => booking.status === 'cancelled' && booking.slotIndex === null),
     ).toBe(true);
+  });
+
+  it('never has more than the fixture cap, so meta always says hasMore: false', () => {
+    for (const group of OWNER_BOOKING_GROUP_VALUES) {
+      expect(devSpaceBookings('space-1', group, NOW).meta).toEqual({
+        limit: 20,
+        hasMore: false,
+        nextCursor: null,
+      });
+    }
   });
 });

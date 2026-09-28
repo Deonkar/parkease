@@ -126,9 +126,14 @@ describe('with no dev-mock session', () => {
   });
 
   it('reads space bookings from the network', async () => {
-    m.get.mockResolvedValue({ data: { data: [networkBooking] } });
+    m.get.mockResolvedValue({
+      data: { data: [networkBooking], meta: { limit: 20, hasMore: false, nextCursor: null } },
+    });
 
-    await expect(fetchSpaceBookings('space-1', 'active')).resolves.toEqual([networkBooking]);
+    await expect(fetchSpaceBookings('space-1', 'active')).resolves.toEqual({
+      data: [networkBooking],
+      meta: { limit: 20, hasMore: false, nextCursor: null },
+    });
     expect(m.get).toHaveBeenCalledWith('/owner/spaces/space-1/bookings', expect.anything());
   });
 });
@@ -192,8 +197,9 @@ describe('under a dev-mock session', () => {
     const upcoming = await fetchSpaceBookings('space-1', 'upcoming');
     const past = await fetchSpaceBookings('space-1', 'past');
 
-    expect(active).toHaveLength(2);
-    expect(upcoming).toHaveLength(1);
-    expect(past).toHaveLength(2);
+    expect(active.data).toHaveLength(2);
+    expect(upcoming.data).toHaveLength(1);
+    expect(past.data).toHaveLength(2);
+    expect(active.meta).toEqual({ limit: 20, hasMore: false, nextCursor: null });
   });
 });

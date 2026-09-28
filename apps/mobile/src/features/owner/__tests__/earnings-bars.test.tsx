@@ -1,7 +1,7 @@
 import { colors } from '@parkease/tokens';
 import { describe, expect, it, vi } from 'vitest';
 
-import { byTestId, nodes, render, style } from '../../shared/__tests__/render-native';
+import { byTestId, nodes, render, style, text } from '../../shared/__tests__/render-native';
 import { EarningsBars } from '../components/EarningsBars';
 
 vi.mock('react-native', () => ({
@@ -23,14 +23,19 @@ describe('EarningsBars', () => {
   });
 
   it('describes itself in words for TalkBack', () => {
-    // `toLocaleDateString('en-IN', { month: 'short' })` prints "Sept" (4
-    // letters) on this Node/ICU build, and `formatDateIST` (used here per the
-    // brief's ruling) also carries the year — this is its real output, not a
-    // weakened assertion.
+    // Through the shared fixed-table formatter (M5): "Sep", never ICU's
+    // "Sept", and no year — every day in `days` is already inside the one
+    // period on screen.
     const tree = render(<EarningsBars days={days} />);
     expect(byTestId(tree, 'earnings-bars')?.props['accessibilityLabel']).toBe(
-      'Daily earnings, 3 days. Best day 12 Sept 2026, ₹102.00.',
+      'Daily earnings, 3 days. Best day 12 Sep, ₹102.00.',
     );
+  });
+
+  it('labels the axis with the first and last day, hidden from TalkBack (M4)', () => {
+    const tree = render(<EarningsBars days={days} />);
+    expect(text(byTestId(tree, 'earnings-axis-first') ?? null)).toBe('10 Sep');
+    expect(text(byTestId(tree, 'earnings-axis-last') ?? null)).toBe('12 Sep');
   });
 
   it('renders nothing for a single day — one bar is not a chart', () => {

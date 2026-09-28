@@ -1,19 +1,18 @@
 import type { OwnerEarningsView } from '@parkease/contracts/owner';
-import { colors, spacing } from '@parkease/tokens';
-import { StyleSheet, View } from 'react-native';
+import { colors, fontSize, spacing } from '@parkease/tokens';
+import { StyleSheet, Text, View } from 'react-native';
 
-import { formatDateIST } from '@/lib/format';
+import { formatDayMonthIST } from '@/lib/format';
 import { formatPaise } from '@/lib/money';
 
 const HEIGHT = 96;
 const MIN_BAR = 2;
 
-// `toLocaleDateString('en-IN', { month: 'short' })` prints "Sept" (4 letters)
-// on this Node/ICU build rather than "Sep" — see S-41. `formatDateIST` goes
-// through the same locale call, so it carries the same "Sept" and also the
-// year; that is accepted as its real output rather than reimplementing a
-// second date formatter here (R-ARCH-07).
-const dayLabel = (date: string) => formatDateIST(new Date(`${date}T00:00:00Z`));
+// The shared fixed-table formatter (S-41, R-ARCH-07): deterministic across
+// ICU builds and, for the axis and the "best day" label, the year would just
+// be noise — every day in `days` is already inside the one period on screen.
+const dayLabel = (date: string, options?: { weekday?: boolean }) =>
+  formatDayMonthIST(new Date(`${date}T00:00:00Z`), options);
 
 /**
  * Daily bars from the server's own buckets (spec §4) — no aggregation here.
@@ -33,26 +32,41 @@ export function EarningsBars({ days }: { readonly days: OwnerEarningsView['days'
       ? `Best day ${dayLabel(best.date)}, ${formatPaise(best.netPaise, { alwaysDecimals: true })}.`
       : 'No earnings in this period.';
 
+  const first = days[0];
+  const last = days[days.length - 1];
+
   return (
-    <View
-      style={styles.root}
-      accessible
-      accessibilityRole="image"
-      accessibilityLabel={`Daily earnings, ${String(days.length)} days. ${summary}`}
-      testID="earnings-bars"
-    >
-      {days.map((day) => (
-        <View
-          key={day.date}
-          testID="earnings-bar"
-          style={[
-            styles.bar,
-            day.netPaise > 0
-              ? { height: Math.max(MIN_BAR, (day.netPaise / peak) * HEIGHT) }
-              : styles.empty,
-          ]}
-        />
-      ))}
+    <View>
+      <View
+        style={styles.root}
+        accessible
+        accessibilityRole="image"
+        accessibilityLabel={`Daily earnings, ${String(days.length)} days. ${summary}`}
+        testID="earnings-bars"
+      >
+        {days.map((day) => (
+          <View
+            key={day.date}
+            testID="earnings-bar"
+            style={[
+              styles.bar,
+              day.netPaise > 0
+                ? { height: Math.max(MIN_BAR, (day.netPaise / peak) * HEIGHT) }
+                : styles.empty,
+            ]}
+          />
+        ))}
+      </View>
+      {/* The chart above already speaks its own summary to TalkBack — this
+          row is a visual axis only. */}
+      <View style={styles.axis} importantForAccessibility="no">
+        <Text style={styles.axisLabel} testID="earnings-axis-first">
+          {first ? dayLabel(first.date) : ''}
+        </Text>
+        <Text style={styles.axisLabel} testID="earnings-axis-last">
+          {last ? dayLabel(last.date) : ''}
+        </Text>
+      </View>
     </View>
   );
 }
@@ -66,4 +80,10 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 3,
   },
   empty: { height: MIN_BAR, backgroundColor: colors.border },
+  axis: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: spacing.xs,
+  },
+  axisLabel: { fontSize: fontSize.xs, color: colors.textTertiary },
 });

@@ -97,14 +97,18 @@ export default function OwnerDashboardScreen() {
     });
   };
 
+  const header = (greetingName: string | null): ReactNode => (
+    <View>
+      <Text style={styles.muted}>{formatDateIST(new Date())}</Text>
+      <Text style={styles.h1} accessibilityRole="header">
+        {greetingName ? `${greeting()}, ${greetingName}` : greeting()}
+      </Text>
+    </View>
+  );
+
   const body = (data: OwnerDashboard): ReactNode => (
     <>
-      <View>
-        <Text style={styles.muted}>{formatDateIST(new Date())}</Text>
-        <Text style={styles.h1} accessibilityRole="header">
-          {data.greetingName ? `${greeting()}, ${data.greetingName}` : greeting()}
-        </Text>
-      </View>
+      {header(data.greetingName)}
 
       {dashboard.isError ? (
         <RefreshNotice
@@ -193,6 +197,7 @@ export default function OwnerDashboardScreen() {
         if (data.spaces.length === 0) {
           return (
             <>
+              {header(data.greetingName)}
               <ScanButton />
               <EmptyState
                 title="List your first space"

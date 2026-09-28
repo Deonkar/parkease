@@ -225,7 +225,7 @@ function BookingGroup({
   // TanStack Query's discriminated union has already narrowed `data` to
   // defined here: `isPending` returned above, and the one `isError` branch
   // with `data === undefined` returned above it too.
-  const rows = query.data;
+  const rows = query.data.data;
   return (
     <View style={styles.bookingGroup}>
       <Text style={styles.bookingGroupTitle}>{`${title} (${String(rows.length)})`}</Text>
@@ -259,6 +259,15 @@ function BookingGroup({
           </View>
         ))
       )}
+      {/* The group is capped at the server's page size (20) and this list is
+          nested inside the screen's own ScrollView, where FlashList cannot
+          virtualize — so a second page is never fetched here; this notice is
+          the only signal that more bookings exist on this space. */}
+      {query.data.meta.hasMore ? (
+        <Text style={styles.subvalue} testID="booking-group-more">
+          Showing the first 20. More bookings on this space aren&apos;t listed here yet.
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -326,5 +335,9 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
   },
-  bookingRetry: { minHeight: touchTarget, justifyContent: 'center' },
+  bookingRetry: {
+    minHeight: touchTarget,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.base,
+  },
 });

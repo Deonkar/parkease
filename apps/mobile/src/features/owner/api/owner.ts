@@ -9,7 +9,7 @@ import {
   ownerEarningsViewSchema,
   statementLineSchema,
 } from '@parkease/contracts/owner';
-import { cursorPageMetaSchema } from '@parkease/contracts/primitives';
+import { type CursorPageMeta, cursorPageMetaSchema } from '@parkease/contracts/primitives';
 import { z } from 'zod';
 
 import { api } from '@/lib/api';
@@ -25,10 +25,10 @@ import { devDashboard, devEarnings, devSpaceBookings, devTransactions } from './
  * (R-VAL-01).
  */
 const envelope = <T extends z.ZodTypeAny>(data: T) => z.object({ data });
-const transactionsPageSchema = z.object({
-  data: z.array(statementLineSchema),
-  meta: cursorPageMetaSchema,
-});
+const cursorPage = <T extends z.ZodTypeAny>(item: T) =>
+  z.object({ data: z.array(item), meta: cursorPageMetaSchema });
+const transactionsPageSchema = cursorPage(statementLineSchema);
+const spaceBookingsPageSchema = cursorPage(ownerBookingSchema);
 
 export async function fetchDashboard(signal?: AbortSignal): Promise<OwnerDashboard> {
   if (await isOwnerDevMock()) {
@@ -68,7 +68,7 @@ export async function fetchSpaceBookings(
   spaceId: string,
   group: OwnerBookingGroup,
   signal?: AbortSignal,
-): Promise<OwnerBooking[]> {
+): Promise<{ data: OwnerBooking[]; meta: CursorPageMeta }> {
   if (await isOwnerDevMock()) {
     return devSpaceBookings(spaceId, group);
   }
@@ -76,5 +76,5 @@ export async function fetchSpaceBookings(
     params: { group },
     signal,
   });
-  return envelope(z.array(ownerBookingSchema)).parse(response.data).data;
+  return spaceBookingsPageSchema.parse(response.data);
 }

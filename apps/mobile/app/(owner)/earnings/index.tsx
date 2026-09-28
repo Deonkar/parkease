@@ -86,16 +86,15 @@ export default function OwnerEarningsScreen() {
         />
       ) : null}
       {earnings.data === undefined ? null : (
-        <View style={styles.summary}>
-          <KpiCard
-            hero
-            label={LABELS[period].heading}
-            value={formatPaise(earnings.data.netPaise, { alwaysDecimals: true })}
-            caption={`${String(earnings.data.bookings)} ${earnings.data.bookings === 1 ? 'booking' : 'bookings'}`}
-            testID="earnings-headline"
-          />
+        <KpiCard
+          hero
+          label={LABELS[period].heading}
+          value={formatPaise(earnings.data.netPaise, { alwaysDecimals: true })}
+          caption={`${String(earnings.data.bookings)} ${earnings.data.bookings === 1 ? 'booking' : 'bookings'}`}
+          testID="earnings-headline"
+        >
           <EarningsBars days={earnings.data.days} />
-        </View>
+        </KpiCard>
       )}
       {/* R-FAIL-01: a failed background refetch or pull no longer goes silent
           just because pages already loaded — `ListEmptyComponent` only fires
@@ -207,6 +206,12 @@ export default function OwnerEarningsScreen() {
 
   return (
     <View style={styles.root}>
+      <View style={styles.titleBlock}>
+        <Text style={styles.title} accessibilityRole="header">
+          Earnings
+        </Text>
+        <Text style={styles.subtitle}>Your share, after the ParkEase fee</Text>
+      </View>
       <View style={styles.tabsRow}>{tabs}</View>
       <View style={styles.body}>{content()}</View>
     </View>
@@ -215,6 +220,15 @@ export default function OwnerEarningsScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surfaceSecondary },
+  titleBlock: {
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.base,
+    paddingBottom: spacing.sm,
+    backgroundColor: colors.surface,
+    gap: spacing.xs / 2,
+  },
+  title: { fontSize: fontSize['2xl'], fontWeight: fontWeight.bold, color: colors.text },
+  subtitle: { fontSize: fontSize.sm, color: colors.textSecondary },
   tabsRow: {
     backgroundColor: colors.surface,
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -224,14 +238,6 @@ const styles = StyleSheet.create({
   skeletons: { padding: spacing.base, gap: spacing.md },
   list: { padding: spacing.base, paddingBottom: spacing.xl },
   header: { gap: spacing.base, marginBottom: spacing.md },
-  summary: {
-    gap: spacing.base,
-    padding: spacing.base,
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
   section: {
     fontSize: fontSize.xs,
     fontWeight: fontWeight.bold,

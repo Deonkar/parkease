@@ -31,6 +31,12 @@ describe('StatementLine', () => {
     expect(text(byTestId(tree, 'line-who') ?? null)).toBe('Ravi K. · 2 hrs · Basement Parking');
   });
 
+  it('dates the line with a weekday and no year, through the fixed IST table (M5)', () => {
+    // 2026-09-12T04:49Z is 10:19 AM IST on a Saturday.
+    const tree = render(<StatementLine line={line} />);
+    expect(text(tree)).toContain('Sat 12 Sep · 10:19 AM');
+  });
+
   it('shows the refund row only when something was refunded', () => {
     expect(byTestId(render(<StatementLine line={line} />), 'line-refund')).toBeUndefined();
 

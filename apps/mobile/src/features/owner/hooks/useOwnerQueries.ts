@@ -38,5 +38,6 @@ export function useSpaceBookings(spaceId: string, group: OwnerBookingGroup) {
   return useQuery({
     queryKey: ownerKeys.spaceBookings(spaceId, group),
     queryFn: ({ signal }) => fetchSpaceBookings(spaceId, group, signal),
+    enabled: spaceId.length > 0,
   });
 }

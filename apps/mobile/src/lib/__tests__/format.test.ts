@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { formatDistance, formatDateIST, formatTimeIST } from '../format';
+import { formatDayMonthIST, formatDistance, formatDateIST, formatTimeIST } from '../format';
 
 describe('formatDistance', () => {
   it('formats meters under 1km', () => {
@@ -40,5 +40,30 @@ describe('formatTimeIST', () => {
     const date = new Date('2026-01-15T00:00:00Z');
     const result = formatTimeIST(date);
     expect(result).toBe('5:30 AM');
+  });
+});
+
+describe('formatDayMonthIST', () => {
+  it('formats day and month with no year', () => {
+    expect(formatDayMonthIST(new Date('2026-09-12T04:49:00.000Z'))).toBe('12 Sep');
+  });
+
+  it('adds the weekday abbreviation when asked', () => {
+    expect(formatDayMonthIST(new Date('2026-09-12T04:49:00.000Z'), { weekday: true })).toBe(
+      'Sat 12 Sep',
+    );
+  });
+
+  it('crosses the IST midnight boundary: 18:45 UTC is already the next day in IST', () => {
+    // 2026-09-11T18:45Z + 5:30 = 2026-09-12T00:15 IST.
+    expect(formatDayMonthIST(new Date('2026-09-11T18:45:00.000Z'), { weekday: true })).toBe(
+      'Sat 12 Sep',
+    );
+  });
+
+  it('always prints the fixed 3-letter month table, never a 4-letter ICU spelling', () => {
+    // September, per the S-41 note, is where `toLocaleString` disagrees with
+    // itself across ICU builds ("Sep" vs "Sept").
+    expect(formatDayMonthIST(new Date('2026-09-01T04:00:00.000Z'))).toMatch(/^1 Sep$/);
   });
 });

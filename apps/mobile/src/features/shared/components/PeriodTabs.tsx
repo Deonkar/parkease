@@ -6,7 +6,6 @@ export interface PeriodTabsProps<P extends string> {
   readonly label: (period: P) => string;
   readonly value: P;
   readonly onChange: (period: P) => void;
-  readonly testIDPrefix?: string;
 }
 
 /**
@@ -28,7 +27,6 @@ export function PeriodTabs<P extends string>({
   label,
   value,
   onChange,
-  testIDPrefix = 'period-tab',
 }: PeriodTabsProps<P>) {
   return (
     <View style={styles.root} accessibilityRole="tablist">
@@ -44,13 +42,13 @@ export function PeriodTabs<P extends string>({
             }}
             android_ripple={{ color: colors.primarySoft }}
             style={styles.tab}
-            testID={`${testIDPrefix}-${period}`}
+            testID={`period-tab-${period}`}
           >
             <Text style={[styles.label, selected && styles.labelSelected]} numberOfLines={1}>
               {label(period)}
             </Text>
             {selected ? (
-              <View style={styles.indicator} testID={`${testIDPrefix}-${period}-indicator`} />
+              <View style={styles.indicator} testID={`period-tab-${period}-indicator`} />
             ) : null}
           </Pressable>
         );

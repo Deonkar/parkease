@@ -26,9 +26,18 @@ describe('owner screens', () => {
     expect(dashboard).not.toMatch(/ActivityIndicator/);
   });
 
+  it('dashboard shows the date and greeting header even with no spaces yet (M6)', () => {
+    expect(dashboard.match(/header\(data\.greetingName\)/g)?.length).toBe(2);
+  });
+
   it('dashboard keeps the scanner, and See all goes to earnings', () => {
     expect(dashboard).toContain("router.push('/(owner)/scan')");
     expect(dashboard).toContain("router.push('/(owner)/earnings')");
+  });
+
+  it('earnings: has an unconditional page title above the tabs (M2)', () => {
+    expect(earnings).toMatch(/accessibilityRole="header"[\s\S]{0,50}Earnings/);
+    expect(earnings).toContain('Your share, after the ParkEase fee');
   });
 
   it('earnings: period tabs drive both queries; transactions in a FlashList with paging', () => {
@@ -65,6 +74,13 @@ describe('owner screens', () => {
   it('listing detail shows active and upcoming bookings', () => {
     expect(listing).toContain("useSpaceBookings(id, 'active')");
     expect(listing).toContain("useSpaceBookings(id, 'upcoming')");
+  });
+
+  it('listing detail warns when a space has more bookings than the group shows (M9)', () => {
+    expect(listing).toContain('query.data.meta.hasMore');
+    expect(listing).toContain(
+      'Showing the first 20. More bookings on this space aren&apos;t listed here yet.',
+    );
   });
 
   it('listing detail keeps cached bookings on screen through a transient refetch failure (F8, R-FAIL-01)', () => {

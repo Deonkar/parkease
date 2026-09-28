@@ -449,14 +449,15 @@ const SPACE_BOOKING_SEEDS: Record<OwnerBookingGroup, readonly BookingSeed[]> = {
   ],
 };
 
+/** Well under the real endpoint's 20-row cap, so `meta.hasMore` is always false here. */
 export function devSpaceBookings(
   spaceId: string,
   group: OwnerBookingGroup,
   now: Date = new Date(),
-): OwnerBooking[] {
+): { data: OwnerBooking[]; meta: CursorPageMeta } {
   void spaceId;
   const nowMs = now.getTime();
-  return SPACE_BOOKING_SEEDS[group].map((seed) =>
+  const data = SPACE_BOOKING_SEEDS[group].map((seed) =>
     ownerBookingSchema.parse({
       bookingId: seed.bookingId,
       driverName: seed.driverName,
@@ -468,4 +469,8 @@ export function devSpaceBookings(
       earnedPaise: seed.earnedPaise,
     }),
   );
+  return {
+    data,
+    meta: cursorPageMetaSchema.parse({ limit: 20, hasMore: false, nextCursor: null }),
+  };
 }
