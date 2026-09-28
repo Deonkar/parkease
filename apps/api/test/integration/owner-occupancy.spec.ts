@@ -2,7 +2,14 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { SpaceOccupancyQuery } from '../../src/domains/space/queries/occupancy.js';
 
-import { type Harness, seedSpace, startHarness, stopHarness, truncateSpaces } from './harness.js';
+import {
+  type Harness,
+  seedSpace,
+  seedUser,
+  startHarness,
+  stopHarness,
+  truncateSpaces,
+} from './harness.js';
 
 describe('space occupancy', () => {
   let h: Harness;
@@ -75,5 +82,30 @@ describe('space occupancy', () => {
 
     const [row] = await occupancy.forOwner(h.ownerId, { from, to });
     expect(row?.occupancyBp).toBe(0);
+  });
+
+  it('never counts a second owner’s space or booking, even in the same window (A1 regression)', async () => {
+    const spaceId = await seedSpace(h, { lat: 12.93, lng: 77.62, carSlots: 2, twoWheelerSlots: 4 });
+    await seed(spaceId, 0, at(0), at(8), 'confirmed');
+    await seed(spaceId, 1, at(0), at(8), 'active');
+    // Completed: its slot is `released`, and it must still count (spec §2) —
+    // the same case that keeps the second owner's completed booking below
+    // off the partial GiST index and inside the unscoped-subquery risk.
+    await seed(spaceId, 0, at(0), at(8), 'completed', 'two_wheeler');
+
+    const otherOwner = await seedUser(h, 'owner');
+    const theirSpaceId = await seedSpace(h, { lat: 12.95, lng: 77.64, carSlots: 2 });
+    await h.sql`UPDATE spaces SET owner_id = ${otherOwner} WHERE id = ${theirSpaceId}`;
+    // Fully booked in the exact same window, both `confirmed` and
+    // `completed`/`released` — the two statuses that exercise both subqueries.
+    await seed(theirSpaceId, 0, at(0), at(8), 'confirmed');
+    await seed(theirSpaceId, 1, at(0), at(8), 'completed', 'two_wheeler');
+
+    const rows = await occupancy.forOwner(h.ownerId, { from, to });
+    expect(rows).toHaveLength(1);
+    expect(rows.map((r) => r.id)).not.toContain(theirSpaceId);
+    // Unchanged from the single-owner case above: a second owner's fully
+    // booked space in the same window must not shift this owner's figure.
+    expect(rows[0]?.occupancyBp).toBe(5_000);
   });
 });
