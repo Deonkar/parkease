@@ -13,6 +13,11 @@ import { cursorPageMetaSchema } from '@parkease/contracts/primitives';
 import { z } from 'zod';
 
 import { api } from '@/lib/api';
+import { listDevMockSpaces } from '@/lib/dev-mock-store';
+
+import { isOwnerDevMock } from '../dev-mock';
+
+import { devDashboard, devEarnings, devSpaceBookings, devTransactions } from './dev-fixtures';
 
 /**
  * Every response is parsed, never asserted. A payload from the network is
@@ -26,6 +31,9 @@ const transactionsPageSchema = z.object({
 });
 
 export async function fetchDashboard(signal?: AbortSignal): Promise<OwnerDashboard> {
+  if (await isOwnerDevMock()) {
+    return devDashboard(listDevMockSpaces());
+  }
   const response = await api.get<unknown>('/owner/dashboard', { signal });
   return envelope(ownerDashboardSchema).parse(response.data).data;
 }
@@ -34,6 +42,9 @@ export async function fetchEarnings(
   period: OwnerEarningsPeriod,
   signal?: AbortSignal,
 ): Promise<OwnerEarningsView> {
+  if (await isOwnerDevMock()) {
+    return devEarnings(period);
+  }
   const response = await api.get<unknown>('/owner/earnings', { params: { period }, signal });
   return envelope(ownerEarningsViewSchema).parse(response.data).data;
 }
@@ -43,6 +54,9 @@ export async function fetchTransactions(
   cursor: string | undefined,
   signal?: AbortSignal,
 ) {
+  if (await isOwnerDevMock()) {
+    return devTransactions(period, cursor);
+  }
   const response = await api.get<unknown>('/owner/earnings/transactions', {
     params: { period, ...(cursor === undefined ? {} : { cursor }) },
     signal,
@@ -55,6 +69,9 @@ export async function fetchSpaceBookings(
   group: OwnerBookingGroup,
   signal?: AbortSignal,
 ): Promise<OwnerBooking[]> {
+  if (await isOwnerDevMock()) {
+    return devSpaceBookings(spaceId, group);
+  }
   const response = await api.get<unknown>(`/owner/spaces/${spaceId}/bookings`, {
     params: { group },
     signal,
