@@ -138,6 +138,19 @@ export class OwnerBalanceQuery {
     return and(eq(spaces.ownerId, ownerId), eq(ledgerEntries.account, LedgerAccount.OWNER_PAYABLE));
   }
 
+  /**
+   * `movement` scoped to a named period, so a caller in `roles/` never needs
+   * `ledgerEntries.occurredAt` itself — that column is a `@parkease/db` import,
+   * and ADR-016 keeps the database out of `roles/` entirely.
+   */
+  async movementForPeriod(
+    ownerId: string,
+    period: EarningsPeriod,
+    reader: Reader = this.db,
+  ): Promise<Movement> {
+    return this.movement(ownerId, periodBound(ledgerEntries.occurredAt, period), reader);
+  }
+
   /** Ledger movement on the owner's `owner_payable` inside `bound` (undefined = all time). */
   async movement(
     ownerId: string,
