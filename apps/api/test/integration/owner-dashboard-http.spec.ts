@@ -1,4 +1,8 @@
+import { computeWashFee, washEntries } from '@parkease/contracts/money';
+import { toPaise, toRate } from '@parkease/contracts/primitives';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+
+import { withTransaction } from '../../src/platform/db/transaction.js';
 
 import { type BookingStack, buildBookingStack, windowFromNow, zoneOf } from './booking-harness.js';
 import {
@@ -70,6 +74,40 @@ describe('owner dashboard HTTP', () => {
     expect(dashboard.data.owedPaise).toBe(earnings.data.netPaise);
     expect(earnings.data.bookings).toBe(2);
     expect(dashboard.data.statement).toHaveLength(2);
+  });
+
+  it('keeps a wash on a recent booking out of the dashboard and the statement (C1)', async () => {
+    const spaceId = await seedSpace(h, { lat: 12.9345, lng: 77.6266, carSlots: 2 });
+    await bookConfirmed(spaceId, 2);
+    const washed = await bookConfirmed(spaceId, 6);
+
+    const before = {
+      dashboard: await get('/owner/dashboard'),
+      transactions: await get('/owner/earnings/transactions'),
+    };
+    expect(before.dashboard.status).toBe(200);
+    expect(before.transactions.status).toBe(200);
+
+    // The posting accept-wash makes: the washer, not the driver, is the
+    // counterparty on owner_payable, under the parking booking's id.
+    const washer = await seedUser(h, 'washer');
+    await withTransaction(h.db, (tx) =>
+      stack.ledger.post(tx, {
+        bookingId: washed.id,
+        entries: washEntries(
+          computeWashFee(toPaise(39900), toRate(0.2)),
+          washer,
+          'car wash service',
+        ),
+      }),
+    );
+
+    const dashboard = await get('/owner/dashboard');
+    const transactions = await get('/owner/earnings/transactions');
+    expect(dashboard.status).toBe(200);
+    expect(transactions.status).toBe(200);
+    expect(dashboard.body).toEqual(before.dashboard.body);
+    expect(transactions.body).toEqual(before.transactions.body);
   });
 
   it('shows a surged booking as base, fee and net — no surge, GST or total', async () => {

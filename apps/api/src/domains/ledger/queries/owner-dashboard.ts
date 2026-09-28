@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { bookings, ledgerEntries, spaces, users } from '@parkease/db/schema';
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { ledgerEntries, users } from '@parkease/db/schema';
+import { eq } from 'drizzle-orm';
 
 import { DB, type Database } from '../../../platform/db/db.module.js';
 import { SpaceOccupancyQuery } from '../../space/queries/occupancy.js';
@@ -13,7 +13,6 @@ export interface OwnerDashboardData {
   readonly owedPaise: number;
   readonly today: { readonly netPaise: number; readonly bookings: number };
   readonly month: { readonly netPaise: number; readonly growthBp: number | null };
-  readonly activeBookings: number;
   readonly statement: readonly StatementRow[];
   readonly spaces: readonly {
     id: string;
@@ -61,18 +60,6 @@ export class OwnerDashboardQuery {
           tx,
         );
 
-        const [active] = await tx
-          .select({ n: sql<number>`count(*)::int` })
-          .from(bookings)
-          .innerJoin(spaces, eq(spaces.id, bookings.spaceId))
-          .where(
-            and(
-              eq(spaces.ownerId, ownerId),
-              eq(bookings.status, 'active'),
-              isNull(bookings.deletedAt),
-              isNull(spaces.deletedAt),
-            ),
-          );
         const [owner] = await tx
           .select({ name: users.name })
           .from(users)
@@ -92,7 +79,6 @@ export class OwnerDashboardQuery {
                 ? Math.round(((month.netPaise - lastMonth.netPaise) * 10_000) / lastMonth.netPaise)
                 : null,
           },
-          activeBookings: active?.n ?? 0,
           statement: statement.items,
           spaces: spaceRows,
         };

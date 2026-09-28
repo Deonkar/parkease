@@ -65,6 +65,11 @@ interface CohortOptions {
  * reversing pair for the ~10% that need one) — chained through
  * data-modifying CTEs so it is one round trip regardless of `count`.
  *
+ * Every row is stamped with the booking's driver as `counterparty_user_id`,
+ * as create-booking and the reversal paths stamp it. `OwnerBalanceQuery`
+ * counts only those rows (washer/valet legs share the account), so an
+ * unstamped fixture would measure an empty statement.
+ *
  * Slot assignment cycles deterministically through `slotSpaceIds` /
  * `slotIndices` by `gs`, so `booking_slots_no_overlap` (EXCLUDE USING gist,
  * scoped to status IN ('confirmed','active')) never fires: a cohort whose
@@ -130,31 +135,31 @@ async function insertBookingCohort(h: Harness, opts: CohortOptions): Promise<voi
       RETURNING booking_id
     ),
     ins_credit AS (
-      INSERT INTO ledger_entries (txn_id, account, direction, amount_paise, booking_id, description, occurred_at)
-      SELECT f.txn_id, 'owner_payable', 'credit', f.owner_earnings_paise, f.booking_id,
+      INSERT INTO ledger_entries (txn_id, account, direction, amount_paise, booking_id, counterparty_user_id, description, occurred_at)
+      SELECT f.txn_id, 'owner_payable', 'credit', f.owner_earnings_paise, f.booking_id, f.driver_id,
              'load-fixture booking credit', f.occurred_at
       FROM final f JOIN ins_bookings b ON b.id = f.booking_id
       WHERE f.status NOT IN ('pending_payment', 'expired')
       RETURNING booking_id
     ),
     ins_debit AS (
-      INSERT INTO ledger_entries (txn_id, account, direction, amount_paise, booking_id, description, occurred_at)
-      SELECT f.txn_id, 'driver_receivable', 'debit', f.owner_earnings_paise, f.booking_id,
+      INSERT INTO ledger_entries (txn_id, account, direction, amount_paise, booking_id, counterparty_user_id, description, occurred_at)
+      SELECT f.txn_id, 'driver_receivable', 'debit', f.owner_earnings_paise, f.booking_id, f.driver_id,
              'load-fixture booking debit', f.occurred_at
       FROM final f JOIN ins_bookings b ON b.id = f.booking_id
       WHERE f.status NOT IN ('pending_payment', 'expired')
       RETURNING booking_id
     ),
     ins_reversal_credit AS (
-      INSERT INTO ledger_entries (txn_id, account, direction, amount_paise, booking_id, description, occurred_at)
-      SELECT f.reversal_txn_id, 'driver_receivable', 'credit', f.owner_earnings_paise, f.booking_id,
+      INSERT INTO ledger_entries (txn_id, account, direction, amount_paise, booking_id, counterparty_user_id, description, occurred_at)
+      SELECT f.reversal_txn_id, 'driver_receivable', 'credit', f.owner_earnings_paise, f.booking_id, f.driver_id,
              'load-fixture reversal credit', f.occurred_at + interval '1 hour'
       FROM final f JOIN ins_bookings b ON b.id = f.booking_id
       WHERE f.needs_reversal
       RETURNING booking_id
     )
-    INSERT INTO ledger_entries (txn_id, account, direction, amount_paise, booking_id, description, occurred_at)
-    SELECT f.reversal_txn_id, 'owner_payable', 'debit', f.owner_earnings_paise, f.booking_id,
+    INSERT INTO ledger_entries (txn_id, account, direction, amount_paise, booking_id, counterparty_user_id, description, occurred_at)
+    SELECT f.reversal_txn_id, 'owner_payable', 'debit', f.owner_earnings_paise, f.booking_id, f.driver_id,
            'load-fixture reversal debit', f.occurred_at + interval '1 hour'
     FROM final f JOIN ins_bookings b ON b.id = f.booking_id
     WHERE f.needs_reversal
@@ -535,13 +540,15 @@ describe('owner dashboard, earnings and bookings under load', () => {
 
   it('EXPLAIN shows the statement page and occupancy query plans', async () => {
     // The exact query `OwnerBalanceQuery.statementQuery` + `.statementPage`
-    // build (owner-balance.ts L192-252), reconstructed here since that
+    // build (owner-balance.ts), reconstructed here since that
     // method is private — same shape, same joins, same having/order/limit.
     const CREDITS = sql<string>`coalesce(sum(${ledgerEntries.amountPaise})
         filter (where ${ledgerEntries.direction} = 'credit'), 0)::text`;
     const DEBITS = sql<string>`coalesce(sum(${ledgerEntries.amountPaise})
         filter (where ${ledgerEntries.direction} = 'debit'), 0)::text`;
-    const firstCredit = sql`min(${ledgerEntries.occurredAt})`.mapWith(ledgerEntries.occurredAt);
+    const firstCredit = sql`date_trunc('milliseconds', min(${ledgerEntries.occurredAt}))`.mapWith(
+      ledgerEntries.occurredAt,
+    );
     const UNPAID = ['pending_payment', 'expired'] as const;
 
     const statementQuery = h.db
@@ -565,6 +572,7 @@ describe('owner dashboard, earnings and bookings under load', () => {
         and(
           eq(spaces.ownerId, h.ownerId),
           eq(ledgerEntries.account, LedgerAccount.OWNER_PAYABLE),
+          eq(ledgerEntries.counterpartyUserId, bookings.driverId),
           notInArray(bookings.status, [...UNPAID]),
         ),
       )

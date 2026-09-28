@@ -23,7 +23,6 @@ export const ownerDashboardSchema = z
        */
       growthBp: z.number().int().nullable(),
     }),
-    activeBookings: z.number().int().nonnegative(),
     statement: z.array(statementLineSchema).max(3),
     spaces: z.array(
       z.object({

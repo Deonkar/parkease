@@ -82,7 +82,6 @@ describe('ownerDashboardSchema', () => {
       owedPaise: 348000,
       today: { netPaise: 48000, bookings: 3 },
       month: { netPaise: 1280000, growthBp: null },
-      activeBookings: 3,
       statement: [line],
       spaces: [
         {
@@ -94,6 +93,19 @@ describe('ownerDashboardSchema', () => {
       ],
     };
     expect(ownerDashboardSchema.parse(dashboard)).toEqual(dashboard);
+  });
+
+  it('carries no activeBookings count — no screen renders one (m2, YAGNI)', () => {
+    const dashboard = {
+      greetingName: null,
+      owedPaise: 0,
+      today: { netPaise: 0, bookings: 0 },
+      month: { netPaise: 0, growthBp: null },
+      activeBookings: 0,
+      statement: [],
+      spaces: [],
+    };
+    expect(ownerDashboardSchema.safeParse(dashboard).success).toBe(false);
   });
 });
 

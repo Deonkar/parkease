@@ -261,7 +261,6 @@ export function devDashboard(
     owedPaise: 348_000,
     today: { netPaise: 48_000, bookings: 3 },
     month: { netPaise: 1_280_000, growthBp: 1_100 },
-    activeBookings: 3,
     statement,
     // Empty when the owner has no spaces yet, so the "List your first space"
     // empty state is reachable straight from the dev-mock session.

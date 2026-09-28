@@ -1,7 +1,15 @@
+import {
+  computeValetLegFee,
+  computeWashFee,
+  valetLegEntries,
+  washEntries,
+} from '@parkease/contracts/money';
+import { toPaise, toRate } from '@parkease/contracts/primitives';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { istDays, istStartOfToday } from '../../src/domains/ledger/period-bound.js';
 import { OwnerBalanceQuery } from '../../src/domains/ledger/queries/owner-balance.js';
+import { withTransaction } from '../../src/platform/db/transaction.js';
 
 import { type BookingStack, buildBookingStack, windowFromNow, zoneOf } from './booking-harness.js';
 import {
@@ -54,6 +62,12 @@ describe('owner earnings reads', () => {
     await h.sql`UPDATE bookings SET status = 'confirmed' WHERE id = ${bookingId}`;
   };
 
+  /**
+   * Must match `OwnerBalanceQuery`'s definition of an owner-side row exactly:
+   * `owner_payable`, on a booking at one of the owner's spaces, stamped with that
+   * booking's DRIVER as counterparty. Washer and valet legs post to the same
+   * account under the same booking id with the partner as counterparty (C1).
+   */
   const rawNet = async (): Promise<number> => {
     const [row] = await h.sql<{ net: string }[]>`
       SELECT coalesce(sum(le.amount_paise) FILTER (WHERE le.direction = 'credit'), 0)
@@ -62,6 +76,7 @@ describe('owner earnings reads', () => {
       JOIN bookings b ON b.id = le.booking_id
       JOIN spaces s ON s.id = b.space_id
       WHERE le.account = 'owner_payable' AND s.owner_id = ${h.ownerId}
+        AND le.counterparty_user_id = b.driver_id
     `;
     return Number(row?.net ?? 0);
   };
@@ -143,6 +158,92 @@ describe('owner earnings reads', () => {
     expect(second.hasMore).toBe(false);
     const ids = [...first.items, ...second.items].map((row) => row.bookingId);
     expect(new Set(ids).size).toBe(3);
+  });
+
+  it('pages every booking exactly once when first credits tie inside one millisecond (I1)', async () => {
+    const spaceId = await seedSpace(h, { lat: 12.9345, lng: 77.6266, carSlots: 1 });
+    // ledger_entries is append-only (migration 0007 rejects UPDATE), so the
+    // instants are set at INSERT: one base millisecond, three microsecond-distinct
+    // offsets, and one exact tie with the last — the rows a millisecond-truncated
+    // cursor skips.
+    const [base] = await h.sql<{ t: string }[]>`
+      SELECT (date_trunc('milliseconds', now()) - interval '1 minute')::text AS t`;
+    if (base === undefined) throw new Error('no base instant');
+    const ids: string[] = [];
+    for (const micros of [1, 2, 3, 3]) {
+      const [booking] = await h.sql<{ id: string }[]>`
+        INSERT INTO bookings (driver_id, space_id, vehicle_type, duration_type, starts_at, ends_at,
+          status, base_paise, surge_premium_paise, parkease_fee_paise, gst_paise, total_paise,
+          owner_earnings_paise)
+        VALUES (${h.driverId}, ${spaceId}, 'car', 'hourly', now() + interval '1 day',
+          now() + interval '1 day 2 hours', 'confirmed', 6000, 0, 900, 0, 6000, 5100)
+        RETURNING id`;
+      if (booking === undefined) throw new Error('failed to seed booking');
+      ids.push(booking.id);
+      await h.sql`
+        INSERT INTO ledger_entries (txn_id, account, direction, amount_paise, booking_id,
+          counterparty_user_id, description, occurred_at)
+        SELECT t, acct, dir, 5100, ${booking.id}, ${h.driverId}, 'tie fixture',
+               ${base.t}::timestamptz + ${micros} * interval '1 microsecond'
+        FROM (SELECT uuidv7() AS t) txn,
+             (VALUES ('owner_payable', 'credit'), ('driver_receivable', 'debit')) AS legs(acct, dir)`;
+    }
+
+    const seen: string[] = [];
+    let cursor: string | undefined;
+    for (let guard = 0; guard < 10; guard += 1) {
+      const page = await earnings.statementPage(h.ownerId, { period: 'month', limit: 1, cursor });
+      seen.push(...page.items.map((row) => row.bookingId));
+      if (page.nextCursor === null) break;
+      cursor = page.nextCursor;
+    }
+    expect(seen.sort()).toEqual([...ids].sort());
+  });
+
+  it('ignores washer and valet legs posted under the owner’s booking (C1)', async () => {
+    const spaceId = await seedSpace(h, { lat: 12.9345, lng: 77.6266, carSlots: 1 });
+    const { booking } = await book(spaceId, h.driverId, 2, 2);
+    await confirm(booking.id);
+
+    const snapshot = async () => ({
+      movement: await earnings.movement(h.ownerId, undefined),
+      days: await earnings.days(h.ownerId, 'month'),
+      statement: await earnings.statementPage(h.ownerId, { period: 'month', limit: 10 }),
+      count: await earnings.statementCount(h.ownerId, 'month'),
+      byBooking: [...(await earnings.netByBooking(h.ownerId, [booking.id]))],
+      forOwner: await earnings.forOwner(h.ownerId),
+      forBooking: await earnings.forBooking(booking.id),
+      raw: await rawNet(),
+    });
+    const before = await snapshot();
+
+    // Exactly the postings accept-wash and accept-job make: the partner is the
+    // row-level counterparty on owner_payable, under the PARKING booking's id.
+    const washer = await seedUser(h, 'washer');
+    const valet = await seedUser(h, 'valet');
+    await withTransaction(h.db, async (tx) => {
+      await stack.ledger.post(tx, {
+        bookingId: booking.id,
+        entries: washEntries(
+          computeWashFee(toPaise(39900), toRate(0.2)),
+          washer,
+          'car wash service',
+        ),
+      });
+      await stack.ledger.post(tx, {
+        bookingId: booking.id,
+        entries: valetLegEntries(
+          computeValetLegFee(3000, toRate(0.2)),
+          valet,
+          'valet outbound leg',
+        ),
+      });
+    });
+
+    const after = await snapshot();
+    expect(after).toEqual(before);
+    expect(after.movement.netPaise).toBe(booking.ownerEarningsPaise);
+    expect(after.statement.items[0]?.feePaise).toBeGreaterThanOrEqual(0);
   });
 
   it('refuses a forged cursor as a 400, not a 500', async () => {

@@ -41,6 +41,37 @@ const UNPAID: BookingStatus[] = ['pending_payment', 'expired'];
 const net = (debits: number, credits: number) =>
   signedBalancePaise(LedgerAccount.OWNER_PAYABLE, debits, credits);
 
+/**
+ * The one definition of an owner-side row: `owner_payable`, stamped with the
+ * booking's DRIVER as counterparty. Needs `bookings` joined.
+ *
+ * The account alone is not enough. A wash (`washEntries`) or a valet leg
+ * (`valetLegEntries`) credits `owner_payable` under the PARKING booking's id
+ * with the washer or valet as the row's counterparty, so an account-and-space
+ * filter hands the partner's money to the space owner. Every owner-side
+ * posting — create, extend, cancel/refund reversals, expiry — stamps the
+ * driver (learnings.md, "Booking postings stamp the DRIVER…").
+ */
+const ownerSide = () =>
+  and(
+    eq(ledgerEntries.account, LedgerAccount.OWNER_PAYABLE),
+    eq(ledgerEntries.counterpartyUserId, bookings.driverId),
+  );
+
+/**
+ * The statement's sort key and cursor, truncated to milliseconds in SQL.
+ * `occurred_at` holds microseconds and a JS `Date` holds milliseconds, so an
+ * untruncated key round-tripped through the cursor lands below the rows it
+ * came from, and page 2 skips every row in that millisecond — ties included
+ * (I1). Truncating in the select, the ORDER BY and the HAVING makes the key a
+ * `Date` can carry exactly. Period bounds are whole-second instants, so
+ * truncation never moves a line across one.
+ */
+const FIRST_CREDIT = () =>
+  sql`date_trunc('milliseconds', min(${ledgerEntries.occurredAt}))`.mapWith(
+    ledgerEntries.occurredAt,
+  );
+
 const cursorSchema = z.object({ t: z.string().datetime(), i: z.string().uuid() });
 
 const encodeCursor = (row: StatementRow) =>
@@ -73,6 +104,11 @@ function decodeCursor(raw: string): { at: string; id: string } | undefined {
  * from `promo_expense` and never touches `owner_payable` (R-MONEY-05), so a free
  * booking credits the owner exactly what a paid one would.
  *
+ * Every read here counts only owner-side rows (`ownerSide`): `owner_payable`
+ * stamped with the booking's driver as counterparty. The account is shared
+ * with washers and valets under the same booking id, so ownership by space
+ * alone would count their earnings as the owner's.
+ *
  * Task 15 (owner dashboard) added the period reads below: `movement`, `days`,
  * `statementCount`, `statementPage` and `netByBooking`. All of them take an
  * optional `reader` so a caller building a consistent snapshot across several
@@ -89,53 +125,22 @@ export class OwnerBalanceQuery {
    * from a subtraction written the way it happened to read at the call site.
    */
   async forOwner(ownerId: string): Promise<number> {
-    const [row] = await this.db
-      .select({
-        debitsPaise: sql<string>`coalesce(sum(${ledgerEntries.amountPaise})
-          filter (where ${ledgerEntries.direction} = 'debit'), 0)::text`,
-        creditsPaise: sql<string>`coalesce(sum(${ledgerEntries.amountPaise})
-          filter (where ${ledgerEntries.direction} = 'credit'), 0)::text`,
-      })
-      .from(ledgerEntries)
-      .innerJoin(bookings, eq(bookings.id, ledgerEntries.bookingId))
-      .innerJoin(spaces, eq(spaces.id, bookings.spaceId))
-      .where(
-        and(eq(spaces.ownerId, ownerId), eq(ledgerEntries.account, LedgerAccount.OWNER_PAYABLE)),
-      );
-
-    return signedBalancePaise(
-      LedgerAccount.OWNER_PAYABLE,
-      Number(row?.debitsPaise ?? 0),
-      Number(row?.creditsPaise ?? 0),
-    );
+    return (await this.movement(ownerId, undefined)).netPaise;
   }
 
   /** The same question scoped to one booking, for a statement line. */
   async forBooking(bookingId: string): Promise<number> {
     const [row] = await this.db
-      .select({
-        debitsPaise: sql<string>`coalesce(sum(${ledgerEntries.amountPaise})
-          filter (where ${ledgerEntries.direction} = 'debit'), 0)::text`,
-        creditsPaise: sql<string>`coalesce(sum(${ledgerEntries.amountPaise})
-          filter (where ${ledgerEntries.direction} = 'credit'), 0)::text`,
-      })
+      .select({ creditsPaise: CREDITS, debitsPaise: DEBITS })
       .from(ledgerEntries)
-      .where(
-        and(
-          eq(ledgerEntries.bookingId, bookingId),
-          eq(ledgerEntries.account, LedgerAccount.OWNER_PAYABLE),
-        ),
-      );
+      .innerJoin(bookings, eq(bookings.id, ledgerEntries.bookingId))
+      .where(and(ownerSide(), eq(ledgerEntries.bookingId, bookingId)));
 
-    return signedBalancePaise(
-      LedgerAccount.OWNER_PAYABLE,
-      Number(row?.debitsPaise ?? 0),
-      Number(row?.creditsPaise ?? 0),
-    );
+    return net(Number(row?.debitsPaise ?? 0), Number(row?.creditsPaise ?? 0));
   }
 
   private ownerScope(ownerId: string) {
-    return and(eq(spaces.ownerId, ownerId), eq(ledgerEntries.account, LedgerAccount.OWNER_PAYABLE));
+    return and(eq(spaces.ownerId, ownerId), ownerSide());
   }
 
   /**
@@ -190,7 +195,7 @@ export class OwnerBalanceQuery {
   }
 
   private statementQuery(ownerId: string, reader: Reader) {
-    const firstCredit = sql`min(${ledgerEntries.occurredAt})`.mapWith(ledgerEntries.occurredAt);
+    const firstCredit = FIRST_CREDIT();
     const query = reader
       .select({
         bookingId: bookings.id,
@@ -245,7 +250,7 @@ export class OwnerBalanceQuery {
           periodBound(firstCredit, opts.period),
           cursor === undefined
             ? undefined
-            : sql`(min(${ledgerEntries.occurredAt}), ${bookings.id}) < (${cursor.at}::timestamptz, ${cursor.id}::uuid)`,
+            : sql`(${firstCredit}, ${bookings.id}) < (${cursor.at}::timestamptz, ${cursor.id}::uuid)`,
         ),
       )
       .orderBy(desc(firstCredit), desc(bookings.id))
