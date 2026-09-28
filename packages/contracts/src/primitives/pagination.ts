@@ -33,6 +33,15 @@ export const single = <T extends z.ZodTypeAny>(data: T) => z.object({ data });
 export const page = <T extends z.ZodTypeAny>(item: T) =>
   z.object({ data: z.array(item), meta: pageMetaSchema });
 
+/**
+ * The keyset-paged response shape a controller returns before
+ * `TransformInterceptor` remaps `items` to the envelope's `data` key
+ * (R-ARCH-07 — second use: `earnings.controller.ts` and
+ * `bookings.controller.ts` both hand-rolled this exact object).
+ */
+export const cursorPageOf = <T extends z.ZodTypeAny>(item: T) =>
+  z.object({ items: z.array(item), meta: cursorPageMetaSchema });
+
 export const errorEnvelopeSchema = z.object({
   error: z.object({
     code: z.string().regex(/^[A-Z][A-Z0-9_]*$/),

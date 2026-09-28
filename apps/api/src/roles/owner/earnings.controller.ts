@@ -6,8 +6,7 @@ import {
   ownerTransactionsQuerySchema,
   statementLineSchema,
 } from '@parkease/contracts/owner';
-import { cursorPageMetaSchema } from '@parkease/contracts/primitives';
-import { z } from 'zod';
+import { cursorPageOf } from '@parkease/contracts/primitives';
 
 import { OwnerBalanceQuery } from '../../domains/ledger/queries/owner-balance.js';
 import { type AuthUser, CurrentUser } from '../../platform/auth/current-user.decorator.js';
@@ -16,10 +15,7 @@ import { Roles } from '../../platform/rbac/roles.decorator.js';
 
 import { toEarningsView, toStatementLine } from './views/earnings.view.js';
 
-const transactionsPageSchema = z.object({
-  items: z.array(statementLineSchema),
-  meta: cursorPageMetaSchema,
-});
+const transactionsPageSchema = cursorPageOf(statementLineSchema);
 
 /** Answered from the ledger and nothing else (R-MONEY-05). */
 @Controller('owner/earnings')

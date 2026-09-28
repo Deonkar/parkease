@@ -96,6 +96,74 @@ describe('owner dashboard HTTP', () => {
     expect(body.data[0]).toMatchObject({ basePaise: 6000, feePaise: 900, netPaise: 5100 });
   });
 
+  /** A `completed` booking, seeded directly: past bookings aren't reachable through the create flow. */
+  const bookPast = async (spaceId: string, hoursAgo: number) => {
+    const startsAt = new Date(Date.now() - hoursAgo * 3_600_000);
+    const endsAt = new Date(startsAt.getTime() + 2 * 3_600_000);
+    const [booking] = await h.sql<{ id: string }[]>`
+      INSERT INTO bookings (driver_id, space_id, vehicle_type, duration_type, starts_at, ends_at,
+        status, base_paise, surge_premium_paise, parkease_fee_paise, gst_paise, total_paise,
+        owner_earnings_paise)
+      VALUES (${h.driverId}, ${spaceId}, 'car', 'hourly', ${startsAt.toISOString()},
+        ${endsAt.toISOString()}, 'completed', 6000, 0, 900, 0, 6000, 5100)
+      RETURNING id`;
+    if (booking === undefined) throw new Error('failed to seed past booking');
+    await h.sql`
+      INSERT INTO booking_slots (booking_id, space_id, vehicle_type, slot_index, period, status)
+      VALUES (${booking.id}, ${spaceId}, 'car', 0,
+        tstzrange(${startsAt.toISOString()}::timestamptz, ${endsAt.toISOString()}::timestamptz, '[)'),
+        'released')`;
+    return booking;
+  };
+
+  it('pages upcoming bookings soonest-first, no duplicates, and rejects a past cursor replayed against upcoming', async () => {
+    const spaceId = await seedSpace(h, { lat: 12.9345, lng: 77.6266, carSlots: 3 });
+    // Seeded out of order so soonest-first is a real assertion, not an
+    // artifact of insertion order.
+    const soonest = await bookConfirmed(spaceId, 8);
+    const middle = await bookConfirmed(spaceId, 4);
+    const latest = await bookConfirmed(spaceId, 12);
+    await bookPast(spaceId, 100);
+    await bookPast(spaceId, 50);
+
+    const page1 = await get(`/owner/spaces/${spaceId}/bookings?group=upcoming&limit=2`);
+    expect(page1.status).toBe(200);
+    const body1 = page1.body as {
+      data: { bookingId: string }[];
+      meta: { hasMore: boolean; nextCursor: string | null };
+    };
+    expect(body1.data.map((b) => b.bookingId)).toEqual([middle.id, soonest.id]);
+    expect(body1.meta.hasMore).toBe(true);
+    expect(body1.meta.nextCursor).not.toBeNull();
+
+    const page2 = await get(
+      `/owner/spaces/${spaceId}/bookings?group=upcoming&limit=2&cursor=${String(body1.meta.nextCursor)}`,
+    );
+    expect(page2.status).toBe(200);
+    const body2 = page2.body as {
+      data: { bookingId: string }[];
+      meta: { hasMore: boolean; nextCursor: string | null };
+    };
+    expect(body2.data.map((b) => b.bookingId)).toEqual([latest.id]);
+    expect(body2.meta.hasMore).toBe(false);
+    expect(body2.meta.nextCursor).toBeNull();
+
+    const allIds = [...body1.data, ...body2.data].map((b) => b.bookingId);
+    expect(new Set(allIds).size).toBe(allIds.length);
+
+    // A `past` cursor carries a different filter tag (`owner-past` vs
+    // `owner-upcoming`); replaying it against `upcoming` must not silently
+    // reinterpret it as a different sort order — it is simply invalid.
+    const pastPage = await get(`/owner/spaces/${spaceId}/bookings?group=past&limit=1`);
+    const pastMeta = (pastPage.body as { meta: { nextCursor: string | null } }).meta;
+    expect(pastMeta.nextCursor).not.toBeNull();
+    const replayed = await get(
+      `/owner/spaces/${spaceId}/bookings?group=upcoming&cursor=${String(pastMeta.nextCursor)}`,
+    );
+    expect(replayed.status).toBe(400);
+    expect((replayed.body as { error: { code: string } }).error.code).toBe('INVALID_CURSOR');
+  });
+
   it('lists bookings on one space, and 404s another owner’s space', async () => {
     const mine = await seedSpace(h, { lat: 12.9345, lng: 77.6266, carSlots: 1 });
     await bookConfirmed(mine, 2);

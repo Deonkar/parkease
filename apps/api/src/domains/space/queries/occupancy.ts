@@ -8,8 +8,6 @@ import { DB, type Database } from '../../../platform/db/db.module.js';
 // would be a second copy of the same shape drifting from the original.
 import type { Reader } from '../../ledger/queries/owner-balance.js';
 
-export { istStartOfToday } from '../../ledger/period-bound.js';
-
 /**
  * Booking status, not slot status: completion and cancellation both set the
  * slot `released`, so filtering on the slot would lose every finished booking
@@ -32,9 +30,18 @@ export class SpaceOccupancyQuery {
     const from = sql`${window.from.toISOString()}::timestamptz`;
     const to = sql`${window.to.toISOString()}::timestamptz`;
 
+    // Scoped to the owner's own spaces INSIDE the subquery, not just by the
+    // outer join: a completed booking's slot is `released`, outside the
+    // partial GiST index, so an unscoped `&&` falls back to a platform-wide
+    // scan of `booking_slots` instead of using `booking_slots_space_id_idx` /
+    // `space_slots_space_id_idx`. Behaviour is unchanged — narrowing before
+    // the aggregate cannot add or drop a row the outer join wouldn't already
+    // have dropped.
     const slotCounts = reader
       .select({ spaceId: spaceSlots.spaceId, slots: sql<number>`count(*)::int`.as('slots') })
       .from(spaceSlots)
+      .innerJoin(spaces, eq(spaces.id, spaceSlots.spaceId))
+      .where(and(eq(spaces.ownerId, ownerId), isNull(spaces.deletedAt)))
       .groupBy(spaceSlots.spaceId)
       .as('slot_counts');
 
@@ -47,8 +54,11 @@ export class SpaceOccupancyQuery {
       })
       .from(bookingSlots)
       .innerJoin(bookings, eq(bookings.id, bookingSlots.bookingId))
+      .innerJoin(spaces, eq(spaces.id, bookingSlots.spaceId))
       .where(
         and(
+          eq(spaces.ownerId, ownerId),
+          isNull(spaces.deletedAt),
           inArray(bookings.status, OCCUPYING),
           sql`${bookingSlots.period} && tstzrange(${from}, ${to}, '[)')`,
         ),

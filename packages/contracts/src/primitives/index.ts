@@ -56,6 +56,7 @@ export {
   type CursorPageMeta,
   single,
   page,
+  cursorPageOf,
   errorEnvelopeSchema,
   type ErrorEnvelope,
 } from './pagination.js';

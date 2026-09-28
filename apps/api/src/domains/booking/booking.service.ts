@@ -198,10 +198,16 @@ export class BookingService {
       // Written as one SQL row comparison rather than an or(); `or()` is typed
       // as possibly-undefined and the non-null assertion needed to use it is
       // exactly the kind of "I know better" the lint rule is there to stop.
+      // Explicit casts: postgres-js cannot infer a bind parameter's type from
+      // a bare JS `Date`/string in a raw tuple comparison the way it can from
+      // a typed column reference — left uncast this throws
+      // "argument must be of type string... Received an instance of Date" the
+      // moment a real second page is requested (never exercised until a test
+      // actually paged past page 1).
       conditions.push(
         ascending
-          ? sql`(${bookings.startsAt}, ${bookings.id}) > (${cursor.startsAt}, ${cursor.id})`
-          : sql`(${bookings.startsAt}, ${bookings.id}) < (${cursor.startsAt}, ${cursor.id})`,
+          ? sql`(${bookings.startsAt}, ${bookings.id}) > (${cursor.startsAt.toISOString()}::timestamptz, ${cursor.id}::uuid)`
+          : sql`(${bookings.startsAt}, ${bookings.id}) < (${cursor.startsAt.toISOString()}::timestamptz, ${cursor.id}::uuid)`,
       );
     }
 
@@ -350,10 +356,11 @@ export class BookingService {
           message: 'That page link is no longer valid. Pull to refresh.',
         });
       }
+      // Same explicit cast as `listForDriver` — see the comment there.
       conditions.push(
         ascending
-          ? sql`(${bookings.startsAt}, ${bookings.id}) > (${cursor.startsAt}, ${cursor.id})`
-          : sql`(${bookings.startsAt}, ${bookings.id}) < (${cursor.startsAt}, ${cursor.id})`,
+          ? sql`(${bookings.startsAt}, ${bookings.id}) > (${cursor.startsAt.toISOString()}::timestamptz, ${cursor.id}::uuid)`
+          : sql`(${bookings.startsAt}, ${bookings.id}) < (${cursor.startsAt.toISOString()}::timestamptz, ${cursor.id}::uuid)`,
       );
     }
 

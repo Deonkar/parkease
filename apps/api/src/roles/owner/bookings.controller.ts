@@ -16,8 +16,7 @@ import {
   ownerBookingSchema,
   ownerCheckInSchema,
 } from '@parkease/contracts/owner';
-import { cursorPageMetaSchema } from '@parkease/contracts/primitives';
-import { z } from 'zod';
+import { cursorPageOf } from '@parkease/contracts/primitives';
 
 import { BookingService } from '../../domains/booking/booking.service.js';
 import { CheckInCommand } from '../../domains/booking/commands/check-in.command.js';
@@ -28,10 +27,7 @@ import { Roles } from '../../platform/rbac/roles.decorator.js';
 
 import { toOwnerBookingView, toOwnerCheckInView } from './views/owner-booking.view.js';
 
-const ownerBookingsPageSchema = z.object({
-  items: z.array(ownerBookingSchema),
-  meta: cursorPageMetaSchema,
-});
+const ownerBookingsPageSchema = cursorPageOf(ownerBookingSchema);
 
 /**
  * The owner-verified check-in, plus the owner's own bookings lists. Two role
