@@ -17,7 +17,10 @@ export const ownerDashboardSchema = z
     }),
     month: z.object({
       netPaise: paiseDeltaSchema,
-      /** Month-to-date vs the same days of last month; null when last month was 0. */
+      /**
+       * Month-to-date vs the same days of last month; null when last month's
+       * net was zero or negative (no meaningful baseline to grow from).
+       */
       growthBp: z.number().int().nullable(),
     }),
     activeBookings: z.number().int().nonnegative(),

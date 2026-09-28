@@ -81,6 +81,7 @@ export class OwnerDashboardQuery {
           today: { netPaise: today.netPaise, bookings: bookingsToday },
           month: {
             netPaise: month.netPaise,
+            // null for a zero or negative baseline — a reversal-heavy last month is not a base to grow from.
             growthBp:
               lastMonth.netPaise > 0
                 ? Math.round(((month.netPaise - lastMonth.netPaise) * 10_000) / lastMonth.netPaise)
