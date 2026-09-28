@@ -9,9 +9,19 @@ type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 export interface ApprovalStatusDisplay {
   readonly label: string;
-  /** Text tint, safe wherever the listing detail badge already used it: on
-   * white/surface directly, or on the dashboard's neutral `mutedSoft` pill
-   * (near-white, so the same contrast holds). */
+  /**
+   * Text (and icon) tint. Every value here is checked against BOTH surfaces
+   * it actually renders on: the listing detail badge's plain `surface`, and
+   * the dashboard pill's `colors.mutedSoft` (round 2, fix wave 5) —
+   * `mutedSoft` (#F1F5F9) is close to white but not white, and `colors.error`
+   * on it measures 4.41:1, under the 4.5:1 AA floor, the same failure
+   * `colors.ts` already documents for `error` on `errorLight`. `rejected`
+   * uses `errorInk` instead (5.91:1 on `mutedSoft`, 6.47:1 on `surface` —
+   * clears both). `warning` clears both surfaces already (5.02:1 on
+   * `surface`, 4.58:1 on `mutedSoft`) so `pending_approval` and
+   * `changes_requested` are unchanged.
+   * `approval-status-contrast.test.ts` is the guard against this regressing.
+   */
   readonly color: string;
   readonly icon: IconName;
 }
@@ -59,7 +69,7 @@ export const APPROVAL_STATUS_DISPLAY: Readonly<Record<ApprovalStatusValue, Appro
     },
     [ApprovalStatus.REJECTED]: {
       label: 'Not Approved',
-      color: colors.error,
+      color: colors.errorInk,
       icon: 'close-circle-outline',
     },
   };
