@@ -4,8 +4,8 @@ import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 import { render } from '../../shared/__tests__/render-native';
+import { RefreshNotice } from '../../shared/components/RefreshNotice';
 import { FieldError } from '../components/FieldError';
-import { RefreshNotice } from '../components/RefreshNotice';
 
 /**
  * H4: every message that appears is announced, one way, everywhere.

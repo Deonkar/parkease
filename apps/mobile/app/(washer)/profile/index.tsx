@@ -18,12 +18,12 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/contexts/AuthContext';
+import { RefreshNotice } from '@/features/shared/components/RefreshNotice';
 import { useAnnounce } from '@/features/shared/hooks/useAnnounce';
 import { loadFailureCopy } from '@/features/washer/api/errors';
 import { FieldError } from '@/features/washer/components/FieldError';
 import { SubmitBlock } from '@/features/washer/components/FormFields';
 import { PhotoField } from '@/features/washer/components/PhotoField';
-import { RefreshNotice } from '@/features/washer/components/RefreshNotice';
 import { VerificationNotice } from '@/features/washer/components/VerificationNotice';
 import { WashCamera } from '@/features/washer/components/WashCamera';
 import { WasherHeader } from '@/features/washer/components/WasherHeader';

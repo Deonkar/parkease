@@ -1,18 +1,22 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import type { WasherEarningsLine, WasherEarningsPeriod } from '@parkease/contracts/washer';
+import {
+  WASHER_EARNINGS_PERIOD_VALUES,
+  type WasherEarningsLine,
+  type WasherEarningsPeriod,
+} from '@parkease/contracts/washer';
 import { colors, fontSize, fontWeight, layout, radius, spacing } from '@parkease/tokens';
 import { ErrorState, Skeleton } from '@parkease/ui-native';
 import { FlashList } from '@shopify/flash-list';
 import { useState, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { PeriodTabs } from '@/features/shared/components/PeriodTabs';
+import { RefreshNotice } from '@/features/shared/components/RefreshNotice';
 import { resolveScreenState } from '@/features/shared/screen-state';
 import { loadFailureCopy } from '@/features/washer/api/errors';
 import { EarningsLine } from '@/features/washer/components/EarningsLine';
 import { EarningsSummary } from '@/features/washer/components/EarningsSummary';
-import { PeriodTabs } from '@/features/washer/components/PeriodTabs';
 import { ReadableColumn } from '@/features/washer/components/ReadableColumn';
-import { RefreshNotice } from '@/features/washer/components/RefreshNotice';
 import { WasherHeader } from '@/features/washer/components/WasherHeader';
 import { useWasherEarnings } from '@/features/washer/hooks/useWasherQueries';
 import { PERIOD_LABELS } from '@/features/washer/labels';
@@ -140,7 +144,12 @@ export default function WasherEarningsScreen() {
   return (
     <View style={styles.root}>
       <WasherHeader title="Earnings">
-        <PeriodTabs value={period} onChange={setPeriod} />
+        <PeriodTabs
+          values={WASHER_EARNINGS_PERIOD_VALUES}
+          label={(p) => PERIOD_LABELS[p].tab}
+          value={period}
+          onChange={setPeriod}
+        />
       </WasherHeader>
       <ReadableColumn>{content()}</ReadableColumn>
     </View>

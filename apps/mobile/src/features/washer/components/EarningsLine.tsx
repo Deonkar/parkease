@@ -2,6 +2,7 @@ import type { WasherEarningsLine } from '@parkease/contracts/washer';
 import { colors, elevation, fontSize, fontWeight, radius, spacing } from '@parkease/tokens';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { AmountRow } from '@/features/shared/components/AmountRow';
 import { formatDateIST, formatTimeIST } from '@/lib/format';
 import { formatPaise, MINUS_SIGN } from '@/lib/money';
 
@@ -9,25 +10,6 @@ import { SERVICE_LABELS, VEHICLE_LABELS } from '../labels';
 
 export interface EarningsLineProps {
   readonly line: WasherEarningsLine;
-}
-
-interface AmountRowProps {
-  readonly label: string;
-  readonly value: string;
-  readonly testID: string;
-  readonly emphasis?: boolean;
-}
-
-/** One labelled amount, read by TalkBack as one phrase ("ParkEase fee, −₹79.80"). */
-function AmountRow({ label, value, testID, emphasis = false }: AmountRowProps) {
-  return (
-    <View style={styles.row} accessible accessibilityLabel={`${label}, ${value}`}>
-      <Text style={[styles.label, emphasis && styles.labelEmphasis]}>{label}</Text>
-      <Text style={[styles.amount, emphasis && styles.amountEmphasis]} testID={testID}>
-        {value}
-      </Text>
-    </View>
-  );
 }
 
 /**
@@ -92,15 +74,5 @@ const styles = StyleSheet.create({
   },
   vehicle: { fontWeight: fontWeight.regular, color: colors.textSecondary },
   amounts: { marginTop: spacing.md, gap: spacing.sm },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
-  label: { fontSize: fontSize.sm, color: colors.textSecondary },
-  labelEmphasis: { fontWeight: fontWeight.semibold, color: colors.text },
-  // Tabular figures, so the three amounts align down their right edge.
-  amount: {
-    fontSize: fontSize.sm,
-    color: colors.textSecondary,
-    fontVariant: ['tabular-nums'],
-  },
-  amountEmphasis: { fontSize: fontSize.base, fontWeight: fontWeight.bold, color: colors.text },
   rule: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
 });
