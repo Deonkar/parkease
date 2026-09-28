@@ -17,6 +17,8 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ReadableColumn } from '@/features/shared/components/ReadableColumn';
+import { RefreshNotice } from '@/features/shared/components/RefreshNotice';
 import { useAnnounce } from '@/features/shared/hooks/useAnnounce';
 import { resolveScreenState } from '@/features/shared/screen-state';
 import { advanceOutcomeFor } from '@/features/washer/action-outcomes';
@@ -24,8 +26,6 @@ import { loadFailureCopy } from '@/features/washer/api/errors';
 import { ElapsedBar, elapsedMinutesSince } from '@/features/washer/components/ElapsedBar';
 import { EvidencePair, type EvidenceSlotView } from '@/features/washer/components/EvidencePair';
 import { JobEndFooter, JobWonNotice } from '@/features/washer/components/JobMoments';
-import { ReadableColumn } from '@/features/washer/components/ReadableColumn';
-import { RefreshNotice } from '@/features/washer/components/RefreshNotice';
 import { StepRail, currentStepFor } from '@/features/washer/components/StepRail';
 import { WashActionBar } from '@/features/washer/components/WashActionBar';
 import { WashCamera } from '@/features/washer/components/WashCamera';

@@ -7,6 +7,7 @@ import type {
   VehicleType,
 } from '@parkease/contracts/enums';
 import type { Quote } from '@parkease/contracts/money';
+import type { OwnerBookingGroup } from '@parkease/contracts/owner';
 import { bookings, bookingSlots, spaces, users } from '@parkease/db/schema';
 import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
@@ -47,13 +48,16 @@ interface BookingCursor {
   readonly id: string;
 }
 
-const encodeCursor = (filter: BookingFilter, row: { startsAt: Date; id: string }): string =>
+/** Every cursor tag this service issues — a driver filter, or `owner-<group>`. */
+type CursorFilter = BookingFilter | `owner-${OwnerBookingGroup}`;
+
+const encodeCursor = (filter: CursorFilter, row: { startsAt: Date; id: string }): string =>
   Buffer.from(
     JSON.stringify({ f: filter, t: row.startsAt.toISOString(), i: row.id }),
     'utf8',
   ).toString('base64url');
 
-function decodeCursor(raw: string, filter: BookingFilter): BookingCursor | undefined {
+function decodeCursor(raw: string, filter: CursorFilter): BookingCursor | undefined {
   let parsed: unknown;
   try {
     parsed = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'));
@@ -194,10 +198,16 @@ export class BookingService {
       // Written as one SQL row comparison rather than an or(); `or()` is typed
       // as possibly-undefined and the non-null assertion needed to use it is
       // exactly the kind of "I know better" the lint rule is there to stop.
+      // Explicit casts: postgres-js cannot infer a bind parameter's type from
+      // a bare JS `Date`/string in a raw tuple comparison the way it can from
+      // a typed column reference — left uncast this throws
+      // "argument must be of type string... Received an instance of Date" the
+      // moment a real second page is requested (never exercised until a test
+      // actually paged past page 1).
       conditions.push(
         ascending
-          ? sql`(${bookings.startsAt}, ${bookings.id}) > (${cursor.startsAt}, ${cursor.id})`
-          : sql`(${bookings.startsAt}, ${bookings.id}) < (${cursor.startsAt}, ${cursor.id})`,
+          ? sql`(${bookings.startsAt}, ${bookings.id}) > (${cursor.startsAt.toISOString()}::timestamptz, ${cursor.id}::uuid)`
+          : sql`(${bookings.startsAt}, ${bookings.id}) < (${cursor.startsAt.toISOString()}::timestamptz, ${cursor.id}::uuid)`,
       );
     }
 
@@ -302,5 +312,79 @@ export class BookingService {
       .where(eq(bookings.id, bookingId))
       .returning();
     return row;
+  }
+
+  /** Does this owner own this (non-deleted) space? A miss is a 404 at the controller. */
+  async ownsSpace(ownerId: string, spaceId: string): Promise<boolean> {
+    const [row] = await this.db
+      .select({ id: spaces.id })
+      .from(spaces)
+      .where(and(eq(spaces.id, spaceId), eq(spaces.ownerId, ownerId), isNull(spaces.deletedAt)));
+    return row !== undefined;
+  }
+
+  /**
+   * Bookings on an owner's spaces, one group at a time. Active and upcoming
+   * read soonest-first (the next arrival is what the owner needs); past reads
+   * newest-first. Keyset over `(starts_at, id)`, as `listForDriver`.
+   */
+  async listForOwner(
+    ownerId: string,
+    query: {
+      group: OwnerBookingGroup;
+      limit: number;
+      cursor?: string | undefined;
+      spaceId?: string;
+    },
+  ) {
+    const ascending = query.group !== 'past';
+    const conditions = [eq(spaces.ownerId, ownerId), isNull(bookings.deletedAt)];
+    if (query.spaceId !== undefined) conditions.push(eq(bookings.spaceId, query.spaceId));
+    if (query.group === 'active') conditions.push(eq(bookings.status, 'active'));
+    if (query.group === 'upcoming') {
+      conditions.push(eq(bookings.status, 'confirmed'), sql`${bookings.startsAt} > now()`);
+    }
+    if (query.group === 'past') {
+      conditions.push(inArray(bookings.status, ['completed', 'cancelled', 'no_show']));
+    }
+
+    if (query.cursor !== undefined) {
+      const cursor = decodeCursor(query.cursor, `owner-${query.group}`);
+      if (cursor === undefined) {
+        throw new BadRequestException({
+          error: 'INVALID_CURSOR',
+          message: 'That page link is no longer valid. Pull to refresh.',
+        });
+      }
+      // Same explicit cast as `listForDriver` — see the comment there.
+      conditions.push(
+        ascending
+          ? sql`(${bookings.startsAt}, ${bookings.id}) > (${cursor.startsAt.toISOString()}::timestamptz, ${cursor.id}::uuid)`
+          : sql`(${bookings.startsAt}, ${bookings.id}) < (${cursor.startsAt.toISOString()}::timestamptz, ${cursor.id}::uuid)`,
+      );
+    }
+
+    const rows = await this.db
+      .select({ booking: bookings, driverName: users.name, slotIndex: bookingSlots.slotIndex })
+      .from(bookings)
+      .innerJoin(spaces, eq(spaces.id, bookings.spaceId))
+      .innerJoin(users, eq(users.id, bookings.driverId))
+      .leftJoin(bookingSlots, eq(bookingSlots.bookingId, bookings.id))
+      .where(and(...conditions))
+      .orderBy(
+        ascending ? asc(bookings.startsAt) : desc(bookings.startsAt),
+        ascending ? asc(bookings.id) : desc(bookings.id),
+      )
+      .limit(query.limit + 1);
+
+    const hasMore = rows.length > query.limit;
+    const items = hasMore ? rows.slice(0, query.limit) : rows;
+    const last = items.at(-1);
+    return {
+      items,
+      hasMore,
+      nextCursor:
+        hasMore && last !== undefined ? encodeCursor(`owner-${query.group}`, last.booking) : null,
+    };
   }
 }

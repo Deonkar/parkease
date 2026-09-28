@@ -15,6 +15,7 @@ import { CarwashModule } from '../../src/domains/carwash/carwash.module.js';
 import { SwitchRoleCommand } from '../../src/domains/identity/commands/switch-role.command.js';
 import { RoleRepository } from '../../src/domains/identity/repositories/role.repository.js';
 import { UserRepository } from '../../src/domains/identity/repositories/user.repository.js';
+import { LedgerModule } from '../../src/domains/ledger/ledger.module.js';
 import { PaymentModule } from '../../src/domains/payment/payment.module.js';
 import { RAZORPAY } from '../../src/domains/payment/razorpay.client.js';
 import { PricingModule } from '../../src/domains/pricing/pricing.module.js';
@@ -44,6 +45,8 @@ import { DriverQuotesController } from '../../src/roles/driver/quotes.controller
 import { DriverSearchController } from '../../src/roles/driver/search.controller.js';
 import { DriverValetController } from '../../src/roles/driver/valet.controller.js';
 import { OwnerBookingsController } from '../../src/roles/owner/bookings.controller.js';
+import { OwnerDashboardController } from '../../src/roles/owner/dashboard.controller.js';
+import { OwnerEarningsController } from '../../src/roles/owner/earnings.controller.js';
 import { RazorpayWebhookController } from '../../src/roles/public/webhooks/razorpay.controller.js';
 import { MeController } from '../../src/roles/shared/me.controller.js';
 import { ValetAvailabilityController } from '../../src/roles/valet/availability.controller.js';
@@ -118,6 +121,7 @@ class StubAuthGuard implements CanActivate {
     SurgeModule,
     PricingModule,
     BookingModule,
+    LedgerModule,
     PaymentModule,
     // Domain only. The tracking gateway is deliberately absent: it needs
     // AuthModule, which is out of this module because FirebaseVerifierService
@@ -138,6 +142,8 @@ class StubAuthGuard implements CanActivate {
     DriverSearchController,
     DriverPaymentsController,
     OwnerBookingsController,
+    OwnerDashboardController,
+    OwnerEarningsController,
     RazorpayWebhookController,
     DriverValetController,
     ValetJobsController,

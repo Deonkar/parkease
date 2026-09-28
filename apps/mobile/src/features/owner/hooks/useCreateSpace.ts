@@ -9,6 +9,7 @@ import { uuidv7 } from '@/lib/uuid';
 import { createSpace } from '../api/spaces';
 
 import { MY_LISTINGS_KEY } from './useMyListings';
+import { ownerKeys } from './useOwnerQueries';
 
 export function useCreateSpace() {
   const queryClient = useQueryClient();
@@ -46,6 +47,9 @@ export function useCreateSpace() {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: MY_LISTINGS_KEY });
+      // A first space turns the dashboard's empty state into the real thing;
+      // any later space changes today's occupancy row (F7).
+      void queryClient.invalidateQueries({ queryKey: ownerKeys.dashboard });
     },
   });
 }

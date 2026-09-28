@@ -9,7 +9,6 @@ import {
   spacing,
 } from '@parkease/tokens';
 import { Button } from '@parkease/ui-native';
-import { useMutation } from '@tanstack/react-query';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
@@ -17,10 +16,10 @@ import { StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInUp, useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { newIntent } from '@/lib/api';
 import { formatTimeIST } from '@/lib/format';
 
-import { bookingIdInToken, ownerCheckIn } from '../../src/features/owner/api/check-in';
+import { bookingIdInToken } from '../../src/features/owner/api/check-in';
+import { useOwnerCheckIn } from '../../src/features/owner/hooks/useOwnerCheckIn';
 import { toApiFailure } from '../../src/features/shared/api/errors';
 import { ScreenHeader } from '../../src/features/shared/components/ScreenHeader';
 
@@ -38,10 +37,7 @@ export default function OwnerScanScreen() {
   const [notOurs, setNotOurs] = useState(false);
   const lastScan = useRef<{ token: string; at: number } | null>(null);
 
-  const checkIn = useMutation({
-    mutationFn: ({ bookingId, token }: { bookingId: string; token: string }) =>
-      ownerCheckIn(bookingId, token, newIntent()),
-  });
+  const checkIn = useOwnerCheckIn();
 
   const onScanned = useCallback(
     ({ data }: { data: string }) => {

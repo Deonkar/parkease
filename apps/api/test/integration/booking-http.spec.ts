@@ -232,6 +232,58 @@ describe('booking HTTP', () => {
       });
       expect(response.status).toBe(400);
     });
+
+    /**
+     * Regression: `decodeCursor` hands `listForDriver` a JS `Date`, and the
+     * tuple-comparison SQL had no explicit `::timestamptz` cast — postgres-js
+     * cannot infer a bind parameter's type from a bare `Date` there, so a real
+     * second-page request threw 500 ("argument must be of type string...
+     * Received an instance of Date"). The tampered-cursor case above never
+     * reached that code path (it 400s before any query runs), so this was
+     * never actually exercised until now.
+     */
+    it('pages past page 1 with a real cursor: 200, no duplicate ids, hasMore false on the last page', async () => {
+      const spaceId = await seedSpace(h, { lat: 12.9345, lng: 77.6266, carSlots: 3 });
+      const bodyAt = (hoursFromNow: number) => {
+        const window = windowFromNow(hoursFromNow, 2);
+        return {
+          spaceId,
+          vehicleType: 'car' as const,
+          durationType: 'hourly' as const,
+          startsAt: window.startsAt.toISOString(),
+          endsAt: window.endsAt.toISOString(),
+        };
+      };
+      await post('/api/v1/driver/bookings', bodyAt(2), key());
+      await post('/api/v1/driver/bookings', bodyAt(6), key());
+      await post('/api/v1/driver/bookings', bodyAt(10), key());
+
+      const page1 = await http.request({ method: 'GET', url: '/api/v1/driver/bookings?limit=2' });
+      expect(page1.status).toBe(200);
+      const body1 = page1.body as {
+        data: { id: string }[];
+        meta: { hasMore: boolean; nextCursor: string | null };
+      };
+      expect(body1.data).toHaveLength(2);
+      expect(body1.meta.hasMore).toBe(true);
+      expect(body1.meta.nextCursor).not.toBeNull();
+
+      const page2 = await http.request({
+        method: 'GET',
+        url: `/api/v1/driver/bookings?limit=2&cursor=${String(body1.meta.nextCursor)}`,
+      });
+      expect(page2.status).toBe(200);
+      const body2 = page2.body as {
+        data: { id: string }[];
+        meta: { hasMore: boolean; nextCursor: string | null };
+      };
+      expect(body2.data).toHaveLength(1);
+      expect(body2.meta.hasMore).toBe(false);
+      expect(body2.meta.nextCursor).toBeNull();
+
+      const allIds = [...body1.data, ...body2.data].map((b) => b.id);
+      expect(new Set(allIds).size).toBe(allIds.length);
+    });
   });
 
   describe('GET /driver/spaces/:id', () => {

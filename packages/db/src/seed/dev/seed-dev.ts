@@ -191,7 +191,10 @@ async function seedDev(): Promise<void> {
               direction: 'credit',
               amountPaise: ownerEarningsPaise,
               bookingId: booking.id,
-              counterpartyUserId: ownerDriverId,
+              // The booking's driver, as create-booking stamps it: owner
+              // figures count only owner_payable rows whose counterparty is
+              // the driver (washer/valet legs share the account).
+              counterpartyUserId: driverId,
               description: 'Owner earnings for booking',
             },
             {

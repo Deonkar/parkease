@@ -14,6 +14,11 @@ const sources = [
   ...readdirSync(join(root, 'src', 'features', 'washer', 'components')).map((file) =>
     join('src', 'features', 'washer', 'components', file),
   ),
+  // PeriodTabs and RefreshNotice moved to features/shared/components (task 15,
+  // R-ARCH-07) — named explicitly rather than readdir'd, so this audit does not
+  // also sweep in unrelated shared controls that were never in scope for it.
+  join('src', 'features', 'shared', 'components', 'PeriodTabs.tsx'),
+  join('src', 'features', 'shared', 'components', 'RefreshNotice.tsx'),
   join('app', '(washer)', 'active', 'index.tsx'),
   join('app', '(washer)', 'offers.tsx'),
   join('app', '(washer)', 'menu.tsx'),
@@ -36,14 +41,14 @@ describe('washer touch targets', () => {
   it('covers every control the audit named', () => {
     const read = (file: string) => readFileSync(join(root, file), 'utf8');
     const components = join('src', 'features', 'washer', 'components');
-    for (const file of [
-      'EvidencePair.tsx',
-      'PhotoField.tsx',
-      'RefreshNotice.tsx',
-      'ServiceRow.tsx',
-    ]) {
+    for (const file of ['EvidencePair.tsx', 'PhotoField.tsx', 'ServiceRow.tsx']) {
       expect(read(join(components, file)), file).toContain('touchTarget');
     }
+    // RefreshNotice moved to features/shared/components (task 15, R-ARCH-07).
+    expect(
+      read(join('src', 'features', 'shared', 'components', 'RefreshNotice.tsx')),
+      'RefreshNotice.tsx',
+    ).toContain('touchTarget');
     expect(read(join('app', '(washer)', 'active', 'index.tsx'))).toContain('touchTarget');
   });
 });

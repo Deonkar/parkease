@@ -1,9 +1,14 @@
-import type { WasherEarningsPeriod } from '@parkease/contracts/washer';
+import {
+  WASHER_EARNINGS_PERIOD_VALUES,
+  type WasherEarningsPeriod,
+} from '@parkease/contracts/washer';
 import { act, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { byTestId, mount, nodes, style, text } from '../../shared/__tests__/render-native';
+import { PERIOD_LABELS } from '../../washer/labels';
 import { PeriodTabs } from '../components/PeriodTabs';
+
+import { byTestId, mount, nodes, style, text } from './render-native';
 
 // react-native ships Flow source the node-environment parser cannot read.
 vi.mock('react-native', () => ({
@@ -18,6 +23,8 @@ function Host({ onChange }: { readonly onChange: (period: WasherEarningsPeriod) 
   const [period, setPeriod] = useState<WasherEarningsPeriod>('week');
   return (
     <PeriodTabs
+      values={WASHER_EARNINGS_PERIOD_VALUES}
+      label={(p) => PERIOD_LABELS[p].tab}
       value={period}
       onChange={(next) => {
         onChange(next);
@@ -102,5 +109,20 @@ describe('the earnings period tabs', () => {
     // The selected tab carries an indicator bar the others do not.
     expect(byTestId(view.tree(), 'period-tab-week-indicator')).toBeDefined();
     expect(byTestId(view.tree(), 'period-tab-today-indicator')).toBeUndefined();
+  });
+
+  it('takes any period set — the owner has three', () => {
+    const view = mount(
+      <PeriodTabs
+        values={['today', 'week', 'month'] as const}
+        label={(p) => ({ today: 'Today', week: 'Week', month: 'Month' })[p]}
+        value="month"
+        onChange={() => undefined}
+      />,
+    );
+    const labels = nodes(view.tree())
+      .filter((node) => node.props['accessibilityRole'] === 'tab')
+      .map((node) => text(node));
+    expect(labels).toEqual(['Today', 'Week', 'Month']);
   });
 });

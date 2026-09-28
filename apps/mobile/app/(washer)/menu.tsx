@@ -3,10 +3,10 @@ import { ErrorState, Skeleton } from '@parkease/ui-native';
 import type { ReactNode } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
+import { ReadableColumn } from '@/features/shared/components/ReadableColumn';
+import { RefreshNotice } from '@/features/shared/components/RefreshNotice';
 import { resolveScreenState } from '@/features/shared/screen-state';
 import { loadFailureCopy } from '@/features/washer/api/errors';
-import { ReadableColumn } from '@/features/washer/components/ReadableColumn';
-import { RefreshNotice } from '@/features/washer/components/RefreshNotice';
 import { ServiceRow } from '@/features/washer/components/ServiceRow';
 import { WasherHeader } from '@/features/washer/components/WasherHeader';
 import { useServiceSave } from '@/features/washer/hooks/useServiceSave';

@@ -20,6 +20,8 @@ export interface RefreshNoticeProps {
  * Extracted on its second use (R-ARCH-07): the active job and the service menu
  * say the same thing in the same place, and a partner who learns what the
  * amber band means on one screen should not have to learn it again.
+ *
+ * Shared across roles since task 15.
  */
 export function RefreshNotice({ testID, retryLabel, onRetry }: RefreshNoticeProps) {
   useAnnounce(MESSAGE);

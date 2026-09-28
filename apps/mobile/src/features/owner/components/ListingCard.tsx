@@ -1,15 +1,10 @@
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { SpaceSummary } from '@parkease/contracts/owner';
 import { colors, fontSize, spacing } from '@parkease/tokens';
 import { Button } from '@parkease/ui-native';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
-const STATUS_CONFIG: Record<string, { label: string; color: string; glyph: string }> = {
-  active: { label: 'ACTIVE', color: colors.success, glyph: '✓' },
-  pending_approval: { label: 'PENDING APPROVAL', color: colors.warning, glyph: '◷' },
-  inactive: { label: 'INACTIVE', color: colors.textTertiary, glyph: '⊘' },
-  changes_requested: { label: 'CHANGES REQUESTED', color: colors.warning, glyph: '△' },
-  rejected: { label: 'NOT APPROVED', color: colors.error, glyph: '✕' },
-};
+import { APPROVAL_STATUS_DISPLAY } from '@/features/owner/approval-status';
 
 interface ListingCardProps {
   readonly listing: SpaceSummary;
@@ -18,8 +13,7 @@ interface ListingCardProps {
 }
 
 export function ListingCard({ listing, onPress, onToggle }: ListingCardProps) {
-  const fallbackStatus = { label: 'UNKNOWN', color: colors.textTertiary, glyph: '?' };
-  const status = STATUS_CONFIG[listing.approvalStatus] ?? fallbackStatus;
+  const status = APPROVAL_STATUS_DISPLAY[listing.approvalStatus];
 
   return (
     <Pressable style={styles.card} onPress={onPress} accessibilityRole="button">
@@ -44,9 +38,8 @@ export function ListingCard({ listing, onPress, onToggle }: ListingCardProps) {
             {listing.city}
           </Text>
           <View style={styles.statusRow}>
-            <Text style={[styles.statusText, { color: status.color }]}>
-              {status.glyph} {status.label}
-            </Text>
+            <MaterialCommunityIcons name={status.icon} size={12} color={status.color} />
+            <Text style={[styles.statusText, { color: status.color }]}>{status.label}</Text>
           </View>
           <Text style={styles.slots}>
             {listing.slots.car > 0 ? `${String(listing.slots.car)} car` : ''}
@@ -113,11 +106,16 @@ const styles = StyleSheet.create({
   statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: spacing.xs / 2,
     marginTop: 2,
   },
   statusText: {
     fontSize: fontSize.xs,
     fontWeight: '600',
+    // The shared map's label is Title Case (`approval-status.ts`, reconciled
+    // from listing detail's wording); this card's own all-caps look is kept
+    // here rather than duplicating a second, differently-worded copy of it.
+    textTransform: 'uppercase',
   },
   slots: {
     fontSize: fontSize.xs,

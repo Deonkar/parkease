@@ -6,31 +6,12 @@ import {
   type WasherEarningsView,
 } from '@parkease/contracts/washer';
 import { ledgerEntries, washJobs } from '@parkease/db/schema';
-import { and, desc, eq, sql, type SQL, type SQLWrapper } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 
 import { DB, type Database } from '../../../platform/db/db.module.js';
 import { parseOutgoing } from '../../../platform/http/outgoing-contract.js';
 import { signedBalancePaise } from '../../ledger/accounts.js';
-
-/**
- * Period bound in Asia/Kolkata. A partner's week starts when THEIR week
- * starts, not when UTC's does — in IST those differ by five and a half
- * hours, which is the difference between a Monday morning job counting
- * toward last week and this one.
- *
- * Written once and called against both `ledger_entries.occurred_at` (the
- * summary) and `wash_jobs.completed_at` (the lines): they are genuinely
- * different columns, but two hand-written copies of this boundary is exactly
- * how the two ends up disagreeing about when the week started.
- *
- * `all` returns no bound, which is the behaviour this endpoint had before.
- */
-function periodBound(column: SQLWrapper, period: WasherEarningsPeriod): SQL | undefined {
-  if (period === 'all') return undefined;
-
-  const unit = period === 'today' ? 'day' : period;
-  return sql`${column} >= date_trunc(${unit}, now() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata'`;
-}
+import { periodBound } from '../../ledger/period-bound.js';
 
 type ReadTx = Parameters<Parameters<Database['transaction']>[0]>[0];
 

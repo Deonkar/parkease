@@ -8,6 +8,7 @@ import { DeleteSpaceCommand } from './commands/delete-space.command.js';
 import { SetSpacePhotosCommand } from './commands/set-space-photos.command.js';
 import { ToggleSpaceCommand } from './commands/toggle-space.command.js';
 import { UpdateSpaceCommand } from './commands/update-space.command.js';
+import { SpaceOccupancyQuery } from './queries/occupancy.js';
 import { SearchCache } from './search-cache.js';
 import { SearchService } from './search.service.js';
 import { SpaceService } from './space.service.js';
@@ -24,6 +25,7 @@ import { SpaceService } from './space.service.js';
     DeleteSpaceCommand,
     SetSpacePhotosCommand,
     ToggleSpaceCommand,
+    SpaceOccupancyQuery,
   ],
   exports: [
     SpaceService,
@@ -33,6 +35,7 @@ import { SpaceService } from './space.service.js';
     DeleteSpaceCommand,
     SetSpacePhotosCommand,
     ToggleSpaceCommand,
+    SpaceOccupancyQuery,
   ],
 })
 // eslint-disable-next-line @typescript-eslint/no-extraneous-class

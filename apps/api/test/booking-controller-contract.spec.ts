@@ -45,7 +45,7 @@ function routesOf(controller: Ctor): RouteInfo[] {
 
 const CONTROLLERS: ReadonlyArray<readonly [string, Ctor, string]> = [
   ['driver', DriverBookingsController as Ctor, 'driver/bookings'],
-  ['owner', OwnerBookingsController as Ctor, 'owner/bookings'],
+  ['owner', OwnerBookingsController as Ctor, 'owner'],
 ];
 
 describe('booking controllers', () => {

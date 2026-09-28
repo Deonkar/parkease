@@ -18,10 +18,15 @@ export {
 } from './space-detail.js';
 export { ownerDashboardSchema, type OwnerDashboard } from './dashboard.js';
 export {
-  earningsQuerySchema,
-  type EarningsQuery,
-  earningEntrySchema,
-  type EarningEntry,
+  OWNER_EARNINGS_PERIOD_VALUES,
+  ownerEarningsPeriodSchema,
+  type OwnerEarningsPeriod,
+  ownerEarningsQuerySchema,
+  ownerTransactionsQuerySchema,
+  statementLineSchema,
+  type StatementLine,
+  ownerEarningsViewSchema,
+  type OwnerEarningsView,
 } from './earnings.js';
 export { payoutSchema, type Payout } from './payouts.js';
 export {
@@ -31,6 +36,9 @@ export {
   type BankDetailsResponse,
 } from './bank-details.js';
 export {
+  OWNER_BOOKING_GROUP_VALUES,
+  ownerBookingGroupSchema,
+  type OwnerBookingGroup,
   ownerBookingsQuerySchema,
   type OwnerBookingsQuery,
   ownerBookingSchema,
