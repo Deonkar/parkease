@@ -33,9 +33,14 @@ export class OwnerEarningsController {
     @Query() query: unknown,
   ): Promise<OwnerEarningsView> {
     const { period } = ownerEarningsQuerySchema.parse(query ?? {});
-    const movement = await this.earnings.movementForPeriod(user.id, period);
-    const bookings = await this.earnings.statementCount(user.id, period);
-    const days = await this.earnings.days(user.id, period);
+    // Three independent pool reads, no shared connection — safe to run
+    // concurrently. (The dashboard's reads stay sequential: those share one
+    // transaction so today/month/balance cannot straddle a posting.)
+    const [movement, bookings, days] = await Promise.all([
+      this.earnings.movementForPeriod(user.id, period),
+      this.earnings.statementCount(user.id, period),
+      this.earnings.days(user.id, period),
+    ]);
     return toEarningsView(period, movement, bookings, days);
   }
 

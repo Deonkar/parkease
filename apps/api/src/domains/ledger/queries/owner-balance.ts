@@ -277,18 +277,19 @@ export class OwnerBalanceQuery {
     };
   }
 
-  /** Net per booking, for the bookings list's "earned" line. */
-  async netByBooking(bookingIds: readonly string[], reader: Reader = this.db) {
+  /**
+   * Net per booking, for the bookings list's "earned" line. Scoped with
+   * `ownerScope` like every other read here — a caller that passes another
+   * owner's booking ids gets nothing back for them, not that owner's money.
+   */
+  async netByBooking(ownerId: string, bookingIds: readonly string[], reader: Reader = this.db) {
     if (bookingIds.length === 0) return new Map<string, number>();
     const rows = await reader
       .select({ bookingId: ledgerEntries.bookingId, creditsPaise: CREDITS, debitsPaise: DEBITS })
       .from(ledgerEntries)
-      .where(
-        and(
-          inArray(ledgerEntries.bookingId, [...bookingIds]),
-          eq(ledgerEntries.account, LedgerAccount.OWNER_PAYABLE),
-        ),
-      )
+      .innerJoin(bookings, eq(bookings.id, ledgerEntries.bookingId))
+      .innerJoin(spaces, eq(spaces.id, bookings.spaceId))
+      .where(and(this.ownerScope(ownerId), inArray(ledgerEntries.bookingId, [...bookingIds])))
       .groupBy(ledgerEntries.bookingId);
     return new Map(
       rows.map((r) => [r.bookingId ?? '', net(Number(r.debitsPaise), Number(r.creditsPaise))]),

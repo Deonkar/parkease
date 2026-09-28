@@ -1,5 +1,5 @@
 import { BadRequestException, Inject, Injectable } from '@nestjs/common';
-import type { ListBookingsQuery } from '@parkease/contracts/driver';
+import type { BookingFilter, ListBookingsQuery } from '@parkease/contracts/driver';
 import type {
   BookingStatus,
   CheckInMethod,
@@ -48,13 +48,16 @@ interface BookingCursor {
   readonly id: string;
 }
 
-const encodeCursor = (filter: string, row: { startsAt: Date; id: string }): string =>
+/** Every cursor tag this service issues — a driver filter, or `owner-<group>`. */
+type CursorFilter = BookingFilter | `owner-${OwnerBookingGroup}`;
+
+const encodeCursor = (filter: CursorFilter, row: { startsAt: Date; id: string }): string =>
   Buffer.from(
     JSON.stringify({ f: filter, t: row.startsAt.toISOString(), i: row.id }),
     'utf8',
   ).toString('base64url');
 
-function decodeCursor(raw: string, filter: string): BookingCursor | undefined {
+function decodeCursor(raw: string, filter: CursorFilter): BookingCursor | undefined {
   let parsed: unknown;
   try {
     parsed = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'));

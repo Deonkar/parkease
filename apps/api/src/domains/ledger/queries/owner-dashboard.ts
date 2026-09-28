@@ -37,9 +37,13 @@ export class OwnerDashboardQuery {
     private readonly occupancy: SpaceOccupancyQuery,
   ) {}
 
-  async forOwner(ownerId: string, now = new Date()): Promise<OwnerDashboardData> {
+  async forOwner(ownerId: string): Promise<OwnerDashboardData> {
     return this.db.transaction(
       async (tx) => {
+        // The occupancy window's end is the request instant — no caller ever
+        // passed a different `now` (YAGNI), so it is computed here rather than
+        // threaded through as a parameter.
+        const now = new Date();
         const at = ledgerEntries.occurredAt;
         const owed = await this.balance.movement(ownerId, undefined, tx);
         const today = await this.balance.movement(ownerId, periodBound(at, 'today'), tx);
@@ -66,6 +70,7 @@ export class OwnerDashboardQuery {
               eq(spaces.ownerId, ownerId),
               eq(bookings.status, 'active'),
               isNull(bookings.deletedAt),
+              isNull(spaces.deletedAt),
             ),
           );
         const [owner] = await tx

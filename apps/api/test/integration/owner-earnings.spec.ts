@@ -161,6 +161,19 @@ describe('owner earnings reads', () => {
     expect(days.reduce((sum, d) => sum + d.netPaise, 0)).toBe(booking.ownerEarningsPaise);
   });
 
+  it('netByBooking is owner-scoped — another owner gets nothing for it (F1)', async () => {
+    const spaceId = await seedSpace(h, { lat: 12.9345, lng: 77.6266, carSlots: 1 });
+    const { booking } = await book(spaceId, h.driverId, 2, 2);
+    await confirm(booking.id);
+    const otherOwner = await seedUser(h, 'owner');
+
+    const mine = await earnings.netByBooking(h.ownerId, [booking.id]);
+    expect(mine.get(booking.id)).toBeGreaterThan(0);
+
+    const theirs = await earnings.netByBooking(otherOwner, [booking.id]);
+    expect(theirs.has(booking.id)).toBe(false);
+  });
+
   it('is the only module reading owner_payable (R-MONEY-05)', async () => {
     const { spawnSync } = await import('node:child_process');
     // `:/` anchors the pathspec at the repo root whatever vitest's cwd is.

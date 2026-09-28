@@ -93,7 +93,10 @@ export class OwnerBookingsController {
 
   private async page(ownerId: string, q: OwnerBookingsQuery & { spaceId?: string }) {
     const page = await this.bookings.listForOwner(ownerId, q);
-    const earned = await this.balance.netByBooking(page.items.map((row) => row.booking.id));
+    const earned = await this.balance.netByBooking(
+      ownerId,
+      page.items.map((row) => row.booking.id),
+    );
     return parseOutgoing(
       ownerBookingsPageSchema,
       {

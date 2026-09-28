@@ -1,4 +1,4 @@
-import type { BookingStatus, CheckInMethod } from '@parkease/contracts/enums';
+import type { BookingStatus, CheckInMethod, VehicleType } from '@parkease/contracts/enums';
 import type { OwnerCheckInResult } from '@parkease/contracts/owner';
 
 import { shortName } from './earnings.view.js';
@@ -43,7 +43,13 @@ export function toOwnerCheckInView(
 /** One booking line on the owner's bookings list. `parseOutgoing` in the controller brands and validates it. */
 export function toOwnerBookingView(
   row: {
-    booking: { id: string; vehicleType: string; startsAt: Date; endsAt: Date; status: string };
+    booking: {
+      id: string;
+      vehicleType: VehicleType;
+      startsAt: Date;
+      endsAt: Date;
+      status: BookingStatus;
+    };
     driverName: string | null;
     slotIndex: number | null;
   },
