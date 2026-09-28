@@ -1,12 +1,14 @@
 import { ApprovalStatus } from '@parkease/contracts/enums';
-import { colors, fontSize, spacing } from '@parkease/tokens';
+import { colors, fontSize, fontWeight, spacing, touchTarget } from '@parkease/tokens';
 import { Button, ErrorState, ListSkeleton } from '@parkease/ui-native';
 import { Stack, useLocalSearchParams } from 'expo-router';
-import { Alert, Image, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useSpaceBookings } from '@/features/owner/hooks/useOwnerQueries';
 import { useSpaceDetail } from '@/features/owner/hooks/useSpaceDetail';
 import { useToggleSpace } from '@/features/owner/hooks/useToggleSpace';
+import { formatDateIST, formatTimeIST } from '@/lib/format';
 import { formatPaise } from '@/lib/money';
 
 const STATUS_DISPLAY: Record<string, { label: string; color: string; glyph: string }> = {
@@ -21,6 +23,8 @@ export default function ListingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data: space, isLoading, isError, refetch } = useSpaceDetail(id);
   const toggle = useToggleSpace(id);
+  const active = useSpaceBookings(id, 'active');
+  const upcoming = useSpaceBookings(id, 'upcoming');
 
   if (isLoading) {
     return (
@@ -123,6 +127,11 @@ export default function ListingDetailScreen() {
           </View>
         </Section>
 
+        <Section title="Bookings">
+          <BookingGroup title="Active" query={active} />
+          <BookingGroup title="Upcoming" query={upcoming} />
+        </Section>
+
         <Section title="Pricing">
           {space.pricing.car ? (
             <Text style={styles.value}>
@@ -190,6 +199,52 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
+function BookingGroup({
+  title,
+  query,
+}: {
+  readonly title: string;
+  readonly query: ReturnType<typeof useSpaceBookings>;
+}) {
+  if (query.isPending) return <ListSkeleton count={1} itemHeight={56} />;
+  if (query.isError) {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => void query.refetch()}
+        style={styles.bookingRetry}
+      >
+        <Text
+          style={styles.subvalue}
+        >{`Couldn't load ${title.toLowerCase()} bookings. Tap to retry.`}</Text>
+      </Pressable>
+    );
+  }
+  const rows = query.data;
+  return (
+    <View style={styles.bookingGroup}>
+      <Text style={styles.bookingGroupTitle}>{`${title} (${String(rows.length)})`}</Text>
+      {rows.length === 0 ? (
+        <Text style={styles.subvalue}>{`No ${title.toLowerCase()} bookings.`}</Text>
+      ) : (
+        rows.map((row) => (
+          <View key={row.bookingId} style={styles.bookingRow}>
+            <Text style={styles.value}>
+              {`${row.driverName} · ${row.vehicleType === 'car' ? 'Car' : 'Bike'}${row.slotIndex === null ? '' : ` · Slot ${String(row.slotIndex + 1)}`}`}
+            </Text>
+            <Text style={styles.subvalue}>
+              {`${formatDateIST(new Date(row.startsAt))} ${formatTimeIST(new Date(row.startsAt))} – ${formatTimeIST(new Date(row.endsAt))}`}
+            </Text>
+            <Text
+              style={styles.subvalue}
+            >{`${formatPaise(row.earnedPaise, { alwaysDecimals: true })} earned`}</Text>
+          </View>
+        ))
+      )}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   content: { paddingBottom: spacing['3xl'] },
@@ -245,4 +300,13 @@ const styles = StyleSheet.create({
     textTransform: 'capitalize',
   },
   actions: { padding: spacing.base, marginTop: spacing.md },
+  bookingGroup: { gap: spacing.sm },
+  bookingGroupTitle: { fontSize: fontSize.sm, fontWeight: fontWeight.semibold, color: colors.text },
+  bookingRow: {
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+  bookingRetry: { minHeight: touchTarget, justifyContent: 'center' },
 });
