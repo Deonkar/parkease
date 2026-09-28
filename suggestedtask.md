@@ -1607,3 +1607,180 @@ open hours would not show 10,000 bp.
   hours (falling back to the full window when `is24x7` is true) before computing `available`,
   with a test asserting a space that closes overnight reports 10,000 bp when every open hour in
   the window is booked.
+
+### S-83 — The owner statement re-aggregates the owner's whole ledger history on every page
+
+- **Status:** `open`
+- **Found in:** task 15, database review of `OwnerBalanceQuery.statementQuery`
+- **Surface:** api · db
+
+`statementPage` groups `ledger_entries` per booking and applies the period bound and the keyset
+cursor in `HAVING min(occurred_at)`, so every page — including the dashboard's three-line teaser —
+joins and aggregates every `owner_payable` row the owner has before trimming. Keyset pagination is
+therefore not sublinear: page 40 costs what page 1 costs. `listForOwner` has the related shape
+issue (no `(space_id, status, starts_at)` index; the owner scope arrives through the `spaces` join).
+
+- **Why deferred:** measured, not guessed. `owner-dashboard-performance.spec.ts` (10k bookings for
+  one owner, 50k platform noise) puts `/owner/earnings/transactions` at p50 ~48 ms / p95 ~63–80 ms
+  on page 1 and page 20, and `/owner/bookings?group=past` at p95 ~56 ms. The fix is a two-step
+  query (select the page of booking ids first by `bookings.created_at` — which equals the first
+  credit's `occurred_at`, both are the creating transaction's `now()` — then aggregate the ledger
+  for those ids only), and possibly an index needing a reviewed migration. Neither earns its place
+  at today's volumes.
+- **Done means:** the statement page aggregates only the page's bookings (EXPLAIN shows no
+  aggregation over the owner's full history), and the performance spec's transaction p95 stays flat
+  when the seeded owner grows from 10k to 100k bookings.
+
+### S-84 — Task 15 hand-offs: owner reviews list, and a real payout date on the dashboard
+
+- **Status:** `open`
+- **Found in:** task 15 spec §2 and §6
+- **Surface:** api · mobile
+
+`GET /owner/reviews` and a reviews tab were cut from task 15: nothing writes reviews until task 17,
+so the endpoint would have been permanently empty. The dashboard shows "Owed to you" (the exact
+all-time `owner_payable` net) instead of the task file's "Next payout · Monday · est.", because the
+payout schedule is task 16's decision.
+
+- **Why deferred:** each belongs to the task that creates its data (17: reviews; 16: payout schedule).
+- **Done means:** task 17 ships `GET /owner/reviews` (and respond) with a reviews section on the
+  listing detail; task 16 adds the next payout date beside "Owed to you", read from the payout
+  schedule, never estimated client-side.
+
+### S-85 — Owner response contracts accept any string as `driverName`
+
+- **Status:** `open`
+- **Found in:** task 15 security review
+- **Surface:** contracts
+
+`statementLineSchema.driverName` and `ownerBookingSchema.driverName` are `z.string()`. The
+"Ravi K." privacy shape is guaranteed only by `shortName()` in the owner views; a future producer
+that skipped it would ship a driver's full name to owners and every schema would accept it.
+
+- **Why deferred:** not reachable today — every producer routes through `shortName()`.
+- **Done means:** the contracts constrain the shape (first name plus optional initial, length-capped),
+  with a contract test that a full two-word name is refused.
+
+### S-86 — Ledger sums are read as `::text` and converted with `Number()`
+
+- **Status:** `open`
+- **Found in:** task 15 TypeScript review (`owner-balance.ts`; the pattern pre-dates task 15 in `forOwner`)
+- **Surface:** api
+
+`CREDITS`/`DEBITS` cast `sum(amount_paise)` to text and `Number()` it. `money.md` specifies
+`bigint` paise; a sum past `Number.MAX_SAFE_INTEGER` would lose precision silently. Task 15 spread
+the pattern from one query to five.
+
+- **Why deferred:** unreachable at any plausible single-owner volume; the fix is a shared helper
+  touching every ledger read, which is its own change.
+- **Done means:** one helper parses a sum string to a safe integer and throws (500, logged) above
+  `MAX_SAFE_INTEGER`, used by every ledger read, with a unit test at the boundary.
+
+### S-87 — Two near-identical keyset cursor codecs
+
+- **Status:** `open`
+- **Found in:** task 15 ponytail review
+- **Surface:** api
+
+`owner-balance.ts` has its own base64url-JSON cursor (`{t, i}`) beside `booking.service.ts`'s
+(`{f, t, i}`). Both parse through Zod and answer a bad cursor with `400 INVALID_CURSOR`.
+
+- **Why deferred:** merging them changes the driver's booking-list path, outside task 15's surface,
+  for about 15 lines saved.
+- **Done means:** one `encodeCursor(payload)` / `decodeCursor(raw, schema)` pair serves both, and the
+  driver and owner cursor tests stay green unchanged.
+
+### S-88 — Owner mobile leftovers: dead `deleteSpace`, no QR icon on the scan button, stacked refresh notices
+
+- **Status:** `open`
+- **Found in:** task 15 fix wave 1, design audit, task 7 re-review
+- **Surface:** mobile
+
+(1) `apps/mobile/src/features/owner/api/spaces.ts` exports `deleteSpace` with no caller — no hook,
+no screen. (2) The dashboard's "Scan a driver's QR" is a text-only secondary `Button`; the ui-native
+`Button` has no icon prop. (3) On the owner earnings screen, if the summary and the transactions
+both fail to refetch while cached data is shown, two identical "Couldn't refresh" bands stack.
+
+- **Why deferred:** (1) pre-existing and unused; (2) an icon prop changes the shared kit every role
+  uses; (3) a rare double failure whose current behaviour is loud, not silent.
+- **Done means:** (1) delete it, or wire a delete-listing flow that also invalidates the dashboard;
+  (2) `Button` takes an optional leading icon and the scan button uses `qrcode-scan`; (3) one
+  combined notice when both refetches fail.
+
+### S-89 — Listing detail shows at most 20 bookings per group
+
+- **Status:** `open`
+- **Found in:** task 15 test-adequacy review
+- **Surface:** mobile
+
+The Active and Upcoming groups on `(owner)/listings/[id]` fetch one page (limit 20) and render mapped
+rows inside the screen's `ScrollView` — FlashList cannot virtualize nested in a vertical ScrollView.
+Since fix wave 2 the cap is stated on screen when `meta.hasMore` is true, so nothing is hidden
+silently, but the owner cannot page past it.
+
+- **Why deferred:** 20 concurrent active or upcoming bookings on one space is beyond any space in the
+  seed data; a real "all bookings" screen (FlashList, cursor paging over the existing endpoint) is its
+  own screen.
+- **Done means:** a "See all bookings" route lists a space's bookings in a FlashList with infinite
+  paging over `GET /owner/spaces/:id/bookings`, and the listing detail links to it when `hasMore`.
+
+### S-90 — Owner test-coverage leftovers
+
+- **Status:** `open`
+- **Found in:** task 15 per-task and test-adequacy reviews
+- **Surface:** api · mobile
+
+Small, real gaps: no
+occupancy test for a space with zero `space_slots` rows; `statementCount` fetches grouped rows to
+count them (see S-83); no tests for `useOwnerQueries` cache keys or `getNextPageParam`; `SpaceRow`'s
+accessibility label is untested; `devTransactions` parses its cursor with an unchecked `parseInt`;
+the ₹97.02 case is asserted twice (query and HTTP spec).
+
+- **Why deferred:** each covers code already correct by inspection; none guards money or
+  authorisation.
+- **Done means:** each named case has a test, `statementCount` is a `count(*)` over the grouped
+  subquery, and the duplicate HTTP assertion is narrowed to wiring.
+
+### S-91 — Owner endpoint rate limits are a judgment call
+
+- **Status:** `open`
+- **Found in:** task 15 task-4 review
+- **Surface:** api
+
+The five owner GETs got explicit 60/min/user policies in `platform/ratelimit/policies.ts`. The number
+was chosen by the implementer, not specified anywhere.
+
+- **Why deferred:** needs a product decision, not code.
+- **Done means:** product confirms or changes the limit, and the policy table cites the decision.
+
+### S-92 — "Owed to you" includes unpaid checkouts; task 16 must not pay out from it as-is
+
+- **Status:** `open`
+- **Found in:** task 15 final review
+- **Surface:** api · money
+
+A booking posts its `owner_payable` credit at creation (the receivable), before the driver pays.
+For the checkout window, "Owed to you" and the today/month nets include money not yet collected,
+while the statement correctly omits `pending_payment` bookings; expiry reverses it. The figure
+self-corrects, but a payout computed from all-time `owner_payable` movement at the wrong instant
+would pay the owner for an abandoned checkout. Separately, if the balance ever goes negative
+(reversals exceeding credits), the card shows "−₹X" under copy written for money owed _to_ the owner.
+
+- **Why deferred:** display-only today, and the payout rule is task 16's decision (ADR-008 keeps the
+  ledger as the source; what counts as payable is a payout-policy question).
+- **Done means:** task 16's payout balance excludes receivables not yet captured (or pays only after
+  capture), with a test; the dashboard card's copy covers a negative balance.
+
+### S-93 — A confirmed booking past its start, not yet checked in, is in neither booking group
+
+- **Status:** `open`
+- **Found in:** task 15 final review
+- **Surface:** api · mobile
+
+The listing detail's groups are Active (`status = active`) and Upcoming (`confirmed AND starts_at >
+now()`). A driver who is late — confirmed, start time passed, not checked in — appears in neither,
+which is exactly the booking the owner is looking for at the gate. This follows spec §3 as written.
+
+- **Why deferred:** a product decision about the group's meaning, not a defect in the code as specified.
+- **Done means:** Upcoming (or a new "Arriving" group) includes confirmed bookings whose window has
+  started and not ended, with an HTTP test.
