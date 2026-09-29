@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { DB, type Database } from '../../../platform/db/db.module.js';
 import { signedBalancePaise } from '../accounts.js';
 import { type EarningsPeriod, istDays, periodBound } from '../period-bound.js';
+import { notSettlement } from '../settlement.js';
 
 export type Reader = Pick<Database, 'select'>;
 
@@ -120,13 +121,30 @@ export class OwnerBalanceQuery {
   constructor(@Inject(DB) private readonly db: Database) {}
 
   /**
-   * Signed paise: positive means we owe the owner.
+   * Signed paise: positive means we still owe the owner.
    *
    * `owner_payable` is a liability, so the sign comes from the chart rather than
    * from a subtraction written the way it happened to read at the call site.
    */
   async forOwner(ownerId: string): Promise<number> {
-    return (await this.movement(ownerId, undefined)).netPaise;
+    return this.balance(ownerId);
+  }
+
+  /**
+   * What we still owe: every owner-side row, settlements INCLUDED. A Route
+   * transfer at capture discharges the booking's credit, so this is what Route
+   * has not paid yet (pending checkouts, reversals) — not what was earned.
+   * The earnings reads below exclude settlements instead (ADR-030).
+   */
+  async balance(ownerId: string, reader: Reader = this.db): Promise<number> {
+    const [row] = await reader
+      .select({ creditsPaise: CREDITS, debitsPaise: DEBITS })
+      .from(ledgerEntries)
+      .innerJoin(bookings, eq(bookings.id, ledgerEntries.bookingId))
+      .innerJoin(spaces, eq(spaces.id, bookings.spaceId))
+      .where(and(eq(spaces.ownerId, ownerId), ownerSide()));
+
+    return net(Number(row?.debitsPaise ?? 0), Number(row?.creditsPaise ?? 0));
   }
 
   /** The same question scoped to one booking, for a statement line. */
@@ -135,13 +153,14 @@ export class OwnerBalanceQuery {
       .select({ creditsPaise: CREDITS, debitsPaise: DEBITS })
       .from(ledgerEntries)
       .innerJoin(bookings, eq(bookings.id, ledgerEntries.bookingId))
-      .where(and(ownerSide(), eq(ledgerEntries.bookingId, bookingId)));
+      .where(and(ownerSide(), notSettlement(), eq(ledgerEntries.bookingId, bookingId)));
 
     return net(Number(row?.debitsPaise ?? 0), Number(row?.creditsPaise ?? 0));
   }
 
+  /** Owner-side EARNINGS rows: settlements excluded, so a transfer is not a reversal. */
   private ownerScope(ownerId: string) {
-    return and(eq(spaces.ownerId, ownerId), ownerSide());
+    return and(eq(spaces.ownerId, ownerId), ownerSide(), notSettlement());
   }
 
   /**

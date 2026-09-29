@@ -12,6 +12,7 @@ import { DB, type Database } from '../../../platform/db/db.module.js';
 import { parseOutgoing } from '../../../platform/http/outgoing-contract.js';
 import { signedBalancePaise } from '../../ledger/accounts.js';
 import { periodBound } from '../../ledger/period-bound.js';
+import { notSettlement } from '../../ledger/settlement.js';
 
 type ReadTx = Parameters<Parameters<Database['transaction']>[0]>[0];
 
@@ -141,6 +142,8 @@ export class WasherEarningsQuery {
         and(
           eq(ledgerEntries.account, LedgerAccount.OWNER_PAYABLE),
           eq(ledgerEntries.counterpartyUserId, washerUserId),
+          // A Route transfer or payout is money paid, not taken back (S-46).
+          notSettlement(),
           ...(bound === undefined ? [] : [bound]),
         ),
       );

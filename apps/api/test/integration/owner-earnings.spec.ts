@@ -1,6 +1,7 @@
 import {
   computeValetLegFee,
   computeWashFee,
+  routeDischargeEntries,
   valetLegEntries,
   washEntries,
 } from '@parkease/contracts/money';
@@ -246,6 +247,38 @@ describe('owner earnings reads', () => {
     expect(after).toEqual(before);
     expect(after.movement.netPaise).toBe(booking.ownerEarningsPaise);
     expect(after.statement.items[0]?.feePaise).toBeGreaterThanOrEqual(0);
+  });
+
+  it('a Route discharge moves no earnings figure and zeroes what is owed (ADR-030)', async () => {
+    const spaceId = await seedSpace(h, { lat: 12.9345, lng: 77.6266, carSlots: 1 });
+    const { booking } = await book(spaceId, h.driverId, 2, 2);
+    await confirm(booking.id);
+
+    const snapshot = async () => ({
+      movement: await earnings.movement(h.ownerId, undefined),
+      days: await earnings.days(h.ownerId, 'month'),
+      statement: await earnings.statementPage(h.ownerId, { period: 'month', limit: 10 }),
+      count: await earnings.statementCount(h.ownerId, 'month'),
+      byBooking: [...(await earnings.netByBooking(h.ownerId, [booking.id]))],
+      forBooking: await earnings.forBooking(booking.id),
+    });
+    const before = await snapshot();
+    expect(await earnings.balance(h.ownerId)).toBe(booking.ownerEarningsPaise);
+
+    // Exactly what capture posts: the driver-stamped discharge under the booking.
+    await withTransaction(h.db, async (tx) => {
+      await stack.ledger.post(tx, {
+        bookingId: booking.id,
+        entries: routeDischargeEntries(booking.ownerEarningsPaise, h.driverId),
+      });
+    });
+
+    // Earned is still earned — a transfer is not a reversal.
+    expect(await snapshot()).toEqual(before);
+    expect(before.statement.items[0]?.reversedPaise).toBe(0);
+    // Owed is what Route has not yet paid.
+    expect(await earnings.balance(h.ownerId)).toBe(0);
+    expect(await earnings.forOwner(h.ownerId)).toBe(0);
   });
 
   it('refuses a forged cursor as a 400, not a 500', async () => {

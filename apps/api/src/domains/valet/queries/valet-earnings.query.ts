@@ -6,6 +6,7 @@ import { and, count, eq, sql } from 'drizzle-orm';
 
 import { DB, type Database } from '../../../platform/db/db.module.js';
 import { signedBalancePaise } from '../../ledger/accounts.js';
+import { notSettlement } from '../../ledger/settlement.js';
 
 /**
  * What a valet has earned, answered from the ledger and from nothing else.
@@ -40,6 +41,8 @@ export class ValetEarningsQuery {
         and(
           eq(ledgerEntries.account, LedgerAccount.OWNER_PAYABLE),
           eq(ledgerEntries.counterpartyUserId, valetUserId),
+          // A payout is money paid, not taken back (S-46).
+          notSettlement(),
         ),
       );
 

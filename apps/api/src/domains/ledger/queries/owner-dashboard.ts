@@ -44,7 +44,8 @@ export class OwnerDashboardQuery {
         // threaded through as a parameter.
         const now = new Date();
         const at = ledgerEntries.occurredAt;
-        const owed = await this.balance.movement(ownerId, undefined, tx);
+        // Owed, not earned: settlements count, so a Route-paid booking is not owed twice.
+        const owedPaise = await this.balance.balance(ownerId, tx);
         const today = await this.balance.movement(ownerId, periodBound(at, 'today'), tx);
         const month = await this.balance.movement(ownerId, periodBound(at, 'month'), tx);
         const lastMonth = await this.balance.movement(ownerId, lastMonthToDate(at), tx);
@@ -69,7 +70,7 @@ export class OwnerDashboardQuery {
 
         return {
           greetingName: first === undefined || first === '' ? null : first,
-          owedPaise: owed.netPaise,
+          owedPaise,
           today: { netPaise: today.netPaise, bookings: bookingsToday },
           month: {
             netPaise: month.netPaise,
