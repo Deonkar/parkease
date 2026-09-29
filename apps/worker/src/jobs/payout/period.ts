@@ -10,6 +10,14 @@ const DAY_MS = 86_400_000;
  * host's timezone must not move a payout into a different week (learnings,
  * "`toIST(x)` is right with LOCAL getters and wrong with UTC ones").
  */
+/** Midnight IST at the start of `at`'s IST day, as an instant. */
+export function istStartOfDay(at: Date): Date {
+  const ist = new Date(at.getTime() + IST_OFFSET_MS);
+  return new Date(
+    Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate()) - IST_OFFSET_MS,
+  );
+}
+
 export function payoutPeriod(at: Date): string {
   const ist = new Date(at.getTime() + IST_OFFSET_MS);
   const day = Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate());

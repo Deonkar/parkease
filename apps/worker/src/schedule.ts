@@ -1,6 +1,6 @@
 import type PgBoss from 'pg-boss';
 
-import { PAYOUT_RUN_WEEKLY_JOB } from './jobs/payout/payload.js';
+import { PAYOUT_RECONCILE_JOB, PAYOUT_RUN_WEEKLY_JOB } from './jobs/payout/payload.js';
 import { SURGE_RECALCULATE } from './jobs/surge/recalculate.job.js';
 
 const IST = 'Asia/Kolkata';
@@ -16,4 +16,6 @@ export async function registerSchedule(boss: PgBoss): Promise<void> {
 
   // Monday 06:00 IST (§16.6).
   await boss.schedule(PAYOUT_RUN_WEEKLY_JOB, '0 6 * * 1', {}, { tz: IST });
+  // Daily 02:00 IST (§16.7): yesterday's captures and every payout in flight.
+  await boss.schedule(PAYOUT_RECONCILE_JOB, '0 2 * * *', {}, { tz: IST });
 }

@@ -20,7 +20,12 @@ import {
 import { relayOutbox } from './jobs/outbox/relay.job.js';
 import { issueRefund } from './jobs/payment/issue-refund.job.js';
 import { reconcileOrphanCapture } from './jobs/payment/reconcile-orphan.job.js';
-import { PAYOUT_RUN_WEEKLY_JOB, PAYOUT_SEND_JOB } from './jobs/payout/payload.js';
+import {
+  PAYOUT_RECONCILE_JOB,
+  PAYOUT_RUN_WEEKLY_JOB,
+  PAYOUT_SEND_JOB,
+} from './jobs/payout/payload.js';
+import { reconcilePayouts } from './jobs/payout/reconcile.job.js';
 import { runWeeklyPayouts } from './jobs/payout/run-weekly.job.js';
 import { sendPayout } from './jobs/payout/send.job.js';
 import { recalculateSurge, SURGE_RECALCULATE } from './jobs/surge/recalculate.job.js';
@@ -99,6 +104,7 @@ export async function registerHandlers(boss: PgBoss, deps: JobDeps): Promise<voi
   // it is the call that moves money, and a claim per row is what keeps a bank
   // change from cancelling a payout already on its way.
   await boss.work(PAYOUT_RUN_WEEKLY_JOB, {}, () => runWeeklyPayouts(deps));
+  await boss.work(PAYOUT_RECONCILE_JOB, {}, () => reconcilePayouts(deps));
   await boss.work<unknown>(PAYOUT_SEND_JOB, { batchSize: 1 }, async (jobs) => {
     for (const job of jobs) await sendPayout(deps, job.data);
   });

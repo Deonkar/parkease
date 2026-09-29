@@ -1,4 +1,8 @@
-import { computeValetLegFee, valetLegEntries } from '@parkease/contracts/money';
+import {
+  computeValetLegFee,
+  routeDischargeEntries,
+  valetLegEntries,
+} from '@parkease/contracts/money';
 import { toRate } from '@parkease/contracts/primitives';
 import {
   type PgTestContext,
@@ -11,9 +15,12 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 
 import type { JobDeps } from '../../src/deps.js';
 import { postLedger } from '../../src/jobs/booking/ledger.js';
+import type { TransferGateway } from '../../src/jobs/payment/razorpay.js';
 import { type PayoutGateway, RazorpayXError } from '../../src/jobs/payout/razorpayx.js';
+import { reconcilePayouts } from '../../src/jobs/payout/reconcile.job.js';
 import { runWeeklyPayouts } from '../../src/jobs/payout/run-weekly.job.js';
 import { sendPayout } from '../../src/jobs/payout/send.job.js';
+import { logger } from '../../src/logger.js';
 
 let pg: PgTestContext;
 let deps: JobDeps;
@@ -301,5 +308,153 @@ describe('payout.send', () => {
     await expect(
       sendPayout(deps, { payoutId: 'nope' }, gateway(), ON.accountNumber),
     ).rejects.toThrow(/Malformed payout.send payload/);
+  });
+});
+
+describe('payout.reconcile', () => {
+  const YESTERDAY = new Date('2026-09-27T10:00:00Z');
+
+  /** A captured booking whose owner's share Route moved, with the discharge capture posts. */
+  async function capturedWithTransfer(transferPaise = 5100) {
+    const driver = await seedUser('driver');
+    const owner = await seedUser('owner');
+    const [space] = await pg.sql<{ id: string }[]>`
+      INSERT INTO spaces (owner_id, title, address_line, city, state, pincode, location, zone_id,
+                          pricing, schedule, amenities, approval_status)
+      VALUES (${owner}, 'Basement', '5th Cross', 'Bengaluru', 'Karnataka', '560034',
+              ST_SetSRID(ST_MakePoint(77.6266, 12.9345), 4326)::geography, 'tdr1w6',
+              ${JSON.stringify({ car: { hourlyPaise: 3000 } })}::jsonb,
+              ${JSON.stringify({ is24x7: true })}::jsonb, '[]'::jsonb, 'active')
+      RETURNING id`;
+    const [booking] = await pg.sql<{ id: string }[]>`
+      INSERT INTO bookings (driver_id, space_id, vehicle_type, duration_type, starts_at, ends_at,
+                            base_paise, surge_premium_paise, parkease_fee_paise, gst_paise,
+                            total_paise, owner_earnings_paise, status)
+      VALUES (${driver}, ${space?.id ?? ''}, 'car', 'hourly', now(), now() + interval '2 hours',
+              6000, 0, 900, 162, 6162, 5100, 'confirmed')
+      RETURNING id`;
+    const suffix = `${String(seq)}${String(Math.random()).slice(2, 10)}`;
+    const [payment] = await pg.sql<{ id: string }[]>`
+      INSERT INTO payments (booking_id, user_id, razorpay_order_id, razorpay_payment_id,
+                            expected_total_paise, captured_paise, status, captured_at,
+                            route_transfer_paise)
+      VALUES (${booking?.id ?? ''}, ${driver}, ${`order_${suffix}`}, ${`pay_${suffix}`},
+              6162, 6162, 'captured', ${YESTERDAY.toISOString()}::timestamptz, ${transferPaise})
+      RETURNING id`;
+    await deps.db.transaction(async (tx) => {
+      await postLedger(tx, {
+        bookingId: booking?.id ?? '',
+        paymentId: payment?.id ?? '',
+        entries: routeDischargeEntries(transferPaise, driver),
+      });
+    });
+    return { paymentId: payment?.id ?? '' };
+  }
+
+  const clearingFor = async (column: 'payment_id' | 'payout_id', id: string) => {
+    const [row] = await pg.sql<{ net: string; debits: string }[]>`
+      SELECT coalesce(sum(CASE direction WHEN 'credit' THEN amount_paise ELSE -amount_paise END), 0)::text AS net,
+             count(*) FILTER (WHERE direction = 'debit')::text AS debits
+      FROM ledger_entries WHERE account = 'settlement_clearing' AND ${pg.sql(column)} = ${id}`;
+    return { net: Number(row?.net), debits: Number(row?.debits) };
+  };
+
+  const mismatches = () =>
+    pg.sql<{ kind: string; reference: string; expected: string | null; actual: string | null }[]>`
+      SELECT kind, reference, expected_paise::text AS expected, actual_paise::text AS actual
+      FROM reconciliation_mismatches ORDER BY created_at`;
+
+  const transfers = (
+    items: { id: string; amountPaise: number; status: string }[],
+  ): TransferGateway => ({ forPayment: vi.fn().mockResolvedValue(items) });
+
+  const run = (t: TransferGateway, p: PayoutGateway = gateway()) =>
+    reconcilePayouts(deps, { transfers: t, payouts: p, now: MONDAY });
+
+  beforeEach(async () => {
+    await pg.sql`TRUNCATE reconciliation_mismatches`;
+  });
+
+  it('clears a Route transfer that matches the ledger, once', async () => {
+    const { paymentId } = await capturedWithTransfer();
+    const t = transfers([{ id: 'trf_QK7l1n', amountPaise: 5100, status: 'processed' }]);
+
+    await run(t);
+    await run(t);
+
+    expect(await clearingFor('payment_id', paymentId)).toEqual({ net: 0, debits: 1 });
+    expect(await mismatches()).toEqual([]);
+  });
+
+  it('flags a transfer whose amount differs, once, logs it at error, and leaves the clearing open', async () => {
+    const { paymentId } = await capturedWithTransfer();
+    const t = transfers([{ id: 'trf_QK7l1n', amountPaise: 5000, status: 'processed' }]);
+    const error = vi.spyOn(logger, 'error');
+
+    await run(t);
+    await run(t);
+
+    expect(await mismatches()).toEqual([
+      { kind: 'amount_mismatch', reference: paymentId, expected: '5100', actual: '5000' },
+    ]);
+    expect((await clearingFor('payment_id', paymentId)).net).toBe(5100);
+    expect(error).toHaveBeenCalledWith(
+      expect.objectContaining({ unresolved: 1 }),
+      expect.stringContaining('reconciliation'),
+    );
+  });
+
+  it('flags a capture Route never transferred', async () => {
+    const { paymentId } = await capturedWithTransfer();
+
+    await run(transfers([]));
+
+    expect(await mismatches()).toEqual([
+      { kind: 'missing_transfer', reference: paymentId, expected: '5100', actual: '0' },
+    ]);
+  });
+
+  it('waits on a transfer Razorpay has not processed yet', async () => {
+    const { paymentId } = await capturedWithTransfer();
+
+    await run(transfers([{ id: 'trf_QK7l1n', amountPaise: 5100, status: 'pending' }]));
+
+    expect(await mismatches()).toEqual([]);
+    expect((await clearingFor('payment_id', paymentId)).net).toBe(5100);
+  });
+
+  async function processingPayout(): Promise<{ valet: string; payoutId: string; net: number }> {
+    const valet = await seedUser('valet');
+    await withBank(valet);
+    const net = await earn(valet);
+    await runWeeklyPayouts(deps, ON);
+    const [row] = await payoutsOf(valet);
+    await sendPayout(deps, { payoutId: row?.id ?? '' }, gateway(), ON.accountNumber);
+    return { valet, payoutId: row?.id ?? '', net };
+  }
+
+  it('marks a processed RazorpayX payout paid and clears it, once', async () => {
+    const { valet, payoutId } = await processingPayout();
+    const p = gateway({
+      fetch: vi.fn().mockResolvedValue({ id: 'pout_QK7l1nFirst', status: 'processed' }),
+    });
+
+    await run(transfers([]), p);
+    await run(transfers([]), p);
+
+    expect((await payoutsOf(valet))[0]?.status).toBe('paid');
+    expect(await clearingFor('payout_id', payoutId)).toEqual({ net: 0, debits: 1 });
+  });
+
+  it('fails a reversed RazorpayX payout and owes the money again', async () => {
+    const { valet, net } = await processingPayout();
+    const p = gateway({
+      fetch: vi.fn().mockResolvedValue({ id: 'pout_QK7l1nFirst', status: 'reversed' }),
+    });
+
+    await run(transfers([]), p);
+
+    expect((await payoutsOf(valet))[0]?.status).toBe('failed');
+    expect(await owedTo(valet)).toBe(net);
   });
 });

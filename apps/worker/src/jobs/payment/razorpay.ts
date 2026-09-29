@@ -60,6 +60,31 @@ const sdk = (): Razorpay => {
   return client;
 };
 
+const transferListSchema = z.object({
+  items: z.array(
+    z.object({ id: z.string().min(1), amount: gatewayPaise, status: z.string().min(1) }),
+  ),
+});
+
+export interface RouteTransfer {
+  readonly id: string;
+  readonly amountPaise: number;
+  /** `created` | `pending` | `processed` | `failed` | `reversed` | `partially_reversed`. */
+  readonly status: string;
+}
+
+/** The Route transfers Razorpay made from one captured payment (task 16a reconciliation). */
+export interface TransferGateway {
+  forPayment(razorpayPaymentId: string): Promise<readonly RouteTransfer[]>;
+}
+
+export const razorpayTransfers: TransferGateway = {
+  async forPayment(razorpayPaymentId) {
+    const page = transferListSchema.parse(await sdk().payments.fetchTransfer(razorpayPaymentId));
+    return page.items.map((t) => ({ id: t.id, amountPaise: t.amount, status: t.status }));
+  },
+};
+
 export interface RefundGateway {
   findByReference(paymentId: string, reference: string): Promise<WorkerRefund | null>;
   create(input: {
