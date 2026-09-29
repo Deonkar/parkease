@@ -3,10 +3,11 @@ import {
   LedgerAccount as Account,
   type LedgerDirection,
 } from '../enums/index.js';
-import { subPaise } from '../primitives/paise.js';
+import { mulRate, type Paise, subPaise } from '../primitives/paise.js';
 
 import { allocateProportionally } from './allocate.js';
 import type { WashFee } from './carwash-fee.js';
+import { type DatedRate, rateAt, TCS_RATE_HISTORY, TDS_RATE_HISTORY } from './rates.js';
 import { type RefundOutcome, RefundTier } from './refund-policy.js';
 import type { ValetLegFee } from './valet-fee.js';
 
@@ -428,4 +429,78 @@ export function washEntries(
     ...leg(Account.PLATFORM_REVENUE, 'credit', fee.commissionPaise, description),
     ...leg(Account.GST_PAYABLE, 'credit', fee.gstPaise, description),
   ];
+}
+
+/**
+ * Route moved a share out at capture: we no longer owe it, and it is in transit
+ * until reconciliation sees Razorpay's transfer (ADR-030).
+ *
+ * `counterpartyUserId` is whoever the original credit was stamped with — the
+ * DRIVER for a parking booking (so the owner-side predicate still matches it),
+ * the washer for a wash. The clearing leg belongs to nobody.
+ */
+export function routeDischargeEntries(
+  amountPaise: number,
+  counterpartyUserId: string,
+): readonly LedgerEntryDraft[] {
+  const description = 'route transfer at capture';
+  return [
+    ...leg(Account.OWNER_PAYABLE, 'debit', amountPaise, description, counterpartyUserId),
+    ...leg(Account.SETTLEMENT_CLEARING, 'credit', amountPaise, description),
+  ];
+}
+
+/**
+ * The rail confirmed the money arrived. There is no cash account (ADR-008: the
+ * ledger records obligations, not a bank statement), so the transit leg closes
+ * against the drivers' money that funded it (ADR-030).
+ */
+export function settlementClearedEntries(amountPaise: number): readonly LedgerEntryDraft[] {
+  const description = 'settlement confirmed';
+  return [
+    ...leg(Account.SETTLEMENT_CLEARING, 'debit', amountPaise, description),
+    ...leg(Account.DRIVER_RECEIVABLE, 'credit', amountPaise, description),
+  ];
+}
+
+export interface PayoutPosting {
+  readonly entries: readonly LedgerEntryDraft[];
+  readonly tcsPaise: Paise;
+  readonly tdsPaise: Paise;
+  readonly netPaise: Paise;
+}
+
+/**
+ * A RazorpayX payout of a partner's whole payable balance. §16.6.
+ *
+ * TCS and TDS are read at the payout's date from the dated histories, so the
+ * CA's answer to ADR-021 is a new row in `rates.ts`, not a code change. Both
+ * are 0 today, and a zero leg is dropped rather than written (`leg`).
+ * `rates` exists so the non-zero case is testable; production passes nothing.
+ */
+export function payoutEntries(
+  grossPaise: Paise,
+  payeeUserId: string,
+  at: Date,
+  rates: { readonly tcs: readonly DatedRate[]; readonly tds: readonly DatedRate[] } = {
+    tcs: TCS_RATE_HISTORY,
+    tds: TDS_RATE_HISTORY,
+  },
+): PayoutPosting {
+  const tcsPaise = mulRate(grossPaise, rateAt(rates.tcs, at));
+  const tdsPaise = mulRate(grossPaise, rateAt(rates.tds, at));
+  const netPaise = subPaise(subPaise(grossPaise, tcsPaise), tdsPaise);
+  const description = 'payout';
+
+  return {
+    tcsPaise,
+    tdsPaise,
+    netPaise,
+    entries: [
+      ...leg(Account.OWNER_PAYABLE, 'debit', grossPaise, description, payeeUserId),
+      ...leg(Account.SETTLEMENT_CLEARING, 'credit', netPaise, description),
+      ...leg(Account.TCS_PAYABLE, 'credit', tcsPaise, description),
+      ...leg(Account.TDS_PAYABLE, 'credit', tdsPaise, description),
+    ],
+  };
 }
