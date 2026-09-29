@@ -6,6 +6,8 @@ import { ledgerEntries } from '@parkease/db/schema';
 export interface WorkerLedgerPosting {
   readonly txnId?: string;
   readonly bookingId?: string;
+  readonly payoutId?: string;
+  readonly paymentId?: string;
   readonly counterpartyUserId?: string;
   readonly entries: readonly LedgerEntryDraft[];
 }
@@ -36,6 +38,8 @@ export async function postLedger(
       amountPaise: entry.amountPaise,
       description: entry.description,
       bookingId: posting.bookingId ?? null,
+      payoutId: posting.payoutId ?? null,
+      paymentId: posting.paymentId ?? null,
       /**
        * Entry-level wins over posting-level.
        *

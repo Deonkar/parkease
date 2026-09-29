@@ -20,6 +20,9 @@ import {
 import { relayOutbox } from './jobs/outbox/relay.job.js';
 import { issueRefund } from './jobs/payment/issue-refund.job.js';
 import { reconcileOrphanCapture } from './jobs/payment/reconcile-orphan.job.js';
+import { PAYOUT_RUN_WEEKLY_JOB, PAYOUT_SEND_JOB } from './jobs/payout/payload.js';
+import { runWeeklyPayouts } from './jobs/payout/run-weekly.job.js';
+import { sendPayout } from './jobs/payout/send.job.js';
 import { recalculateSurge, SURGE_RECALCULATE } from './jobs/surge/recalculate.job.js';
 import { acceptTimeout } from './jobs/valet/accept-timeout.job.js';
 import { noShow } from './jobs/valet/no-show.job.js';
@@ -89,5 +92,14 @@ export async function registerHandlers(boss: PgBoss, deps: JobDeps): Promise<voi
   });
   await boss.work<unknown>(CARWASH_COMPLETE_REMINDER_JOB, { batchSize: 1 }, async (jobs) => {
     for (const job of jobs) await washCompleteReminder(deps, job.data);
+  });
+
+  // Task 16a. The weekly run is cron-driven and payload-free; each payee it
+  // pays commits a `payout.send` with its payout row. Send is one at a time:
+  // it is the call that moves money, and a claim per row is what keeps a bank
+  // change from cancelling a payout already on its way.
+  await boss.work(PAYOUT_RUN_WEEKLY_JOB, {}, () => runWeeklyPayouts(deps));
+  await boss.work<unknown>(PAYOUT_SEND_JOB, { batchSize: 1 }, async (jobs) => {
+    for (const job of jobs) await sendPayout(deps, job.data);
   });
 }
