@@ -96,7 +96,7 @@ async function seedWasher(opts: SeedWasherOptions = {}): Promise<string> {
   if (opts.onboarded !== false) {
     await h.sql`
       INSERT INTO linked_accounts (user_id, razorpay_account_id, kyc_status)
-      VALUES (${userId}, ${`acc_${userId.slice(0, 12)}`}, 'activated')
+      VALUES (${userId}, ${`acc_${userId.slice(-12)}`}, 'activated')
     `;
   }
 
@@ -1358,7 +1358,7 @@ describe('the washer card, for a partner registered through the app', () => {
     `;
     await h.sql`
       INSERT INTO linked_accounts (user_id, razorpay_account_id, kyc_status)
-      VALUES (${washerId}, ${`acc_${washerId.slice(0, 12)}`}, 'activated')
+      VALUES (${washerId}, ${`acc_${washerId.slice(-12)}`}, 'activated')
     `;
 
     const jobId = await openJob();

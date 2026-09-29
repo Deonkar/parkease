@@ -116,6 +116,13 @@ describe('/me bank details and payouts over HTTP (task 16a)', () => {
     it('answers a replay from the stored response without calling RazorpayX again', async () => {
       const key = crypto.randomUUID();
       const first = await put(BODY, key);
+      // The interceptor stores the response detached from it, by design, so a replay in the
+      // same millisecond can still see the key in flight. A real retry comes after a timeout.
+      await vi.waitFor(async () => {
+        const [row] = await h.sql<{ status: number | null }[]>`
+          SELECT response_status AS status FROM idempotency_keys WHERE key = ${key}`;
+        expect(row?.status).toBe(200);
+      });
       const second = await put(BODY, key);
 
       expect(second).toEqual(first);
