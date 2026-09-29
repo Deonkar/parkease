@@ -1,4 +1,4 @@
-import { payoutEntries } from '@parkease/contracts/money';
+import { MINIMUM_PAYOUT_PAISE, payoutEntries } from '@parkease/contracts/money';
 import { toPaise } from '@parkease/contracts/primitives';
 import { uuidv7 } from '@parkease/db/id';
 import { PAYABLE_BALANCE, partnerPayable } from '@parkease/db/queries';
@@ -10,7 +10,7 @@ import type { JobDeps } from '../../deps.js';
 import { logger } from '../../logger.js';
 import { postLedger } from '../booking/ledger.js';
 
-import { MINIMUM_PAYOUT_PAISE, PAYOUT_SEND_JOB } from './payload.js';
+import { PAYOUT_SEND_JOB } from './payload.js';
 import { payoutPeriod } from './period.js';
 
 /**

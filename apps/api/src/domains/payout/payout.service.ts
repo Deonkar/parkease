@@ -1,6 +1,14 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { draftsFromLedgerRows, type LedgerEntryDraft } from '@parkease/contracts/money';
-import { bankDetails, ledgerEntries, linkedAccounts, payouts, users } from '@parkease/db/schema';
+import { PAYABLE_BALANCE, partnerPayable } from '@parkease/db/queries';
+import {
+  bankDetails,
+  bookings,
+  ledgerEntries,
+  linkedAccounts,
+  payouts,
+  users,
+} from '@parkease/db/schema';
 import { and, desc, eq, inArray, lt } from 'drizzle-orm';
 
 import { DB, type Database } from '../../platform/db/db.module.js';
@@ -69,6 +77,19 @@ export class PayoutService {
       .returning();
     if (row === undefined) throw new Error(`linked_accounts save for ${userId} returned no row`);
     return row;
+  }
+
+  /**
+   * What the Monday RazorpayX run would pay this user now: the same partner-side predicate
+   * the worker pays from (`@parkease/db/queries`), so the screen and the payout agree.
+   */
+  async payableBalance(userId: string): Promise<number> {
+    const [row] = await this.db
+      .select({ balance: PAYABLE_BALANCE })
+      .from(ledgerEntries)
+      .leftJoin(bookings, eq(bookings.id, ledgerEntries.bookingId))
+      .where(partnerPayable(userId));
+    return Number(row?.balance ?? 0);
   }
 
   async phoneOf(userId: string): Promise<string> {

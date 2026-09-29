@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { payoutStatusSchema } from '../enums/payout-status.js';
 import { payoutIdSchema } from '../primitives/ids.js';
 import { cursorPageOf } from '../primitives/pagination.js';
-import { paiseSchema } from '../primitives/paise.js';
+import { paiseDeltaSchema, paiseSchema } from '../primitives/paise.js';
 
 /**
  * `PUT /me/bank-details`. Shared across owner, valet and washer: valets are who
@@ -62,3 +62,16 @@ export const payoutListQuerySchema = z.object({
 export type PayoutListQuery = z.infer<typeof payoutListQuerySchema>;
 
 export const payoutPageSchema = cursorPageOf(payoutViewSchema);
+
+/**
+ * `GET /me/payouts/summary` (valet; task 16b). What the next Monday run will pay if it is
+ * `minimumPaise` or more. Signed: a reversal after a payout can leave it negative.
+ */
+export const payoutSummaryViewSchema = z.object({
+  balancePaise: paiseDeltaSchema,
+  /** IST date of the next run, `YYYY-MM-DD`, from the shared payout schedule. */
+  nextPayoutOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  minimumPaise: paiseSchema,
+});
+
+export type PayoutSummaryView = z.infer<typeof payoutSummaryViewSchema>;

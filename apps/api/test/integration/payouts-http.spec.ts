@@ -1,5 +1,10 @@
-import { payoutEntries } from '@parkease/contracts/money';
-import { toPaise } from '@parkease/contracts/primitives';
+import {
+  computeValetLegFee,
+  nextPayoutOn,
+  payoutEntries,
+  valetLegEntries,
+} from '@parkease/contracts/money';
+import { toPaise, toRate } from '@parkease/contracts/primitives';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { LedgerService } from '../../src/domains/ledger/ledger.service.js';
@@ -248,6 +253,40 @@ describe('/me bank details and payouts over HTTP (task 16a)', () => {
       });
       expect(JSON.stringify(response.body)).not.toContain(ACCOUNT);
     });
+  });
+
+  describe('GET /me/payouts/summary (task 16b)', () => {
+    it('answers the valet balance the Monday run would pay, and when', async () => {
+      const fee = computeValetLegFee(10_000, toRate(0.2));
+      await withTransaction(h.db, async (tx) => {
+        await new LedgerService().post(tx, { entries: valetLegEntries(fee, valetId, 'valet leg') });
+      });
+
+      const response = await get('/api/v1/me/payouts/summary');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        data: {
+          balancePaise: fee.valetEarningsPaise,
+          nextPayoutOn: nextPayoutOn(new Date()),
+          minimumPaise: 10_000,
+        },
+      });
+    });
+
+    it('is zero for a valet with nothing owed', async () => {
+      expect((await get('/api/v1/me/payouts/summary')).body).toMatchObject({
+        data: { balancePaise: 0 },
+      });
+    });
+
+    it.each(['owner', 'washer'])(
+      'is refused to a %s — Route pays them per booking',
+      async (role) => {
+        as(await seedUser(h, role), role);
+        expect((await get('/api/v1/me/payouts/summary')).status).toBe(403);
+      },
+    );
   });
 
   describe('GET /me/payouts', () => {
