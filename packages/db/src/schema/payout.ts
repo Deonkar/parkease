@@ -25,6 +25,8 @@ export const payouts = pgTable(
     /** What actually leaves: gross less withholding. */
     netPaise: paise('net_paise').notNull(),
     txnId: uuid('txn_id').notNull(),
+    /** The account this payout was made for; `payout.send` pays exactly this. */
+    razorpayxFundAccountId: text('razorpayx_fund_account_id').notNull(),
     status: text('status').notNull().default('pending'),
     razorpayPayoutId: text('razorpay_payout_id'),
     razorpayContactId: text('razorpay_contact_id'),
@@ -112,7 +114,9 @@ export const reconciliationMismatches = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    uniqueIndex('reconciliation_mismatches_kind_reference_key').on(t.kind, t.reference),
+    uniqueIndex('reconciliation_mismatches_kind_reference_key')
+      .on(t.kind, t.reference)
+      .where(sql`${t.resolvedAt} IS NULL`),
     index('reconciliation_mismatches_unresolved_idx')
       .on(t.createdAt)
       .where(sql`${t.resolvedAt} IS NULL`),

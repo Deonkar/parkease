@@ -41,8 +41,13 @@ export class RazorpayXError extends Error {
     this.name = 'RazorpayXError';
   }
 
+  /**
+   * RazorpayX refused the details we sent: 400 or 422. A 401/403 is our
+   * credentials and a 429 our rate — "try again shortly", not "check your bank
+   * details", so those answer 503.
+   */
   get rejected(): boolean {
-    return this.status !== null && this.status >= 400 && this.status < 500;
+    return this.status === 400 || this.status === 422;
   }
 }
 

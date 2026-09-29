@@ -59,13 +59,20 @@ export async function sendPayout(
     return;
   }
 
-  const [bank] = await deps.db
-    .select({ fundAccountId: bankDetails.razorpayxFundAccountId })
-    .from(bankDetails)
-    .where(eq(bankDetails.userId, payout.userId));
-  if (bank?.fundAccountId == null) {
-    await failPayout(deps, payoutId, 'no fund account');
-    return;
+  // A fresh claim pays only if the account it was made for is still the
+  // payee's: a change that committed while this payout was being created was
+  // invisible to `cancelPending`, and must fail it rather than let it go to the
+  // old account. A resumed claim (the first attempt may have landed) resends to
+  // the pinned account under the same idempotency key, whatever changed since.
+  if (claimed !== undefined) {
+    const [bank] = await deps.db
+      .select({ fundAccountId: bankDetails.razorpayxFundAccountId })
+      .from(bankDetails)
+      .where(eq(bankDetails.userId, payout.userId));
+    if (bank?.fundAccountId !== payout.razorpayxFundAccountId) {
+      await failPayout(deps, payoutId, 'bank details changed before sending');
+      return;
+    }
   }
 
   let sent;
@@ -73,7 +80,7 @@ export async function sendPayout(
     sent = await gateway.create({
       payoutId,
       accountNumber,
-      fundAccountId: bank.fundAccountId,
+      fundAccountId: payout.razorpayxFundAccountId,
       amountPaise: payout.netPaise,
       period: payout.period,
     });

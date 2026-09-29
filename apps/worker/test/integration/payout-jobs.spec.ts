@@ -294,6 +294,33 @@ describe('payout.send', () => {
     });
   });
 
+  it('fails, rather than redirects, a payout whose bank details changed before it was sent', async () => {
+    const { valet, payoutId, net } = await pendingPayout();
+    // The change committed while this payout was being created, so cancelPending
+    // could not see it: the payout is pinned to the OLD account.
+    await pg.sql`UPDATE bank_details SET razorpayx_fund_account_id = 'fa_QK7l1nNew'
+                 WHERE user_id = ${valet}`;
+    const rzp = gateway();
+
+    await sendPayout(deps, { payoutId }, rzp, ON.accountNumber);
+
+    expect(rzp.create).not.toHaveBeenCalled();
+    expect((await payoutsOf(valet))[0]?.status).toBe('failed');
+    expect(await owedTo(valet)).toBe(net);
+  });
+
+  it.each([401, 409, 429])(
+    'retries a %i instead of failing the payout — it is not the bank saying no',
+    async (status) => {
+      const { valet, payoutId } = await pendingPayout();
+      const rzp = gateway({ create: vi.fn().mockRejectedValue(new RazorpayXError(status, 'x')) });
+
+      await expect(sendPayout(deps, { payoutId }, rzp, ON.accountNumber)).rejects.toThrow();
+
+      expect((await payoutsOf(valet))[0]?.status).toBe('processing');
+    },
+  );
+
   it('does not send a payout cancelled by a bank change', async () => {
     const { payoutId } = await pendingPayout();
     await pg.sql`UPDATE payouts SET status = 'cancelled' WHERE id = ${payoutId}`;
@@ -315,7 +342,7 @@ describe('payout.reconcile', () => {
   const YESTERDAY = new Date('2026-09-27T10:00:00Z');
 
   /** A captured booking whose owner's share Route moved, with the discharge capture posts. */
-  async function capturedWithTransfer(transferPaise = 5100) {
+  async function capturedWithTransfer(transferPaise = 5100, capturedAt = YESTERDAY) {
     const driver = await seedUser('driver');
     const owner = await seedUser('owner');
     const [space] = await pg.sql<{ id: string }[]>`
@@ -339,7 +366,7 @@ describe('payout.reconcile', () => {
                             expected_total_paise, captured_paise, status, captured_at,
                             route_transfer_paise)
       VALUES (${booking?.id ?? ''}, ${driver}, ${`order_${suffix}`}, ${`pay_${suffix}`},
-              6162, 6162, 'captured', ${YESTERDAY.toISOString()}::timestamptz, ${transferPaise})
+              6162, 6162, 'captured', ${capturedAt.toISOString()}::timestamptz, ${transferPaise})
       RETURNING id`;
     await deps.db.transaction(async (tx) => {
       await postLedger(tx, {
@@ -402,6 +429,26 @@ describe('payout.reconcile', () => {
       expect.objectContaining({ unresolved: 1 }),
       expect.stringContaining('reconciliation'),
     );
+  });
+
+  it('does not ask Razorpay again about a capture it already flagged', async () => {
+    await capturedWithTransfer();
+    const t = transfers([{ id: 'trf_QK7l1n', amountPaise: 5000, status: 'processed' }]);
+
+    await run(t);
+    await run(t);
+
+    expect(t.forPayment).toHaveBeenCalledTimes(1);
+  });
+
+  it('flags a transfer still pending three days after capture', async () => {
+    const { paymentId } = await capturedWithTransfer(5100, new Date('2026-09-24T10:00:00Z'));
+
+    await run(transfers([{ id: 'trf_QK7l1n', amountPaise: 5100, status: 'pending' }]));
+
+    expect(await mismatches()).toEqual([
+      { kind: 'missing_transfer', reference: paymentId, expected: '5100', actual: '0' },
+    ]);
   });
 
   it('flags a capture Route never transferred', async () => {

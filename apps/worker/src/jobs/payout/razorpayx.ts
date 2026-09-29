@@ -17,9 +17,14 @@ export class RazorpayXError extends Error {
     this.name = 'RazorpayXError';
   }
 
-  /** RazorpayX refused what we sent. Anything else is it being unavailable. */
+  /**
+   * RazorpayX refused what we sent: 400 (bad request) or 422 (validation).
+   * Not 401/403 (our credentials), 409 (an idempotency conflict — the first
+   * attempt may have landed) or 429 (rate limit): those are ours to retry, and
+   * failing a payout on them would reverse money that may already be moving.
+   */
   get rejected(): boolean {
-    return this.status !== null && this.status >= 400 && this.status < 500;
+    return this.status === 400 || this.status === 422;
   }
 }
 

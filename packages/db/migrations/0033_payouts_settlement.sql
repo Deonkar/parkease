@@ -55,7 +55,11 @@ ALTER TABLE payouts
   ADD COLUMN gross_paise bigint NOT NULL,
   ADD COLUMN tcs_paise bigint NOT NULL DEFAULT 0,
   ADD COLUMN tds_paise bigint NOT NULL DEFAULT 0,
-  ADD COLUMN txn_id uuid NOT NULL;
+  ADD COLUMN txn_id uuid NOT NULL,
+  -- Pinned when the payout is created: the send pays exactly the account the
+  -- payout was made for, and a bank change after that fails it rather than
+  -- redirecting it (review finding: never pay an account the row did not name).
+  ADD COLUMN razorpayx_fund_account_id text NOT NULL;
 
 ALTER TABLE payouts
   ADD CONSTRAINT payouts_split_check
@@ -96,8 +100,9 @@ DROP INDEX bank_details_user_id_idx;
 -- 5. reconciliation_mismatches — the queue task 18's admin panel reads
 -- ---------------------------------------------------------------------------
 --
--- unique(kind, reference) is what makes the daily job idempotent: a second run
--- over the same day finds the row and inserts nothing (R-ASYNC-03).
+-- unique(kind, reference) over UNRESOLVED rows is what makes the daily job
+-- idempotent: a second run finds the open row and inserts nothing (R-ASYNC-03),
+-- while the same problem recurring after an operator resolved it opens anew.
 CREATE TABLE reconciliation_mismatches (
   id uuid PRIMARY KEY DEFAULT uuidv7(),
   kind text NOT NULL,
@@ -112,6 +117,6 @@ CREATE TABLE reconciliation_mismatches (
 );
 
 CREATE UNIQUE INDEX reconciliation_mismatches_kind_reference_key
-  ON reconciliation_mismatches (kind, reference);
+  ON reconciliation_mismatches (kind, reference) WHERE resolved_at IS NULL;
 CREATE INDEX reconciliation_mismatches_unresolved_idx
   ON reconciliation_mismatches (created_at) WHERE resolved_at IS NULL;

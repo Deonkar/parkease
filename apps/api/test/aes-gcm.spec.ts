@@ -24,6 +24,15 @@ describe('field encryption (AES-256-GCM, ENCRYPTION_KEY)', () => {
     expect(() => decryptField(`${iv ?? ''}.${tag ?? ''}.${flipped}`)).toThrow();
   });
 
+  it('refuses a truncated auth tag — GCM would otherwise accept a shorter, forgeable one', () => {
+    const [iv, tag, body] = encryptField(ACCOUNT).split('.');
+    const short = Buffer.from(tag ?? '', 'base64')
+      .subarray(0, 4)
+      .toString('base64');
+
+    expect(() => decryptField(`${iv ?? ''}.${short}.${body ?? ''}`)).toThrow();
+  });
+
   it('refuses a malformed value', () => {
     expect(() => decryptField('not-a-ciphertext')).toThrow();
   });

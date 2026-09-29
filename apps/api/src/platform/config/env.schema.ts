@@ -31,7 +31,9 @@ const envSchema = z.object({
   CLOUDINARY_API_KEY: z.string().min(1),
   CLOUDINARY_API_SECRET: z.string().min(1),
 
-  ENCRYPTION_KEY: z.string().length(64, 'must be 32 bytes as 64 hex characters'),
+  // Hex, strictly: `Buffer.from(x, 'hex')` silently stops at the first non-hex
+  // character, which would leave a shorter key that still "works".
+  ENCRYPTION_KEY: z.string().regex(/^[0-9a-fA-F]{64}$/, 'must be 32 bytes as 64 hex characters'),
 
   CORS_ALLOWED_ORIGINS: z.string().transform((value) =>
     value

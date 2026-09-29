@@ -125,8 +125,10 @@ describe('/me bank details and payouts over HTTP (task 16a)', () => {
       await withTransaction(h.db, async (tx) => {
         await new LedgerService().post(tx, { txnId, entries: posting.entries });
       });
-      await h.sql`INSERT INTO payouts (user_id, period, gross_paise, net_paise, txn_id, status)
-                  VALUES (${valetId}, '2026-W40', 20000, 20000, ${txnId}, 'pending')`;
+      await h.sql`INSERT INTO payouts (user_id, period, gross_paise, net_paise, txn_id, status,
+                                       razorpayx_fund_account_id)
+                  VALUES (${valetId}, '2026-W40', 20000, 20000, ${txnId}, 'pending',
+                          'fa_QK7l1nFirst')`;
       razorpayx.createFundAccount.mockResolvedValue('fa_QK7l1nSecond');
 
       const response = await put({
@@ -221,8 +223,10 @@ describe('/me bank details and payouts over HTTP (task 16a)', () => {
   describe('GET /me/payouts', () => {
     const seedPayout = async (userId: string, period: string, netPaise: number) => {
       const [row] = await h.sql<{ id: string }[]>`
-        INSERT INTO payouts (user_id, period, gross_paise, net_paise, txn_id, status)
-        VALUES (${userId}, ${period}, ${netPaise}, ${netPaise}, gen_random_uuid(), 'paid')
+        INSERT INTO payouts (user_id, period, gross_paise, net_paise, txn_id, status,
+                             razorpayx_fund_account_id)
+        VALUES (${userId}, ${period}, ${netPaise}, ${netPaise}, gen_random_uuid(), 'paid',
+                'fa_QK7l1nFirst')
         RETURNING id`;
       return row?.id ?? '';
     };
