@@ -47,3 +47,6 @@ apps/mobile/ios/
 
 # Graphify knowledge graph — generated locally, each machine builds its own (ADR-028)
 graphify-out/
+
+# MapLibre web worker, copied from node_modules on install (apps/mobile/scripts/copy-maplibre-worker.mjs)
+apps/mobile/public/maplibre/
