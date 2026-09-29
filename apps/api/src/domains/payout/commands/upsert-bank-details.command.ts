@@ -11,7 +11,8 @@ import { OutboxService } from '../../../platform/outbox/outbox.service.js';
 import { LedgerService } from '../../ledger/ledger.service.js';
 import { BankDetailsRejectedError, PayoutProviderUnavailableError } from '../errors.js';
 import { type BankDetailsRow, PayoutService } from '../payout.service.js';
-import { RAZORPAYX, type RazorpayXClient, RazorpayXError } from '../razorpayx.client.js';
+import { RazorpayApiError } from '../razorpay-rest.js';
+import { RAZORPAYX, type RazorpayXClient } from '../razorpayx.client.js';
 
 export interface UpsertBankDetailsInput {
   readonly userId: string;
@@ -130,7 +131,7 @@ export class UpsertBankDetailsCommand {
       });
       return { contactId: contact, fundAccountId };
     } catch (error) {
-      if (!(error instanceof RazorpayXError)) throw error;
+      if (!(error instanceof RazorpayApiError)) throw error;
       // The user id and status only: the request carried a bank account.
       logger.warn({ userId, status: error.status }, 'razorpayx refused bank details registration');
       throw error.rejected ? new BankDetailsRejectedError() : new PayoutProviderUnavailableError();

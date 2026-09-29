@@ -3,7 +3,7 @@ import { toPaise } from '@parkease/contracts/primitives';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { LedgerService } from '../../src/domains/ledger/ledger.service.js';
-import { RazorpayXError } from '../../src/domains/payout/razorpayx.client.js';
+import { RazorpayApiError } from '../../src/domains/payout/razorpay-rest.js';
 import { decryptField } from '../../src/platform/crypto/aes-gcm.js';
 import { withTransaction } from '../../src/platform/db/transaction.js';
 
@@ -202,7 +202,7 @@ describe('/me bank details and payouts over HTTP (task 16a)', () => {
     });
 
     it('writes nothing and answers 503 when RazorpayX is unreachable', async () => {
-      razorpayx.createFundAccount.mockRejectedValue(new RazorpayXError(null, 'network down'));
+      razorpayx.createFundAccount.mockRejectedValue(new RazorpayApiError(null, 'network down'));
 
       const response = await put();
 
@@ -213,7 +213,7 @@ describe('/me bank details and payouts over HTTP (task 16a)', () => {
     });
 
     it('answers 422 when RazorpayX rejects the account', async () => {
-      razorpayx.createFundAccount.mockRejectedValue(new RazorpayXError(400, 'invalid ifsc'));
+      razorpayx.createFundAccount.mockRejectedValue(new RazorpayApiError(400, 'invalid ifsc'));
 
       const response = await put();
 

@@ -20,6 +20,7 @@ import { PaymentModule } from '../../src/domains/payment/payment.module.js';
 import { RAZORPAY } from '../../src/domains/payment/razorpay.client.js';
 import { PayoutModule } from '../../src/domains/payout/payout.module.js';
 import { RAZORPAYX } from '../../src/domains/payout/razorpayx.client.js';
+import { ROUTE } from '../../src/domains/payout/route.client.js';
 import { PricingModule } from '../../src/domains/pricing/pricing.module.js';
 import { SpaceModule } from '../../src/domains/space/space.module.js';
 import { SurgeModule } from '../../src/domains/surge/surge.module.js';
@@ -52,6 +53,7 @@ import { OwnerEarningsController } from '../../src/roles/owner/earnings.controll
 import { RazorpayWebhookController } from '../../src/roles/public/webhooks/razorpay.controller.js';
 import { MeController } from '../../src/roles/shared/me.controller.js';
 import { MePayoutsController } from '../../src/roles/shared/payouts.controller.js';
+import { MeRouteOnboardingController } from '../../src/roles/shared/route-onboarding.controller.js';
 import { ValetAvailabilityController } from '../../src/roles/valet/availability.controller.js';
 import { ValetEarningsController } from '../../src/roles/valet/earnings.controller.js';
 import { ValetJobsController } from '../../src/roles/valet/jobs.controller.js';
@@ -163,6 +165,7 @@ class StubAuthGuard implements CanActivate {
     WasherProfileController,
     MeController,
     MePayoutsController,
+    MeRouteOnboardingController,
   ],
   providers: [
     /**
@@ -215,6 +218,7 @@ export async function startHttpApp(
   h: Harness,
   razorpay?: unknown,
   razorpayx?: unknown,
+  route?: unknown,
 ): Promise<HttpApp> {
   const moduleRef = await Test.createTestingModule({ imports: [HttpTestModule] })
     .overrideProvider(DB)
@@ -227,6 +231,8 @@ export async function startHttpApp(
     .useValue(razorpay ?? {})
     .overrideProvider(RAZORPAYX)
     .useValue(razorpayx ?? {})
+    .overrideProvider(ROUTE)
+    .useValue(route ?? {})
     .compile();
 
   // `rawBody: true` exactly as main.ts sets it. If these two drift apart, every

@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { draftsFromLedgerRows, type LedgerEntryDraft } from '@parkease/contracts/money';
-import { bankDetails, ledgerEntries, payouts } from '@parkease/db/schema';
+import { bankDetails, ledgerEntries, linkedAccounts, payouts, users } from '@parkease/db/schema';
 import { and, desc, eq, inArray, lt } from 'drizzle-orm';
 
 import { DB, type Database } from '../../platform/db/db.module.js';
@@ -8,6 +8,19 @@ import type { TxHandle } from '../../platform/db/transaction.js';
 
 export type BankDetailsRow = typeof bankDetails.$inferSelect;
 export type PayoutRow = typeof payouts.$inferSelect;
+export type LinkedAccountRow = typeof linkedAccounts.$inferSelect;
+export type LinkedAccountPatch = Partial<
+  Pick<
+    LinkedAccountRow,
+    | 'kycStatus'
+    | 'razorpayStakeholderId'
+    | 'razorpayProductId'
+    | 'requirements'
+    | 'legalName'
+    | 'settlementLast4'
+    | 'settlementIfscPrefix'
+  >
+>;
 
 export interface BankDetailsWrite {
   readonly userId: string;
@@ -27,6 +40,45 @@ export interface BankDetailsWrite {
 @Injectable()
 export class PayoutService {
   constructor(@Inject(DB) private readonly db: Database) {}
+
+  async linkedFor(userId: string): Promise<LinkedAccountRow | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(linkedAccounts)
+      .where(eq(linkedAccounts.userId, userId));
+    return row;
+  }
+
+  /**
+   * One row per user (`linked_accounts_user_id_key`). Each onboarding step saves here before
+   * the next Razorpay call, so a failure part-way resumes instead of creating a second account.
+   * A single-row statement: no other row has to commit with it.
+   */
+  async saveLinked(
+    userId: string,
+    razorpayAccountId: string,
+    patch: LinkedAccountPatch,
+  ): Promise<LinkedAccountRow> {
+    const [row] = await this.db
+      .insert(linkedAccounts)
+      .values({ userId, razorpayAccountId, ...patch })
+      .onConflictDoUpdate({
+        target: linkedAccounts.userId,
+        set: { razorpayAccountId, ...patch, updatedAt: new Date() },
+      })
+      .returning();
+    if (row === undefined) throw new Error(`linked_accounts save for ${userId} returned no row`);
+    return row;
+  }
+
+  async phoneOf(userId: string): Promise<string> {
+    const [row] = await this.db
+      .select({ phone: users.phone })
+      .from(users)
+      .where(eq(users.id, userId));
+    if (row === undefined) throw new Error(`No user ${userId}`);
+    return row.phone;
+  }
 
   async bankFor(userId: string): Promise<BankDetailsRow | undefined> {
     const [row] = await this.db.select().from(bankDetails).where(eq(bankDetails.userId, userId));
