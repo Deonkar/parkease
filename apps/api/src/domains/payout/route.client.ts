@@ -47,11 +47,13 @@ export interface RouteClient {
   ): Promise<RouteSettlement>;
 }
 
-const idResponse = z.object({ id: z.string().min(1) });
+/** Razorpay ids (`acc_…`, `sth_…`, `acc_prd_…`) are word characters; nothing else reaches a URL path. */
+const razorpayId = z.string().regex(/^[A-Za-z0-9_]+$/);
+const idResponse = z.object({ id: razorpayId });
 
 /** Razorpay's product states; `requested` is ours `pending`. */
 const productResponse = z.object({
-  id: z.string().min(1),
+  id: razorpayId,
   activation_status: z.enum([
     'requested',
     'under_review',
@@ -65,8 +67,9 @@ const productResponse = z.object({
     .default([]),
 });
 
-export const toRouteStatus = (status: z.infer<typeof productResponse>['activation_status']) =>
-  status === 'requested' ? 'pending' : status;
+export const toRouteStatus = (
+  status: z.infer<typeof productResponse>['activation_status'],
+): RouteStatus => (status === 'requested' ? 'pending' : status);
 
 @Injectable()
 export class RouteHttpClient implements RouteClient {

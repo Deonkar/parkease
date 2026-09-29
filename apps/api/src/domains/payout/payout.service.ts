@@ -1,5 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { routeStatusSchema, type RouteStatus } from '@parkease/contracts/enums';
 import { draftsFromLedgerRows, type LedgerEntryDraft } from '@parkease/contracts/money';
+import type { RouteRequirement } from '@parkease/contracts/shared';
 import { PAYABLE_BALANCE, partnerPayable } from '@parkease/db/queries';
 import {
   bankDetails,
@@ -13,6 +15,20 @@ import { and, desc, eq, inArray, lt } from 'drizzle-orm';
 
 import { DB, type Database } from '../../platform/db/db.module.js';
 import type { TxHandle } from '../../platform/db/transaction.js';
+
+/** How far along Route onboarding a status is: breaks a tie between two same-second events. */
+const LIFECYCLE: Record<RouteStatus, number> = {
+  pending: 0,
+  under_review: 1,
+  needs_clarification: 2,
+  activated: 3,
+  rejected: 3,
+  suspended: 3,
+};
+const lifecycleOf = (status: string): number => {
+  const parsed = routeStatusSchema.safeParse(status);
+  return parsed.success ? LIFECYCLE[parsed.data] : 0;
+};
 
 export type BankDetailsRow = typeof bankDetails.$inferSelect;
 export type PayoutRow = typeof payouts.$inferSelect;
@@ -77,6 +93,68 @@ export class PayoutService {
       .returning();
     if (row === undefined) throw new Error(`linked_accounts save for ${userId} returned no row`);
     return row;
+  }
+
+  /**
+   * A Route status write, ordered by when Razorpay said it. Webhooks arrive out of order with
+   * distinct event ids, and the submit path races them, so each write carries its own time and
+   * one no newer than the stored one is dropped: a late `under_review` never undoes
+   * `activated`. The row is locked so two writers cannot both read the old time.
+   *
+   * Only a webhook `stamp`s its time: it is Razorpay's clock, in whole seconds. Two events in
+   * the same second are told apart by how far along the lifecycle they are, so `activated` is
+   * never dropped for sharing a second with `under_review`. The submit path passes its request
+   * time floored to the second, defers to any webhook from that second on, and leaves the
+   * stored time alone, so our clock never makes a genuine Razorpay event look stale.
+   */
+  async applyRouteStatus(
+    tx: TxHandle,
+    where: { readonly razorpayAccountId: string } | { readonly userId: string },
+    next: {
+      readonly status: RouteStatus;
+      readonly requirements: readonly RouteRequirement[];
+      readonly at: Date;
+      readonly stamp: boolean;
+    },
+  ): Promise<
+    | { readonly outcome: 'unknown' }
+    | { readonly outcome: 'stale' }
+    | { readonly outcome: 'applied'; readonly userId: string; readonly previous: string }
+  > {
+    const match =
+      'userId' in where
+        ? eq(linkedAccounts.userId, where.userId)
+        : eq(linkedAccounts.razorpayAccountId, where.razorpayAccountId);
+    const [row] = await tx
+      .select({
+        id: linkedAccounts.id,
+        userId: linkedAccounts.userId,
+        kycStatus: linkedAccounts.kycStatus,
+        routeStatusAt: linkedAccounts.routeStatusAt,
+      })
+      .from(linkedAccounts)
+      .where(match)
+      .for('update');
+    if (row === undefined) return { outcome: 'unknown' };
+    const stored = row.routeStatusAt?.getTime() ?? null;
+    const at = next.at.getTime();
+    const stale =
+      stored !== null &&
+      (next.stamp
+        ? stored > at || (stored === at && LIFECYCLE[next.status] < lifecycleOf(row.kycStatus))
+        : stored >= at);
+    if (stale) return { outcome: 'stale' };
+
+    await tx
+      .update(linkedAccounts)
+      .set({
+        kycStatus: next.status,
+        requirements: next.requirements,
+        routeStatusAt: next.stamp ? next.at : row.routeStatusAt,
+        updatedAt: new Date(),
+      })
+      .where(eq(linkedAccounts.id, row.id));
+    return { outcome: 'applied', userId: row.userId, previous: row.kycStatus };
   }
 
   /**

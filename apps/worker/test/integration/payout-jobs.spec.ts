@@ -169,6 +169,21 @@ describe('payout.run-weekly', () => {
     expect(await payoutsOf(valet)).toHaveLength(1);
   });
 
+  it.each(['pending', 'under_review', 'needs_clarification', 'rejected', 'suspended'])(
+    'still pays a partner whose Linked Account is %s — only activated moves them to Route',
+    async (kycStatus) => {
+      const washer = await seedUser('washer');
+      await withBank(washer);
+      await pg.sql`INSERT INTO linked_accounts (user_id, razorpay_account_id, kyc_status)
+                   VALUES (${washer}, ${`acc_${kycStatus}`}, ${kycStatus})`;
+      await earn(washer);
+
+      await runWeeklyPayouts(deps, ON);
+
+      expect(await payoutsOf(washer)).toHaveLength(1);
+    },
+  );
+
   it('never treats the driver stamped on an owner-side row as a payee', async () => {
     const driver = await seedUser('driver');
     await withBank(driver);

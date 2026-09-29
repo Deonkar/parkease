@@ -80,11 +80,16 @@ export const ROUTE_PRODUCT_EVENTS = [
   'product.route.suspended',
 ] as const;
 
+/** Razorpay ids are `acc_…`-shaped; anything else never reaches a URL path or a query. */
+const razorpayId = z.string().regex(/^[A-Za-z0-9_]+$/);
+
 const routeProductSchema = z.object({
   ...envelopeShape,
+  /** Required here: status writes are ordered by it (task 16b review). Unix seconds. */
+  created_at: z.number().int().positive(),
   event: z.enum(ROUTE_PRODUCT_EVENTS),
   payload: z.object({
-    account_id: z.string().min(1),
+    account_id: razorpayId,
     merchant_product: z.object({
       entity: z.object({
         activation_status: z.enum([

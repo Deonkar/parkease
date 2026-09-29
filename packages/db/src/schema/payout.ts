@@ -104,6 +104,8 @@ export const linkedAccounts = pgTable(
     legalName: text('legal_name'),
     settlementLast4: text('settlement_last4'),
     settlementIfscPrefix: text('settlement_ifsc_prefix'),
+    /** When Razorpay said the current status; an older write never overwrites a newer one. */
+    routeStatusAt: timestamp('route_status_at', { withTimezone: true }),
     ...timestamps,
   },
   (t) => [

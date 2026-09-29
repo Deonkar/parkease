@@ -44,7 +44,13 @@ export class MeRouteOnboardingController {
     const form = submitRouteOnboardingSchema.parse(body);
     const row = await this.submit.execute({
       userId: user.id,
-      role: user.activeRole === Role.WASHER ? Role.WASHER : Role.OWNER,
+      // The Razorpay category follows the roles held; only a user holding both is asked
+      // which one they are setting up through the role they are acting as.
+      role:
+        !user.roles.includes(Role.OWNER) ||
+        (user.roles.includes(Role.WASHER) && user.activeRole === Role.WASHER)
+          ? Role.WASHER
+          : Role.OWNER,
       form,
     });
     return toView(row);

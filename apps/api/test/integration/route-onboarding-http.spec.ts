@@ -200,6 +200,36 @@ describe('/me/route-onboarding over HTTP (task 16b)', () => {
     expect(await row()).toMatchObject({ razorpay_account_id: 'acc_QK7l1nOwner' });
   });
 
+  it('keeps the old bank on screen when Razorpay refuses the new one', async () => {
+    route.configureSettlement.mockRejectedValueOnce(new RazorpayApiError(400, 'bad account'));
+
+    expect((await put()).status).toBe(422);
+    expect(await row()).toMatchObject({ settlement_last4: null, legal_name: null });
+  });
+
+  it('never undoes an activation that landed while the settlement call was in flight', async () => {
+    route.configureSettlement.mockImplementationOnce(async () => {
+      await h.sql`UPDATE linked_accounts SET kyc_status = 'activated',
+        route_status_at = now() + interval '1 second' WHERE user_id = ${ownerId}`;
+      return { status: 'under_review', requirements: [] };
+    });
+
+    expect((await put()).status).toBe(200);
+    expect(await row()).toMatchObject({ kyc_status: 'activated', settlement_last4: '6789' });
+  });
+
+  it('files a washer acting in another role under car washes, not parking', async () => {
+    await h.sql`INSERT INTO user_roles (user_id, role) VALUES (${ownerId}, 'washer')`;
+    actingAs.user = { id: ownerId, roles: ['washer', 'driver'], activeRole: 'driver' };
+
+    await put();
+
+    expect(route.upsertAccount).toHaveBeenCalledWith(
+      null,
+      expect.objectContaining({ category: 'services', subcategory: 'car_washes' }),
+    );
+  });
+
   it('rejects a malformed PAN with 400 before calling Razorpay', async () => {
     expect((await put({ ...FORM, pan: 'abc' })).status).toBe(400);
     expect(route.upsertAccount).not.toHaveBeenCalled();
@@ -216,9 +246,12 @@ describe('/me/route-onboarding over HTTP (task 16b)', () => {
   });
 
   describe('the product.route.* webhook', () => {
-    const event = (name: string, status: string, requirements: unknown[] = []) =>
+    /** Razorpay's clock, whole seconds: a minute ahead, so it is after any submit here. */
+    const T = Math.floor(Date.now() / 1000) + 60;
+    const event = (name: string, status: string, requirements: unknown[] = [], createdAt = T) =>
       JSON.stringify({
         entity: 'event',
+        created_at: createdAt,
         event: name,
         payload: {
           account_id: 'acc_QK7l1nOwner',
@@ -263,6 +296,68 @@ describe('/me/route-onboarding over HTTP (task 16b)', () => {
 
       expect(await row()).toMatchObject({ kyc_status: 'activated' });
       expect(await notifications()).toEqual(['payout.route_activated']);
+    });
+
+    it('ignores an older event that arrives late, rather than undoing activation', async () => {
+      await deliver(event('product.route.activated', 'activated', [], T + 20), 'evt_act');
+      await deliver(event('product.route.under_review', 'under_review', [], T + 10), 'evt_late');
+
+      expect(await row()).toMatchObject({ kyc_status: 'activated' });
+      expect(await notifications()).toEqual(['payout.route_activated']);
+    });
+
+    it('refreshes what Razorpay needs when a newer event keeps the status, telling the owner once', async () => {
+      const nc = (field: string, at: number, id: string) =>
+        deliver(
+          event(
+            'product.route.needs_clarification',
+            'needs_clarification',
+            [{ field_reference: field, reason_code: 'document_invalid' }],
+            at,
+          ),
+          id,
+        );
+      await nc('kyc.pan', T + 10, 'evt_nc_a');
+      await nc('settlements.account_number', T + 20, 'evt_nc_b');
+
+      expect(await row()).toMatchObject({
+        requirements: [{ field: 'settlements.account_number', reason: 'document_invalid' }],
+      });
+      expect(await notifications()).toEqual(['payout.route_needs_clarification']);
+    });
+
+    it('rejects a route event with no created_at: status writes are ordered by it', async () => {
+      const undated = JSON.parse(event('product.route.activated', 'activated')) as Record<
+        string,
+        unknown
+      >;
+      delete undated.created_at;
+
+      expect((await deliver(JSON.stringify(undated), 'evt_undated')).status).toBe(400);
+    });
+
+    it.each([
+      ['under_review then activated', 'under_review', 'activated'],
+      ['activated then under_review', 'activated', 'under_review'],
+    ])(
+      'activates on %s in the same second: a tie goes to the later lifecycle step',
+      async (_order, first, second) => {
+        await deliver(event(`product.route.${first}`, first, [], T + 10), 'evt_tie_1');
+        await deliver(event(`product.route.${second}`, second, [], T + 10), 'evt_tie_2');
+
+        expect(await row()).toMatchObject({ kyc_status: 'activated' });
+      },
+    );
+
+    it.each([
+      ['rejected', ['payout.route_rejected']],
+      ['suspended', ['payout.route_suspended']],
+      ['under_review', []],
+    ])('tells the owner about %s as its own template, or not at all', async (status, sent) => {
+      await deliver(event(`product.route.${status}`, status, [], T + 10), `evt_${status}`);
+
+      expect(await row()).toMatchObject({ kyc_status: status });
+      expect(await notifications()).toEqual(sent);
     });
 
     it('records what Razorpay needs clarified', async () => {
