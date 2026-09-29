@@ -26,11 +26,15 @@ const payout = (patch: Partial<Record<string, unknown>>): PayoutView =>
 
 describe('PayoutRow', () => {
   it('shows the net amount, the Monday it was sent, and its status in words', () => {
-    const tree = render(<PayoutRow payout={payout({})} bankLast4="6789" />);
+    const tree = render(<PayoutRow payout={payout({})} />);
     expect(text(byTestId(tree, 'payout-amount') ?? null)).toBe('₹2,800.00');
     expect(text(tree)).toContain('Mon 28 Sep');
-    expect(text(tree)).toContain('To bank ····6789');
+    expect(text(tree)).toContain('To your bank');
     expect(text(byTestId(tree, 'payout-status') ?? null)).toBe('Paid');
+  });
+
+  it('never names an account: a payout keeps its fund account, not its last 4, and the bank may have changed since', () => {
+    expect(text(render(<PayoutRow payout={payout({})} />))).not.toMatch(/····\d{4}/);
   });
 
   it.each([
@@ -40,12 +44,12 @@ describe('PayoutRow', () => {
     ['cancelled', 'Cancelled'],
     ['reversed', 'Returned'],
   ])('labels %s as %s', (status, label) => {
-    const tree = render(<PayoutRow payout={payout({ status })} bankLast4="6789" />);
+    const tree = render(<PayoutRow payout={payout({ status })} />);
     expect(text(byTestId(tree, 'payout-status') ?? null)).toBe(label);
   });
 
   it('says a failed payout went back into the balance, rather than just "Failed"', () => {
-    const tree = render(<PayoutRow payout={payout({ status: 'failed' })} bankLast4="6789" />);
+    const tree = render(<PayoutRow payout={payout({ status: 'failed' })} />);
     expect(text(tree)).toContain('added back to your balance');
   });
 
@@ -56,7 +60,7 @@ describe('PayoutRow', () => {
       tdsPaise: 3_200,
       netPaise: 313_600,
     });
-    const tree = render(<PayoutRow payout={taxed} bankLast4="6789" />);
+    const tree = render(<PayoutRow payout={taxed} />);
     expect(text(byTestId(tree, 'payout-tax') ?? null)).toBe('₹32.00 TCS · ₹32.00 TDS withheld');
   });
 });

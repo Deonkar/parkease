@@ -51,8 +51,9 @@ const COPY: Record<RoutePayee, { title: string; body: string }> = {
 
 /**
  * Shown where not being set up costs the payee something: the owner dashboard (spaces hidden
- * from search) and the washer's offers (no offers). Hidden while loading, once submitted, and on
- * a fetch error — it is a nudge; the Get paid screen itself says what failed.
+ * from search) and the washer's offers (no offers). Hidden while loading and once submitted. A
+ * failed read still shows: going quiet would leave hidden spaces or missing offers with no
+ * explanation anywhere (R-FAIL-01), and the tap opens Get paid, which says what failed.
  */
 export function PayoutSetupBanner({
   payee,
@@ -62,19 +63,24 @@ export function PayoutSetupBanner({
   readonly href: Href;
 }) {
   const query = useRouteOnboarding();
-  if (query.data === undefined) return null;
-  const phase = phaseOf(query.data);
+  if (query.data === undefined && !query.isError) return null;
+  const phase = query.data === undefined ? null : phaseOf(query.data);
   if (phase === 'reviewing' || phase === 'active') return null;
 
   const copy =
-    query.data?.status === 'needs_clarification'
+    query.data === undefined
       ? {
-          title: 'Razorpay needs a change',
-          body: 'Fix your payout details so your account can go live.',
+          title: "Couldn't check your payout setup",
+          body: 'Open Get paid to see what went wrong.',
         }
-      : phase === 'blocked'
-        ? { title: "Razorpay couldn't verify you", body: 'Contact support to get paid.' }
-        : COPY[payee];
+      : query.data?.status === 'needs_clarification'
+        ? {
+            title: 'Razorpay needs a change',
+            body: 'Fix your payout details so your account can go live.',
+          }
+        : phase === 'blocked'
+          ? { title: "Razorpay couldn't verify you", body: 'Contact support to get paid.' }
+          : COPY[payee];
 
   return (
     <Pressable

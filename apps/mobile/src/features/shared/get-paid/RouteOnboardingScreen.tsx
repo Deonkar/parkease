@@ -11,9 +11,9 @@ import {
   touchTarget,
 } from '@parkease/tokens';
 import { Button, ErrorState, Skeleton } from '@parkease/ui-native';
-import { router } from 'expo-router';
+import { type Href, router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { BackHandler, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { toApiFailure } from '../api/errors';
 import { FieldError } from '../components/FieldError';
@@ -46,10 +46,23 @@ const BANNER: Record<RoutePayee, { title: string; body: string }> = {
   },
 };
 
+/** Where "Done" goes when there is no history to go back to (a web deep link). */
+const HOME: Record<RoutePayee, Href> = {
+  owner: '/(owner)/earnings',
+  washer: '/(washer)/earnings',
+};
+
 const TITLES: Record<StepKey, string> = {
   details: 'Your details',
   pan: 'PAN',
   bank: 'Bank account',
+};
+
+/** Mid-sentence forms of TITLES — "Continue with Your details" reads as a typo. */
+const CONTINUE: Record<StepKey, string> = {
+  details: 'Continue with your details',
+  pan: 'Continue with PAN',
+  bank: 'Continue with bank account',
 };
 
 const PROMPTS: Record<StepKey, string> = {
@@ -108,6 +121,20 @@ export function RouteOnboardingScreen({ payee }: { readonly payee: RoutePayee })
       setDraft((d) => (d.legalName === '' ? { ...d, legalName: knownName } : d));
   }, [knownName]);
 
+  // Android back on a step returns to the checklist, as the header arrow does, instead of
+  // leaving the screen and losing the draft.
+  useEffect(() => {
+    if (open === null) return;
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      setOpen(null);
+      setShowErrors(false);
+      return true;
+    });
+    return () => {
+      subscription.remove();
+    };
+  }, [open]);
+
   const set = (field: keyof Draft) => (value: string) => {
     const normalised =
       field === 'pan' || field === 'ifsc'
@@ -155,6 +182,7 @@ export function RouteOnboardingScreen({ payee }: { readonly payee: RoutePayee })
           <ReadableColumn style={styles.column}>
             <StatusCard
               phase={phase}
+              home={HOME[payee]}
               bankLast4={view?.bankLast4 ?? null}
               ifscPrefix={view?.ifscPrefix ?? null}
             />
@@ -276,6 +304,8 @@ export function RouteOnboardingScreen({ payee }: { readonly payee: RoutePayee })
                 }
                 setEdited((s) => new Set(s).add(open));
                 setShowErrors(false);
+                // The last send's error was about the details just changed.
+                submit.reset();
                 setOpen(null);
               }}
             />
@@ -292,7 +322,12 @@ export function RouteOnboardingScreen({ payee }: { readonly payee: RoutePayee })
         title: 'Razorpay needs a change',
         body: 'Fix the step marked below and send your details again.',
       }
-    : BANNER[payee];
+    : pending === undefined
+      ? {
+          title: BANNER[payee].title,
+          body: 'All 3 steps are done. Send them to Razorpay to finish.',
+        }
+      : BANNER[payee];
 
   return (
     <View style={styles.root}>
@@ -358,12 +393,18 @@ export function RouteOnboardingScreen({ payee }: { readonly payee: RoutePayee })
               loading={submit.isPending}
               onPress={() => {
                 const form = submitRouteOnboardingSchema.safeParse(draft);
-                if (form.success) submit.mutate(form.data);
+                if (form.success)
+                  submit.mutate(form.data, {
+                    // A later needs_clarification must mark its steps again.
+                    onSuccess: () => {
+                      setEdited(new Set());
+                    },
+                  });
               }}
             />
           ) : (
             <Button
-              label={`Continue with ${TITLES[pending.key]}`}
+              label={CONTINUE[pending.key]}
               onPress={() => {
                 setOpen(pending.key);
               }}
@@ -447,10 +488,12 @@ function Explainer({
 
 function StatusCard({
   phase,
+  home,
   bankLast4,
   ifscPrefix,
 }: {
   readonly phase: 'reviewing' | 'active' | 'blocked';
+  readonly home: Href;
   readonly bankLast4: string | null;
   readonly ifscPrefix: string | null;
 }) {
@@ -487,7 +530,8 @@ function StatusCard({
         label="Done"
         variant="secondary"
         onPress={() => {
-          router.back();
+          if (router.canGoBack()) router.back();
+          else router.replace(home);
         }}
       />
     </View>
@@ -539,8 +583,8 @@ const styles = StyleSheet.create({
   },
   stepDivider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   marker: {
-    width: 32,
-    height: 32,
+    width: spacing['2xl'],
+    height: spacing['2xl'],
     borderRadius: radius.full,
     borderWidth: 2,
     borderColor: colors.borderStrong,

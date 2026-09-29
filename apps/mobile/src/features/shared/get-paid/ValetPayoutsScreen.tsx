@@ -108,33 +108,46 @@ export function ValetPayoutsScreen() {
         </Text>
       </View>
 
-      <Pressable
-        testID="bank-row"
-        accessibilityRole="button"
-        accessibilityLabel={
-          last4 === null ? 'Add your bank account' : `Bank account ending ${last4}. Change`
-        }
-        onPress={() => {
-          setEditing(true);
-        }}
-        android_ripple={{ color: colors.surfaceTertiary }}
-        style={styles.bankRow}
-      >
-        <MaterialCommunityIcons name="bank-outline" size={22} color={colors.primary} />
-        <View style={styles.bankText}>
-          <Text style={styles.bankTitle}>
-            {last4 === null
-              ? 'Add your bank account'
-              : `${bank.data?.ifscPrefix ?? ''} ····${last4}`}
-          </Text>
-          {bank.data == null ? (
-            <Text style={styles.bankSub}>Payouts wait until you add one</Text>
-          ) : (
-            <Text style={styles.bankSub}>{bank.data.accountHolderName}</Text>
-          )}
-        </View>
-        <Text style={styles.bankAction}>{last4 === null ? 'Add' : 'Change'}</Text>
-      </Pressable>
+      {bank.isError && bank.data === undefined ? (
+        // Not "Add your bank account": a failed read is not an empty one, and offering to add
+        // would invite a valet who has a bank on file to overwrite it (R-FAIL-01).
+        <Pressable
+          testID="bank-retry"
+          accessibilityRole="button"
+          onPress={() => void bank.refetch()}
+          style={styles.retry}
+        >
+          <Text style={styles.retryText}>Couldn&apos;t load your bank account. Tap to retry.</Text>
+        </Pressable>
+      ) : (
+        <Pressable
+          testID="bank-row"
+          accessibilityRole="button"
+          accessibilityLabel={
+            last4 === null ? 'Add your bank account' : `Bank account ending ${last4}. Change`
+          }
+          onPress={() => {
+            setEditing(true);
+          }}
+          android_ripple={{ color: colors.surfaceTertiary }}
+          style={styles.bankRow}
+        >
+          <MaterialCommunityIcons name="bank-outline" size={22} color={colors.primary} />
+          <View style={styles.bankText}>
+            <Text style={styles.bankTitle}>
+              {last4 === null
+                ? 'Add your bank account'
+                : `${bank.data?.ifscPrefix ?? ''} ····${last4}`}
+            </Text>
+            {bank.data == null ? (
+              <Text style={styles.bankSub}>Payouts wait until you add one</Text>
+            ) : (
+              <Text style={styles.bankSub}>{bank.data.accountHolderName}</Text>
+            )}
+          </View>
+          <Text style={styles.bankAction}>{last4 === null ? 'Add' : 'Change'}</Text>
+        </Pressable>
+      )}
 
       {rows.length > 0 ? (
         <Text style={styles.section} accessibilityRole="header">
@@ -153,14 +166,28 @@ export function ValetPayoutsScreen() {
           keyExtractor={(p) => p.id}
           renderItem={({ item }) => (
             <View style={styles.rowCard}>
-              <PayoutRow payout={item} bankLast4={last4} />
+              <PayoutRow payout={item} />
             </View>
           )}
           ItemSeparatorComponent={Separator}
           ListHeaderComponent={header}
+          ListFooterComponent={
+            payouts.isFetchNextPageError ? (
+              <Pressable
+                testID="payouts-more-retry"
+                accessibilityRole="button"
+                onPress={() => void payouts.fetchNextPage()}
+                style={styles.retry}
+              >
+                <Text style={styles.retryText}>Couldn&apos;t load more. Tap to retry.</Text>
+              </Pressable>
+            ) : null
+          }
           contentContainerStyle={styles.list}
           onEndReached={() => {
-            if (payouts.hasNextPage && !payouts.isFetchingNextPage) void payouts.fetchNextPage();
+            // Not after a failed page: the footer's "Tap to retry" owns that, or a scroll loops it.
+            if (payouts.hasNextPage && !payouts.isFetchingNextPage && !payouts.isFetchNextPageError)
+              void payouts.fetchNextPage();
           }}
           ListEmptyComponent={
             payouts.isError ? (
@@ -285,6 +312,13 @@ function BankForm({
 }
 
 const styles = StyleSheet.create({
+  retry: {
+    minHeight: touchTarget,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.base,
+  },
+  retryText: { fontSize: fontSize.sm, fontWeight: fontWeight.semibold, color: colors.warning },
   root: { flex: 1, backgroundColor: colors.surfaceSecondary },
   body: { flex: 1 },
   skeletons: { padding: spacing.base, gap: spacing.md },

@@ -69,6 +69,18 @@ describe('contrast — coloured text on white', () => {
     expect(contrast(colors.errorInk, colors.errorLight)).toBeGreaterThanOrEqual(AA_NORMAL);
   });
 
+  // Task 16b: a step needing a change says so in warning text, on the card and in the
+  // warning banner; payout status chips are small words on a tint.
+  it.each([
+    ['warning on surface', colors.warning, colors.surface],
+    ['warning on warningLight', colors.warning, colors.warningLight],
+    ['textSecondary on warningLight', colors.textSecondary, colors.warningLight],
+    ['primaryDark on primarySoft', colors.primaryDark, colors.primarySoft],
+    ['textSecondary on surfaceTertiary', colors.textSecondary, colors.surfaceTertiary],
+  ])('%s clears AA for normal text', (_label, fg, bg) => {
+    expect(contrast(fg, bg)).toBeGreaterThanOrEqual(AA_NORMAL);
+  });
+
   /**
    * The reason `errorInk` exists at all, pinned so nobody "simplifies" the two
    * tiers back into one. `error` is tuned for white and lands at 4.41:1 on the
