@@ -9,6 +9,7 @@ import type { Database } from '../../client.js';
 import { uuidv7 } from '../../id.js';
 import { bookings, bookingSlots } from '../../schema/booking.js';
 import { users } from '../../schema/identity.js';
+import { linkedAccounts } from '../../schema/payout.js';
 import { spaces, spaceSlots } from '../../schema/space.js';
 
 // Bangalore bounding box (task-07 §"search-performance.spec.ts").
@@ -182,6 +183,19 @@ export async function seedPerfSpaces(
     if (id === undefined) throw new Error(`seed-perf: owner ${r.phone} not resolved`);
     return id;
   });
+  // Search shows only spaces whose owner Route can pay (task 16b), so every perf owner is
+  // activated — otherwise the benchmark would time an empty result.
+  await db
+    .insert(linkedAccounts)
+    .values(
+      ownerIds.map((userId, i) => ({
+        userId,
+        razorpayAccountId: `acc_perf${String(i).padStart(10, '0')}`,
+        kycStatus: 'activated',
+      })),
+    )
+    .onConflictDoNothing({ target: linkedAccounts.userId });
+
   const driverIds = driverRows.map((r) => {
     const id = phoneToId.get(r.phone);
     if (id === undefined) throw new Error(`seed-perf: driver ${r.phone} not resolved`);

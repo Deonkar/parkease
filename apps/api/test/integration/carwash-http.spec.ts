@@ -363,9 +363,18 @@ describe('POST /washer/jobs/:id/accept — first accept wins', () => {
    * ADR-013. A partner we cannot route money to must not take the job at all —
    * the alternative is a driver with somebody on the way and no way to pay them.
    */
-  it('refuses a partner with no activated linked account', async () => {
+  it('is never offered a job without an activated linked account (task 16b)', async () => {
     const washerId = await seedWasher({ onboarded: false });
     const jobId = await openJob();
+
+    // Dispatch skips them entirely, so the job is not theirs to accept.
+    expect((await accept(jobId, washerId)).status).toBe(404);
+  });
+
+  it('refuses a partner whose linked account lapsed between offer and accept', async () => {
+    const washerId = await seedWasher();
+    const jobId = await openJob();
+    await h.sql`UPDATE linked_accounts SET kyc_status = 'suspended' WHERE user_id = ${washerId}`;
 
     const res = await accept(jobId, washerId);
 

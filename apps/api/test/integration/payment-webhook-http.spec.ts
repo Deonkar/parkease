@@ -635,8 +635,7 @@ describe('razorpay webhook over HTTP', () => {
         endsAt: window.endsAt,
         vehicleNumber: 'KA-01-AB-1234',
       });
-      await h.sql`INSERT INTO linked_accounts (user_id, razorpay_account_id, kyc_status)
-                  VALUES (${h.ownerId}, 'acc_QK7l1nOwner', 'activated')`;
+      // The harness owner already has an activated Linked Account (task 16b fixture).
       razorpay.createOrder.mockResolvedValue({ ...ok(booking.totalPaise), amountPaidPaise: 0 });
       actingAs.user = { id: h.driverId, roles: ['driver'], activeRole: 'driver' };
 
@@ -647,7 +646,6 @@ describe('razorpay webhook over HTTP', () => {
         headers: { 'idempotency-key': crypto.randomUUID() },
       });
       actingAs.user = null;
-      await h.sql`DELETE FROM linked_accounts`;
 
       expect(response.status).toBe(201);
       const [row] = await h.sql<{ transfer: string | null }[]>`

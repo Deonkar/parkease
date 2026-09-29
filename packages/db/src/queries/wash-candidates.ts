@@ -96,6 +96,9 @@ export function washCandidateQuery(input: WashCandidateQueryInput): SQL {
       ON ur.user_id = wp.user_id AND ur.role = 'washer' AND ur.status = 'active'
     JOIN users u
       ON u.id = wp.user_id AND u.status = 'active'
+    -- Only partners Route can pay (task 16b): accept-wash would refuse anyone else.
+    JOIN linked_accounts la
+      ON la.user_id = wp.user_id AND la.kyc_status = 'activated'
     JOIN wash_services ws
       ON ws.washer_user_id = wp.user_id
      AND ws.service_name = ${input.serviceName}
