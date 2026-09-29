@@ -1,7 +1,19 @@
 import { LedgerAccount } from '@parkease/contracts/enums';
+import {
+  computeValetLegFee,
+  type DatedRate,
+  type LedgerEntryDraft,
+  payoutEntries,
+  reverseEntries,
+  routeDischargeEntries,
+  settlementClearedEntries,
+  valetLegEntries,
+} from '@parkease/contracts/money';
+import { toPaise, toRate } from '@parkease/contracts/primitives';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { OwnerBalanceQuery } from '../../src/domains/ledger/queries/owner-balance.js';
+import { withTransaction } from '../../src/platform/db/transaction.js';
 
 import { type BookingStack, buildBookingStack, windowFromNow, zoneOf } from './booking-harness.js';
 import {
@@ -208,6 +220,52 @@ describe('ledger balance', () => {
 
     expect(await ownerBalance.forBooking(booking.id)).toBe(0);
     expect(await unbalancedTxns()).toEqual([]);
+  });
+
+  it('balances the settlement lifecycle, and clears settlement_clearing to zero (task 16a)', async () => {
+    const spaceId = await seedSpace(h, { lat: 12.9345, lng: 77.6266, carSlots: 1 });
+    const { booking } = await book(spaceId, h.driverId, 2, 2);
+    const valet = await seedUser(h, 'valet');
+    const oneRate: readonly DatedRate[] = [
+      { rate: toRate(0.01), effectiveFrom: '2026-01-01', note: 'test: 1%' },
+    ];
+
+    await withTransaction(h.db, async (tx) => {
+      const post = (entries: readonly LedgerEntryDraft[], bookingId?: string) =>
+        stack.ledger.post(tx, { entries, ...(bookingId === undefined ? {} : { bookingId }) });
+
+      // Route pays the owner at capture, then reconciliation confirms it.
+      await post(routeDischargeEntries(booking.ownerEarningsPaise, h.driverId), booking.id);
+      await post(settlementClearedEntries(booking.ownerEarningsPaise));
+
+      // A valet earns, is paid with TCS and TDS withheld, and the payout clears.
+      await post(valetLegEntries(computeValetLegFee(10_000, toRate(0.2)), valet, 'valet leg'));
+      const paid = payoutEntries(toPaise(12_000), valet, new Date(), {
+        tcs: oneRate,
+        tds: oneRate,
+      });
+      await post(paid.entries);
+      await post(settlementClearedEntries(paid.netPaise));
+
+      // A second payout fails and is reversed: the valet is owed it again.
+      await post(valetLegEntries(computeValetLegFee(10_000, toRate(0.2)), valet, 'valet leg'));
+      const failed = payoutEntries(toPaise(12_000), valet, new Date());
+      await post(failed.entries);
+      await post(reverseEntries(failed.entries, 'payout failed'));
+    });
+
+    expect(await unbalancedTxns()).toEqual([]);
+    expect(await ownerBalance.balance(h.ownerId)).toBe(0);
+
+    const [totals] = await h.sql<{ clearing: string; valet: string; tax: string }[]>`
+      SELECT
+        coalesce(sum(CASE direction WHEN 'credit' THEN amount_paise ELSE -amount_paise END)
+          FILTER (WHERE account = 'settlement_clearing'), 0)::text AS clearing,
+        coalesce(sum(CASE direction WHEN 'credit' THEN amount_paise ELSE -amount_paise END)
+          FILTER (WHERE account = 'owner_payable' AND counterparty_user_id = ${valet}), 0)::text AS valet,
+        coalesce(sum(amount_paise) FILTER (WHERE account IN ('tcs_payable','tds_payable')), 0)::text AS tax
+      FROM ledger_entries`;
+    expect(totals).toEqual({ clearing: '0', valet: '12000', tax: '240' });
   });
 
   it('only ever writes accounts that exist in the chart', async () => {
