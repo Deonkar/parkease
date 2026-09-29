@@ -37,6 +37,7 @@ export {
   LedgerDirection,
 } from './ledger-direction.js';
 export { OUTBOX_STATUS_VALUES, outboxStatusSchema, OutboxStatus } from './outbox-status.js';
+export { ROUTE_STATUS_VALUES, routeStatusSchema, type RouteStatus } from './route-status.js';
 export { CHECK_IN_METHOD_VALUES, checkInMethodSchema, CheckInMethod } from './check-in-method.js';
 export {
   SURGE_BADGE_VALUES,
