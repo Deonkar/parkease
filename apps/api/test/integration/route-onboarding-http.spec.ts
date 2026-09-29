@@ -1,3 +1,5 @@
+import { createHmac } from 'node:crypto';
+
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { RazorpayApiError } from '../../src/domains/payout/razorpay-rest.js';
@@ -211,5 +213,94 @@ describe('/me/route-onboarding over HTTP (task 16b)', () => {
     as(await seedUser(h, role), role);
     expect((await put()).status).toBe(403);
     expect((await get()).status).toBe(403);
+  });
+
+  describe('the product.route.* webhook', () => {
+    const event = (name: string, status: string, requirements: unknown[] = []) =>
+      JSON.stringify({
+        entity: 'event',
+        event: name,
+        payload: {
+          account_id: 'acc_QK7l1nOwner',
+          merchant_product: {
+            entity: { id: 'acc_prd_QK7l1nRoute', activation_status: status, requirements },
+          },
+        },
+      });
+    const deliver = (body: string, eventId: string) => {
+      actingAs.user = null;
+      return http.request({
+        method: 'POST',
+        url: '/api/v1/webhooks/razorpay',
+        rawPayload: body,
+        headers: {
+          'x-razorpay-signature': createHmac('sha256', 'fake_webhook_secret_000')
+            .update(Buffer.from(body, 'utf8'))
+            .digest('hex'),
+          'x-razorpay-event-id': eventId,
+        },
+      });
+    };
+    const notifications = async () =>
+      (
+        await h.sql<{ template: string }[]>`
+          SELECT payload->>'template' AS template FROM outbox_messages
+          WHERE type = 'notification.dispatch' ORDER BY created_at`
+      ).map((n) => n.template);
+
+    beforeEach(async () => {
+      await h.sql`TRUNCATE outbox_messages`;
+      await put();
+    });
+
+    it('activates the account, and tells the owner once across different deliveries', async () => {
+      expect(
+        (await deliver(event('product.route.activated', 'activated'), 'evt_act_1')).status,
+      ).toBe(200);
+      expect(
+        (await deliver(event('product.route.activated', 'activated'), 'evt_act_2')).status,
+      ).toBe(200);
+
+      expect(await row()).toMatchObject({ kyc_status: 'activated' });
+      expect(await notifications()).toEqual(['payout.route_activated']);
+    });
+
+    it('records what Razorpay needs clarified', async () => {
+      await deliver(
+        event('product.route.needs_clarification', 'needs_clarification', [
+          { field_reference: 'kyc.pan', reason_code: 'document_invalid' },
+        ]),
+        'evt_nc_1',
+      );
+
+      as(ownerId, 'owner');
+      expect((await get()).body).toMatchObject({
+        data: {
+          status: 'needs_clarification',
+          requirements: [{ field: 'kyc.pan', reason: 'document_invalid' }],
+        },
+      });
+      expect(await notifications()).toEqual(['payout.route_needs_clarification']);
+    });
+
+    it('answers 200 for an account it does not know, rather than being retried forever', async () => {
+      const unknown = event('product.route.activated', 'activated').replace(
+        'acc_QK7l1nOwner',
+        'acc_QK7l1nNobody',
+      );
+
+      expect((await deliver(unknown, 'evt_unknown')).status).toBe(200);
+      expect(await row()).toMatchObject({ kyc_status: 'under_review' });
+    });
+
+    it('rejects a malformed activation instead of treating it as unhandled', async () => {
+      const bad = JSON.stringify({
+        entity: 'event',
+        event: 'product.route.activated',
+        payload: { merchant_product: { entity: {} } },
+      });
+
+      expect((await deliver(bad, 'evt_bad')).status).toBe(400);
+    });
   });
 });

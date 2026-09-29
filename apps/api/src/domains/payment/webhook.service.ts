@@ -9,6 +9,7 @@ import {
 
 import { IdempotencyService } from '../../platform/idempotency/idempotency.service.js';
 import { logger } from '../../platform/observability/logger.js';
+import { ApplyRouteStatusCommand } from '../payout/commands/apply-route-status.command.js';
 
 import { ConfirmPaymentCommand } from './commands/confirm-payment.command.js';
 import { FailPaymentCommand } from './commands/fail-payment.command.js';
@@ -32,6 +33,7 @@ export class WebhookService {
     private readonly confirmPayment: ConfirmPaymentCommand,
     private readonly failPayment: FailPaymentCommand,
     private readonly processRefund: ProcessRefundCommand,
+    private readonly routeStatus: ApplyRouteStatusCommand,
   ) {}
 
   /**
@@ -139,6 +141,24 @@ export class WebhookService {
           // worker will have recorded the gateway's refund id.
           throw new Error(`No local refund recorded for ${entity.id} yet`);
         }
+        return;
+      }
+
+      case 'product.route.under_review':
+      case 'product.route.needs_clarification':
+      case 'product.route.activated':
+      case 'product.route.rejected':
+      case 'product.route.suspended': {
+        const product = parsed.payload.merchant_product.entity;
+        await this.routeStatus.execute({
+          razorpayAccountId: parsed.payload.account_id,
+          // Razorpay's `requested` is our `pending`: the product exists, review has not begun.
+          status: product.activation_status === 'requested' ? 'pending' : product.activation_status,
+          requirements: product.requirements.map((r) => ({
+            field: r.field_reference,
+            reason: r.reason_code,
+          })),
+        });
         return;
       }
 

@@ -4,6 +4,7 @@ import { IdempotencyModule } from '../../platform/idempotency/idempotency.module
 import { OutboxModule } from '../../platform/outbox/outbox.module.js';
 import { BookingModule } from '../booking/booking.module.js';
 import { LedgerModule } from '../ledger/ledger.module.js';
+import { PayoutModule } from '../payout/payout.module.js';
 
 import { ConfirmPaymentCommand } from './commands/confirm-payment.command.js';
 import { CreateOrderCommand } from './commands/create-order.command.js';
@@ -17,7 +18,15 @@ import { VerificationService } from './verification.service.js';
 import { WebhookService } from './webhook.service.js';
 
 @Module({
-  imports: [PaymentCoreModule, BookingModule, LedgerModule, OutboxModule, IdempotencyModule],
+  imports: [
+    PaymentCoreModule,
+    BookingModule,
+    LedgerModule,
+    OutboxModule,
+    IdempotencyModule,
+    // Route product webhooks arrive on the same signed endpoint (task 16b).
+    PayoutModule,
+  ],
   providers: [
     // Bound by token rather than by class so a test can supply a double and
     // assert the gateway was *not* called — which is how the Route constraint

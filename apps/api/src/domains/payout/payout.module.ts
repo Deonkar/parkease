@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { OutboxModule } from '../../platform/outbox/outbox.module.js';
 import { LedgerModule } from '../ledger/ledger.module.js';
 
+import { ApplyRouteStatusCommand } from './commands/apply-route-status.command.js';
 import { SubmitRouteOnboardingCommand } from './commands/submit-route-onboarding.command.js';
 import { UpsertBankDetailsCommand } from './commands/upsert-bank-details.command.js';
 import { PayoutService } from './payout.service.js';
@@ -19,10 +20,16 @@ import { ROUTE, RouteHttpClient } from './route.client.js';
     PayoutService,
     UpsertBankDetailsCommand,
     SubmitRouteOnboardingCommand,
+    ApplyRouteStatusCommand,
     { provide: RAZORPAYX, useClass: RazorpayXHttpClient },
     { provide: ROUTE, useClass: RouteHttpClient },
   ],
-  exports: [PayoutService, UpsertBankDetailsCommand, SubmitRouteOnboardingCommand],
+  exports: [
+    PayoutService,
+    UpsertBankDetailsCommand,
+    SubmitRouteOnboardingCommand,
+    ApplyRouteStatusCommand,
+  ],
 })
 // eslint-disable-next-line @typescript-eslint/no-extraneous-class
 export class PayoutModule {}
