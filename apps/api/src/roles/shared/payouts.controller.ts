@@ -4,6 +4,7 @@ import { payoutIdSchema } from '@parkease/contracts/primitives';
 import {
   type BankDetailsView,
   payoutListQuerySchema,
+  payoutPageSchema,
   type PayoutView,
   updateBankDetailsSchema,
 } from '@parkease/contracts/shared';
@@ -13,6 +14,7 @@ import { UpsertBankDetailsCommand } from '../../domains/payout/commands/upsert-b
 import { BankDetailsNotFoundError, PayoutNotFoundError } from '../../domains/payout/errors.js';
 import { PayoutService } from '../../domains/payout/payout.service.js';
 import { type AuthUser, CurrentUser } from '../../platform/auth/current-user.decorator.js';
+import { parseOutgoing } from '../../platform/http/outgoing-contract.js';
 import { Roles } from '../../platform/rbac/roles.decorator.js';
 
 import { toBankDetailsView, toPayoutView } from './views/payout.view.js';
@@ -56,10 +58,14 @@ export class MePayoutsController {
       limit: q.limit,
       ...(q.cursor === undefined ? {} : { cursor: q.cursor }),
     });
-    return {
-      items: page.items.map(toPayoutView),
-      meta: { limit: q.limit, hasMore: page.hasMore, nextCursor: page.nextCursor },
-    };
+    return parseOutgoing(
+      payoutPageSchema,
+      {
+        items: page.items.map(toPayoutView),
+        meta: { limit: q.limit, hasMore: page.hasMore, nextCursor: page.nextCursor },
+      },
+      'payout history page',
+    );
   }
 
   @Get('payouts/:id')

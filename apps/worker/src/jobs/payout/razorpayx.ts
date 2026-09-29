@@ -70,7 +70,13 @@ async function call(path: string, init: RequestInit): Promise<SentPayout> {
       `RazorpayX ${path} answered ${String(response.status)}`,
     );
   }
-  const parsed = payoutResponse.parse(await response.json());
+  let parsed;
+  try {
+    parsed = payoutResponse.parse(await response.json());
+  } catch (error) {
+    // Retried like an outage: a 200 we cannot read is not the payee's bank saying no.
+    throw new RazorpayXError(null, `RazorpayX ${path} answered unreadably: ${String(error)}`);
+  }
   return { id: parsed.id, status: parsed.status };
 }
 

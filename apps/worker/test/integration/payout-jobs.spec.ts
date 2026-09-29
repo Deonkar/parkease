@@ -1,6 +1,7 @@
 import {
   computeValetLegFee,
   routeDischargeEntries,
+  settlementClearedEntries,
   valetLegEntries,
 } from '@parkease/contracts/money';
 import { toRate } from '@parkease/contracts/primitives';
@@ -16,6 +17,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import type { JobDeps } from '../../src/deps.js';
 import { postLedger } from '../../src/jobs/booking/ledger.js';
 import type { TransferGateway } from '../../src/jobs/payment/razorpay.js';
+import { failPayout } from '../../src/jobs/payout/fail.js';
 import { type PayoutGateway, RazorpayXError } from '../../src/jobs/payout/razorpayx.js';
 import { reconcilePayouts } from '../../src/jobs/payout/reconcile.job.js';
 import { runWeeklyPayouts } from '../../src/jobs/payout/run-weekly.job.js';
@@ -223,6 +225,45 @@ describe('payout.run-weekly', () => {
     expect(await owedTo(valet)).toBe(earned);
   });
 
+  it('one payee failing does not strand the rest, and the run still reports it', async () => {
+    const broken = await seedUser('valet');
+    const fine = await seedUser('valet');
+    await withBank(broken);
+    await withBank(fine);
+    await earn(broken);
+    await earn(fine);
+    await pg.sql.unsafe(`
+      CREATE FUNCTION refuse_payout() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN
+        IF NEW.user_id = '${broken}' THEN RAISE EXCEPTION 'injected failure'; END IF;
+        RETURN NEW;
+      END $$;
+      CREATE TRIGGER refuse_payout BEFORE INSERT ON payouts
+        FOR EACH ROW EXECUTE FUNCTION refuse_payout();`);
+
+    try {
+      await expect(runWeeklyPayouts(deps, ON)).rejects.toThrow(/1 payee/);
+      expect(await payoutsOf(fine)).toHaveLength(1);
+      expect(await payoutsOf(broken)).toHaveLength(0);
+    } finally {
+      await pg.sql.unsafe('DROP TRIGGER refuse_payout ON payouts; DROP FUNCTION refuse_payout();');
+    }
+  });
+
+  it('a failed payout is not re-paid by a second run in the same week — next Monday pays it', async () => {
+    const valet = await seedUser('valet');
+    await withBank(valet);
+    const net = await earn(valet);
+    await runWeeklyPayouts(deps, ON);
+    const [row] = await payoutsOf(valet);
+    await failPayout(deps, row?.id ?? '', 'refused');
+
+    await runWeeklyPayouts(deps, ON);
+
+    expect(await payoutsOf(valet)).toHaveLength(1);
+    expect(await owedTo(valet)).toBe(net);
+  });
+
   it('pays nobody while RazorpayX is not configured', async () => {
     const valet = await seedUser('valet');
     await withBank(valet);
@@ -292,6 +333,48 @@ describe('payout.send', () => {
       status: 'processing',
       rzp: 'pout_QK7l1nFirst',
     });
+  });
+
+  it('resends a resumed claim to the PINNED account even if bank details changed since', async () => {
+    // The first attempt may have landed at RazorpayX; failing it now would
+    // reverse money already moving. Same key, same account, same payout.
+    const { valet, payoutId } = await pendingPayout();
+    const down = gateway({ create: vi.fn().mockRejectedValue(new RazorpayXError(503, 'down')) });
+    await expect(sendPayout(deps, { payoutId }, down, ON.accountNumber)).rejects.toThrow();
+    await pg.sql`UPDATE bank_details SET razorpayx_fund_account_id = 'fa_QK7l1nNew'
+                 WHERE user_id = ${valet}`;
+
+    const up = gateway();
+    await sendPayout(deps, { payoutId }, up, ON.accountNumber);
+
+    expect(up.create).toHaveBeenCalledWith(
+      expect.objectContaining({ payoutId, fundAccountId: 'fa_QK7l1nValet' }),
+    );
+    expect((await payoutsOf(valet))[0]).toMatchObject({
+      status: 'processing',
+      rzp: 'pout_QK7l1nFirst',
+    });
+    const failed =
+      await pg.sql`SELECT 1 FROM outbox_messages WHERE payload->>'template' = 'payout.failed'`;
+    expect(failed).toHaveLength(0);
+  });
+
+  it('fails a payout exactly once, and never one already paid', async () => {
+    const { valet, payoutId, net } = await pendingPayout();
+
+    await failPayout(deps, payoutId, 'first');
+    await failPayout(deps, payoutId, 'second');
+
+    expect(await owedTo(valet)).toBe(net);
+    const notes =
+      await pg.sql`SELECT 1 FROM outbox_messages WHERE payload->>'template' = 'payout.failed'`;
+    expect(notes).toHaveLength(1);
+
+    const other = await pendingPayout();
+    await pg.sql`UPDATE payouts SET status = 'paid' WHERE id = ${other.payoutId}`;
+    await failPayout(deps, other.payoutId, 'too late');
+    expect((await payoutsOf(other.valet))[0]?.status).toBe('paid');
+    expect(await owedTo(other.valet)).toBe(0);
   });
 
   it('fails, rather than redirects, a payout whose bank details changed before it was sent', async () => {
@@ -449,6 +532,73 @@ describe('payout.reconcile', () => {
     expect(await mismatches()).toEqual([
       { kind: 'missing_transfer', reference: paymentId, expected: '5100', actual: '0' },
     ]);
+  });
+
+  it('asks only about uncleared captures from before today', async () => {
+    const eligible = await capturedWithTransfer();
+    await capturedWithTransfer(5100, new Date('2026-09-28T01:00:00Z')); // today, IST
+    const cleared = await capturedWithTransfer();
+    await deps.db.transaction(async (tx) => {
+      await postLedger(tx, {
+        paymentId: cleared.paymentId,
+        entries: settlementClearedEntries(5100),
+      });
+    });
+    const t = transfers([{ id: 'trf_QK7l1n', amountPaise: 5100, status: 'processed' }]);
+
+    await run(t);
+
+    expect(t.forPayment).toHaveBeenCalledTimes(1);
+    expect((await clearingFor('payment_id', eligible.paymentId)).net).toBe(0);
+  });
+
+  it('reopens a mismatch that recurs after an operator resolved it', async () => {
+    const { paymentId } = await capturedWithTransfer();
+    const t = transfers([{ id: 'trf_QK7l1n', amountPaise: 5000, status: 'processed' }]);
+    await run(t);
+    await pg.sql`UPDATE reconciliation_mismatches SET resolved_at = now()`;
+
+    await run(t);
+
+    const rows = await pg.sql<{ resolved: boolean }[]>`
+      SELECT resolved_at IS NOT NULL AS resolved FROM reconciliation_mismatches
+      WHERE reference = ${paymentId} ORDER BY created_at`;
+    expect(rows.map((r) => r.resolved)).toEqual([true, false]);
+  });
+
+  it('flags a claim that never reached RazorpayX in a day', async () => {
+    const valet = await seedUser('valet');
+    await withBank(valet);
+    await earn(valet);
+    await runWeeklyPayouts(deps, ON);
+    const [row] = await payoutsOf(valet);
+    await pg.sql`UPDATE payouts SET status = 'processing',
+                 initiated_at = ${new Date(MONDAY.getTime() - 2 * 86_400_000).toISOString()}::timestamptz
+                 WHERE id = ${row?.id ?? ''}`;
+
+    await run(transfers([]));
+
+    const flagged = await mismatches();
+    expect(flagged.map((m) => [m.kind, m.reference])).toEqual([['payout_failed', row?.id]]);
+  });
+
+  it('carries on past one failed lookup, then fails the run so it is retried', async () => {
+    const first = await capturedWithTransfer();
+    const second = await capturedWithTransfer();
+    const t: TransferGateway = {
+      forPayment: vi
+        .fn()
+        .mockRejectedValueOnce(new Error('razorpay down'))
+        .mockResolvedValue([{ id: 'trf_QK7l1n', amountPaise: 5100, status: 'processed' }]),
+    };
+
+    await expect(run(t)).rejects.toThrow(/1 lookup/);
+
+    const nets = [
+      (await clearingFor('payment_id', first.paymentId)).net,
+      (await clearingFor('payment_id', second.paymentId)).net,
+    ];
+    expect(nets.sort()).toEqual([0, 5100]); // one cleared, the failed one left open
   });
 
   it('flags a capture Route never transferred', async () => {

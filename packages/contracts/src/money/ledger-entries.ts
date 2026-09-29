@@ -1,7 +1,9 @@
 import {
   type LedgerAccount,
   LedgerAccount as Account,
+  ledgerAccountSchema,
   type LedgerDirection,
+  ledgerDirectionSchema,
 } from '../enums/index.js';
 import { mulRate, type Paise, subPaise } from '../primitives/paise.js';
 
@@ -139,6 +141,32 @@ export function reverseEntries(
     ...(entry.counterpartyUserId === undefined
       ? {}
       : { counterpartyUserId: entry.counterpartyUserId }),
+  }));
+}
+
+/**
+ * A posting read back from `ledger_entries`, as drafts — so it can be handed to
+ * `reverseEntries`. Account and direction are PARSED, not cast: the CHECK
+ * guarantees them today, and a widened CHECK must fail here rather than post an
+ * account the chart does not know. Used by both writers that reverse a stored
+ * payout (the API's bank-change cancel, the worker's failed payout), which must
+ * change together if the row shape does.
+ */
+export function draftsFromLedgerRows(
+  rows: readonly {
+    readonly account: string;
+    readonly direction: string;
+    readonly amountPaise: number;
+    readonly description: string;
+    readonly counterpartyUserId: string | null;
+  }[],
+): LedgerEntryDraft[] {
+  return rows.map((row) => ({
+    account: ledgerAccountSchema.parse(row.account),
+    direction: ledgerDirectionSchema.parse(row.direction),
+    amountPaise: row.amountPaise,
+    description: row.description,
+    ...(row.counterpartyUserId === null ? {} : { counterpartyUserId: row.counterpartyUserId }),
   }));
 }
 

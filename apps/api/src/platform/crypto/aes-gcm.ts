@@ -27,6 +27,12 @@ export function encryptField(plaintext: string): string {
   return [iv, cipher.getAuthTag(), body].map((part) => part.toString('base64')).join('.');
 }
 
+/**
+ * Nothing in the request path calls this: the stored ciphertext is write-only
+ * (ADR-013), and RazorpayX holds the fund account. It is kept as the tested
+ * inverse — the proof that what was stored is recoverable when a fund account
+ * has to be re-registered — and for that re-registration when it is built.
+ */
 export function decryptField(stored: string): string {
   const [iv, tag, body] = stored.split('.');
   if (iv === undefined || tag === undefined || body === undefined) {

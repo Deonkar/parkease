@@ -214,7 +214,7 @@ describe('owner earnings reads', () => {
       statement: await earnings.statementPage(h.ownerId, { period: 'month', limit: 10 }),
       count: await earnings.statementCount(h.ownerId, 'month'),
       byBooking: [...(await earnings.netByBooking(h.ownerId, [booking.id]))],
-      forOwner: await earnings.forOwner(h.ownerId),
+      balance: await earnings.balance(h.ownerId),
       forBooking: await earnings.forBooking(booking.id),
       raw: await rawNet(),
     });
@@ -278,7 +278,6 @@ describe('owner earnings reads', () => {
     expect(before.statement.items[0]?.reversedPaise).toBe(0);
     // Owed is what Route has not yet paid.
     expect(await earnings.balance(h.ownerId)).toBe(0);
-    expect(await earnings.forOwner(h.ownerId)).toBe(0);
   });
 
   it('refuses a forged cursor as a 400, not a 500', async () => {

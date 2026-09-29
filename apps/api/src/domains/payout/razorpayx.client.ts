@@ -101,6 +101,15 @@ export class RazorpayXHttpClient implements RazorpayXClient {
         `RazorpayX ${path} answered ${String(response.status)}`,
       );
     }
-    return idResponse.parse(await response.json()).id;
+    // A 200 we cannot read is RazorpayX misbehaving, not the user's input: it
+    // must answer 503, never the filter's 400 for a ZodError.
+    try {
+      return idResponse.parse(await response.json()).id;
+    } catch (error) {
+      throw new RazorpayXError(
+        response.status,
+        `RazorpayX ${path} answered unreadably: ${String(error)}`,
+      );
+    }
   }
 }

@@ -1,5 +1,4 @@
-import { ledgerAccountSchema, ledgerDirectionSchema } from '@parkease/contracts/enums';
-import { reverseEntries } from '@parkease/contracts/money';
+import { draftsFromLedgerRows, reverseEntries } from '@parkease/contracts/money';
 import { ledgerEntries, outboxMessages, payouts } from '@parkease/db/schema';
 import { and, eq, inArray } from 'drizzle-orm';
 
@@ -24,18 +23,7 @@ export async function failPayout(deps: JobDeps, payoutId: string, reason: string
     const rows = await tx.select().from(ledgerEntries).where(eq(ledgerEntries.txnId, payout.txnId));
     await postLedger(tx, {
       payoutId,
-      entries: reverseEntries(
-        rows.map((row) => ({
-          account: ledgerAccountSchema.parse(row.account),
-          direction: ledgerDirectionSchema.parse(row.direction),
-          amountPaise: row.amountPaise,
-          description: row.description,
-          ...(row.counterpartyUserId === null
-            ? {}
-            : { counterpartyUserId: row.counterpartyUserId }),
-        })),
-        `payout failed: ${reason}`,
-      ),
+      entries: reverseEntries(draftsFromLedgerRows(rows), `payout failed: ${reason}`),
     });
 
     await tx.insert(outboxMessages).values({

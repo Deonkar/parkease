@@ -621,6 +621,40 @@ describe('razorpay webhook over HTTP', () => {
       expect(row?.n).toBe('1');
     });
 
+    it('the order endpoint records the transfer it attached, which capture then discharges', async () => {
+      // Every discharge test above writes route_transfer_paise by hand; this is
+      // the one proof that the real order path writes it at all.
+      const spaceId = await seedSpace(h, { lat: 12.9345, lng: 77.6266, carSlots: 1 });
+      const window = windowFromNow(2, 2);
+      const { booking } = await stack.create.execute({
+        driverId: h.driverId,
+        spaceId,
+        vehicleType: 'car',
+        durationType: 'hourly',
+        startsAt: window.startsAt,
+        endsAt: window.endsAt,
+        vehicleNumber: 'KA-01-AB-1234',
+      });
+      await h.sql`INSERT INTO linked_accounts (user_id, razorpay_account_id, kyc_status)
+                  VALUES (${h.ownerId}, 'acc_QK7l1nOwner', 'activated')`;
+      razorpay.createOrder.mockResolvedValue({ ...ok(booking.totalPaise), amountPaidPaise: 0 });
+      actingAs.user = { id: h.driverId, roles: ['driver'], activeRole: 'driver' };
+
+      const response = await http.request({
+        method: 'POST',
+        url: '/api/v1/driver/payments/orders',
+        payload: { bookingId: booking.id },
+        headers: { 'idempotency-key': crypto.randomUUID() },
+      });
+      actingAs.user = null;
+      await h.sql`DELETE FROM linked_accounts`;
+
+      expect(response.status).toBe(201);
+      const [row] = await h.sql<{ transfer: string | null }[]>`
+        SELECT route_transfer_paise::text AS transfer FROM payments WHERE booking_id = ${booking.id}`;
+      expect(row?.transfer).toBe(String(booking.ownerEarningsPaise));
+    });
+
     it('posts nothing for an order that carried no transfer', async () => {
       const booking = await bookWithTransfer(null);
       razorpay.fetchOrder.mockResolvedValue(ok(booking.totalPaise));

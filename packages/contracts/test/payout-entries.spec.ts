@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   assertEntriesBalance,
   type DatedRate,
+  draftsFromLedgerRows,
   payoutEntries,
   routeDischargeEntries,
   settlementClearedEntries,
@@ -57,6 +58,57 @@ describe('settlementClearedEntries', () => {
     assertEntriesBalance(entries);
     expect(sum(entries, 'settlement_clearing', 'debit')).toBe(5100);
     expect(sum(entries, 'driver_receivable', 'credit')).toBe(5100);
+  });
+});
+
+describe('draftsFromLedgerRows', () => {
+  it('rebuilds a stored posting so it can be reversed, counterparty kept', () => {
+    const drafts = draftsFromLedgerRows([
+      {
+        account: 'owner_payable',
+        direction: 'debit',
+        amountPaise: 900,
+        description: 'payout',
+        counterpartyUserId: VALET,
+      },
+      {
+        account: 'settlement_clearing',
+        direction: 'credit',
+        amountPaise: 900,
+        description: 'payout',
+        counterpartyUserId: null,
+      },
+    ]);
+
+    expect(drafts).toEqual([
+      {
+        account: 'owner_payable',
+        direction: 'debit',
+        amountPaise: 900,
+        description: 'payout',
+        counterpartyUserId: VALET,
+      },
+      {
+        account: 'settlement_clearing',
+        direction: 'credit',
+        amountPaise: 900,
+        description: 'payout',
+      },
+    ]);
+  });
+
+  it('refuses an account the chart does not have, instead of posting it', () => {
+    expect(() =>
+      draftsFromLedgerRows([
+        {
+          account: 'cash',
+          direction: 'debit',
+          amountPaise: 1,
+          description: 'x',
+          counterpartyUserId: null,
+        },
+      ]),
+    ).toThrow();
   });
 });
 

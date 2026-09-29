@@ -67,9 +67,12 @@ export async function reconcilePayouts(
     .select({ id: payouts.id, razorpayPayoutId: payouts.razorpayPayoutId })
     .from(payouts)
     .where(and(eq(payouts.status, 'processing'), isNotNull(payouts.razorpayPayoutId)));
-  for (const payout of inFlight) {
-    await attempt({ payoutId: payout.id }, () =>
-      reconcilePayout(deps, opts.payouts, payout.id, payout.razorpayPayoutId ?? ''),
+  for (const { id, razorpayPayoutId } of inFlight) {
+    // The WHERE excludes NULL; this narrows it for the type, and never lets a
+    // blank id reach `GET /payouts/` (the list endpoint).
+    if (razorpayPayoutId === null) continue;
+    await attempt({ payoutId: id }, () =>
+      reconcilePayout(deps, opts.payouts, id, razorpayPayoutId),
     );
   }
 
@@ -159,8 +162,10 @@ async function reconcileTransfer(
   payment: UnclearedCapture,
   now: Date,
 ): Promise<void> {
-  const expectedPaise = payment.expectedPaise ?? 0;
-  const found = await gateway.forPayment(payment.razorpayPaymentId ?? '');
+  // Both are excluded when NULL by `unclearedCaptures`; narrowed here for the type.
+  if (payment.razorpayPaymentId === null || payment.expectedPaise === null) return;
+  const expectedPaise = payment.expectedPaise;
+  const found = await gateway.forPayment(payment.razorpayPaymentId);
   if (found.some((t) => t.status === 'created' || t.status === 'pending')) {
     const age = now.getTime() - (payment.capturedAt?.getTime() ?? now.getTime());
     if (age < TRANSFER_OVERDUE_MS) return; // Razorpay has not got to it yet

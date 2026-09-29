@@ -208,7 +208,7 @@ describe('ledger balance', () => {
 
     // And the owner-level total is the sum of the two, positive because
     // owner_payable is a liability we owe.
-    expect(await ownerBalance.forOwner(ownerId)).toBe(withoutSurge + withSurge);
+    expect(await ownerBalance.balance(ownerId)).toBe(withoutSurge + withSurge);
   });
 
   it('nets the owner to nothing when a cancellation reverses the booking', async () => {

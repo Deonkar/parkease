@@ -171,6 +171,36 @@ describe('/me bank details and payouts over HTTP (task 16a)', () => {
       ]);
     });
 
+    it('leaves a payout already handed to RazorpayX alone', async () => {
+      // `processing` money may already be moving; reversing it would owe it twice.
+      await put();
+      const posting = payoutEntries(toPaise(20_000), valetId, new Date());
+      const txnId = crypto.randomUUID();
+      await withTransaction(h.db, async (tx) => {
+        await new LedgerService().post(tx, { txnId, entries: posting.entries });
+      });
+      await h.sql`INSERT INTO payouts (user_id, period, gross_paise, net_paise, txn_id, status,
+                                       razorpayx_fund_account_id)
+                  VALUES (${valetId}, '2026-W40', 20000, 20000, ${txnId}, 'processing',
+                          'fa_QK7l1nFirst')`;
+      razorpayx.createFundAccount.mockResolvedValue('fa_QK7l1nSecond');
+
+      expect((await put({ ...BODY, accountNumber: '60200987654321' })).status).toBe(200);
+
+      const [payout] = await h.sql<{ status: string }[]>`SELECT status FROM payouts`;
+      expect(payout?.status).toBe('processing');
+      const [owed] = await h.sql<{ net: string }[]>`
+        SELECT coalesce(sum(CASE direction WHEN 'credit' THEN amount_paise ELSE -amount_paise END), 0)::text AS net
+        FROM ledger_entries WHERE account = 'owner_payable' AND counterparty_user_id = ${valetId}`;
+      expect(owed?.net).toBe('-20000');
+    });
+
+    it.each(['owner', 'washer'])('is open to a %s too', async (role) => {
+      as(await seedUser(h, role), role);
+      expect((await put()).status).toBe(200);
+      expect((await get('/api/v1/me/payouts')).status).toBe(200);
+    });
+
     it('writes nothing and answers 503 when RazorpayX is unreachable', async () => {
       razorpayx.createFundAccount.mockRejectedValue(new RazorpayXError(null, 'network down'));
 

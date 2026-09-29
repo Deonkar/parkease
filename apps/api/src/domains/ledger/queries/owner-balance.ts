@@ -121,16 +121,9 @@ export class OwnerBalanceQuery {
   constructor(@Inject(DB) private readonly db: Database) {}
 
   /**
-   * Signed paise: positive means we still owe the owner.
+   * Signed paise, positive meaning we still owe the owner. `owner_payable` is a
+   * liability, so the sign comes from the chart, not from a subtraction.
    *
-   * `owner_payable` is a liability, so the sign comes from the chart rather than
-   * from a subtraction written the way it happened to read at the call site.
-   */
-  async forOwner(ownerId: string): Promise<number> {
-    return this.balance(ownerId);
-  }
-
-  /**
    * What we still owe: every owner-side row, settlements INCLUDED. A Route
    * transfer at capture discharges the booking's credit, so this is what Route
    * has not paid yet (pending checkouts, reversals) — not what was earned.

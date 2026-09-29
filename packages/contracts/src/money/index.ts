@@ -80,6 +80,7 @@ export { computeWashFee, type WashFee } from './carwash-fee.js';
 export { washEntries } from './ledger-entries.js';
 
 export {
+  draftsFromLedgerRows,
   type PayoutPosting,
   payoutEntries,
   routeDischargeEntries,

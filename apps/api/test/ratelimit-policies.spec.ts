@@ -17,6 +17,19 @@ describe('rate limit policies', () => {
     expect(refreshPolicy?.failClosed).toBe(true);
   });
 
+  it('the /me payout routes resolve to their own policies, never the default (task 16a)', () => {
+    const put = resolvePolicy('PUT', '/api/v1/me/bank-details');
+    expect(put).toMatchObject({ limit: 5, windowSeconds: 60, keyBy: 'user' });
+
+    for (const [method, url] of [
+      ['GET', '/api/v1/me/bank-details'],
+      ['GET', '/api/v1/me/payouts'],
+      ['GET', '/api/v1/me/payouts/0192f1c0-0000-7000-8000-000000000001'],
+    ] as const) {
+      expect(resolvePolicy(method, url)).not.toBe(DEFAULT_POLICY);
+    }
+  });
+
   it('DEFAULT_POLICY is the strictest (10 per 60s)', () => {
     expect(DEFAULT_POLICY.limit).toBe(10);
     expect(DEFAULT_POLICY.windowSeconds).toBe(60);

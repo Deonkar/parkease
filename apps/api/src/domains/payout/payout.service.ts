@@ -1,6 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { ledgerAccountSchema, ledgerDirectionSchema } from '@parkease/contracts/enums';
-import type { LedgerEntryDraft } from '@parkease/contracts/money';
+import { draftsFromLedgerRows, type LedgerEntryDraft } from '@parkease/contracts/money';
 import { bankDetails, ledgerEntries, payouts } from '@parkease/db/schema';
 import { and, desc, eq, inArray, lt } from 'drizzle-orm';
 
@@ -80,19 +79,7 @@ export class PayoutService {
 
     return cancelled.map((payout) => ({
       id: payout.id,
-      entries: rows
-        .filter((row) => row.txnId === payout.txnId)
-        .map((row) => ({
-          // Parsed, not cast: the CHECK constraint guarantees it today, and a
-          // widened CHECK must fail here rather than post an unknown account.
-          account: ledgerAccountSchema.parse(row.account),
-          direction: ledgerDirectionSchema.parse(row.direction),
-          amountPaise: row.amountPaise,
-          description: row.description,
-          ...(row.counterpartyUserId === null
-            ? {}
-            : { counterpartyUserId: row.counterpartyUserId }),
-        })),
+      entries: draftsFromLedgerRows(rows.filter((row) => row.txnId === payout.txnId)),
     }));
   }
 

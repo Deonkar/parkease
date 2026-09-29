@@ -1,4 +1,4 @@
-import { computeWashFee, washEntries } from '@parkease/contracts/money';
+import { computeWashFee, routeDischargeEntries, washEntries } from '@parkease/contracts/money';
 import { toPaise, toRate } from '@parkease/contracts/primitives';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
@@ -74,6 +74,32 @@ describe('owner dashboard HTTP', () => {
     expect(dashboard.data.owedPaise).toBe(earnings.data.netPaise);
     expect(earnings.data.bookings).toBe(2);
     expect(dashboard.data.statement).toHaveLength(2);
+  });
+
+  it('drops "Owed to you" to zero once Route pays, and leaves earnings alone (ADR-030)', async () => {
+    const spaceId = await seedSpace(h, { lat: 12.9345, lng: 77.6266, carSlots: 1 });
+    const booking = await bookConfirmed(spaceId, 2);
+    const before = (await get('/owner/earnings?period=month')).body as {
+      data: { netPaise: number };
+    };
+
+    // Exactly what capture posts: the discharge, stamped with the booking's driver.
+    await withTransaction(h.db, async (tx) => {
+      await stack.ledger.post(tx, {
+        bookingId: booking.id,
+        entries: routeDischargeEntries(booking.ownerEarningsPaise, booking.driverId),
+      });
+    });
+
+    const dashboard = (await get('/owner/dashboard')).body as {
+      data: { month: { netPaise: number }; owedPaise: number };
+    };
+    const after = (await get('/owner/earnings?period=month')).body as {
+      data: { netPaise: number };
+    };
+    expect(dashboard.data.owedPaise).toBe(0);
+    expect(dashboard.data.month.netPaise).toBe(before.data.netPaise);
+    expect(after.data.netPaise).toBe(before.data.netPaise);
   });
 
   it('keeps a wash on a recent booking out of the dashboard and the statement (C1)', async () => {
