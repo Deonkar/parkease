@@ -108,6 +108,30 @@ describe('OrderService', () => {
     expect(client.createOrder.mock.calls[0]?.[0].transfers).toEqual([]);
   });
 
+  it('reports the transfer it attached, so capture can discharge exactly that (ADR-030)', async () => {
+    const service = new OrderService(asClient(clientDouble()));
+
+    const paid = await service.createForBooking(BOOKING, LINKED_ACCOUNT);
+    const free = await service.createForBooking(
+      { ...BOOKING, ownerEarningsPaise: 0 },
+      LINKED_ACCOUNT,
+    );
+    const wash = await service.createForWash(
+      {
+        id: BOOKING.id,
+        bookingId: BOOKING.id,
+        driverUserId: BOOKING.driverId,
+        driverTotalPaise: 9702,
+        washerEarningsPaise: 3192,
+      },
+      LINKED_ACCOUNT,
+    );
+
+    expect(paid.routeTransferPaise).toBe(5100);
+    expect(free.routeTransferPaise).toBeNull();
+    expect(wash.routeTransferPaise).toBe(3192);
+  });
+
   it('never sends a fractional amount to the gateway', async () => {
     const client = clientDouble();
     await new OrderService(asClient(client)).createForBooking(BOOKING, LINKED_ACCOUNT);

@@ -116,6 +116,7 @@ export class CreateWashOrderCommand {
         expectedTotalPaise: fee.driverTotalPaise,
         purpose: 'carwash',
         washJobId: job.id,
+        routeTransferPaise: order.routeTransferPaise,
       });
     });
 

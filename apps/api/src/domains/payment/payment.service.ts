@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { PaymentStatus } from '@parkease/contracts/enums';
-import { bookings, linkedAccounts, payments, refunds, spaces } from '@parkease/db/schema';
+import { bookings, linkedAccounts, payments, refunds, spaces, washJobs } from '@parkease/db/schema';
 import { and, desc, eq } from 'drizzle-orm';
 
 import { DB, type Database } from '../../platform/db/db.module.js';
@@ -14,6 +14,8 @@ export interface InsertPaymentInput {
   /** Omitted means a parking booking, which is what every task-9 caller is. */
   readonly purpose?: 'booking' | 'carwash';
   readonly washJobId?: string;
+  /** The Route transfer attached to the order; null when it carried none. */
+  readonly routeTransferPaise: number | null;
 }
 
 /**
@@ -78,10 +80,26 @@ export class PaymentService {
         // its job id.
         purpose: input.purpose ?? 'booking',
         washJobId: input.washJobId ?? null,
+        routeTransferPaise: input.routeTransferPaise,
       })
       .returning();
 
     return row;
+  }
+
+  /** Who a wash's Route transfer paid, for the discharge at capture. */
+  async washerForJob(tx: TxHandle, washJobId: string): Promise<string> {
+    const [row] = await tx
+      .select({ washerUserId: washJobs.washerUserId })
+      .from(washJobs)
+      .where(eq(washJobs.id, washJobId));
+    // A captured wash payment for a job with no partner is a job nobody could
+    // have sent a transfer to; `wash_jobs_assignee_presence_check` should have
+    // made it unreachable, so it fails loudly rather than posting to nobody.
+    if (row?.washerUserId == null) {
+      throw new Error(`Wash job ${washJobId} has no partner to discharge a transfer against`);
+    }
+    return row.washerUserId;
   }
 
   async findByOrderId(razorpayOrderId: string) {

@@ -3,7 +3,14 @@ import { createHmac } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { type BookingStack, buildBookingStack, windowFromNow } from './booking-harness.js';
-import { type Harness, seedSpace, startHarness, stopHarness, truncateSpaces } from './harness.js';
+import {
+  type Harness,
+  seedSpace,
+  seedUser,
+  startHarness,
+  stopHarness,
+  truncateSpaces,
+} from './harness.js';
 import { actingAs, type HttpApp, startHttpApp, stopHttpApp } from './http-harness.js';
 
 const WEBHOOK_URL = '/api/v1/webhooks/razorpay';
@@ -501,6 +508,168 @@ describe('razorpay webhook over HTTP', () => {
         SELECT type FROM outbox_messages WHERE type = 'payment.orphan-capture'
       `;
       expect(outbox).toHaveLength(1);
+    });
+  });
+
+  describe('the Route discharge at capture (task 16a, ADR-030)', () => {
+    const ok = (totalPaise: number) => ({
+      id: ORDER_ID,
+      amountPaise: totalPaise,
+      amountPaidPaise: totalPaise,
+      currency: 'INR',
+      status: 'paid',
+    });
+
+    /** What the owner is still owed, summed the way OwnerBalanceQuery's owner side does. */
+    const ownerOwed = async () => {
+      const [row] = await h.sql<{ owed: string }[]>`
+        SELECT coalesce(sum(CASE WHEN le.direction = 'credit' THEN le.amount_paise
+                                 ELSE -le.amount_paise END), 0)::text AS owed
+        FROM ledger_entries le
+        JOIN bookings b ON b.id = le.booking_id
+        JOIN spaces s ON s.id = b.space_id
+        WHERE le.account = 'owner_payable' AND le.counterparty_user_id = b.driver_id
+          AND s.owner_id = ${h.ownerId}
+      `;
+      return Number(row?.owed);
+    };
+
+    async function bookWithTransfer(transferPaise: number | null) {
+      const spaceId = await seedSpace(h, { lat: 12.9345, lng: 77.6266, carSlots: 1 });
+      const window = windowFromNow(2, 2);
+      const { booking } = await stack.create.execute({
+        driverId: h.driverId,
+        spaceId,
+        vehicleType: 'car',
+        durationType: 'hourly',
+        startsAt: window.startsAt,
+        endsAt: window.endsAt,
+        vehicleNumber: 'KA-01-AB-1234',
+      });
+      await h.sql`
+        INSERT INTO payments (booking_id, user_id, razorpay_order_id, expected_total_paise,
+                              status, route_transfer_paise)
+        VALUES (${booking.id}, ${h.driverId}, ${ORDER_ID}, ${booking.totalPaise}, 'created',
+                ${transferPaise})
+      `;
+      return booking;
+    }
+
+    const capture = async (totalPaise: number, eventId: string) => {
+      const body = capturedBody(totalPaise);
+      return post(body, { 'x-razorpay-signature': sign(body), 'x-razorpay-event-id': eventId });
+    };
+
+    it('discharges owner_payable into settlement_clearing, so the owner is owed nothing', async () => {
+      const booking = await bookWithTransfer(null);
+      await h.sql`UPDATE payments SET route_transfer_paise = ${booking.ownerEarningsPaise}
+                  WHERE booking_id = ${booking.id}`;
+      expect(await ownerOwed()).toBe(booking.ownerEarningsPaise);
+      razorpay.fetchOrder.mockResolvedValue(ok(booking.totalPaise));
+
+      expect((await capture(booking.totalPaise, 'evt_discharge')).status).toBe(200);
+
+      const rows = await h.sql<
+        {
+          account: string;
+          direction: string;
+          amount: string;
+          cp: string | null;
+          pay: string | null;
+        }[]
+      >`
+        SELECT account, direction, amount_paise::text AS amount,
+               counterparty_user_id AS cp, payment_id AS pay
+        FROM ledger_entries
+        WHERE txn_id IN (SELECT txn_id FROM ledger_entries WHERE account = 'settlement_clearing')
+        ORDER BY account
+      `;
+      const [payment] = await h.sql<{ id: string }[]>`SELECT id FROM payments`;
+      expect(rows).toEqual([
+        {
+          account: 'owner_payable',
+          direction: 'debit',
+          amount: String(booking.ownerEarningsPaise),
+          // The driver, as every owner-side row is stamped — or the owner-side
+          // predicate would not see the discharge at all.
+          cp: h.driverId,
+          pay: payment?.id,
+        },
+        {
+          account: 'settlement_clearing',
+          direction: 'credit',
+          amount: String(booking.ownerEarningsPaise),
+          cp: null,
+          pay: payment?.id,
+        },
+      ]);
+      expect(await ownerOwed()).toBe(0);
+    });
+
+    it('posts the discharge once across redeliveries with different event ids', async () => {
+      const booking = await bookWithTransfer(null);
+      await h.sql`UPDATE payments SET route_transfer_paise = ${booking.ownerEarningsPaise}
+                  WHERE booking_id = ${booking.id}`;
+      razorpay.fetchOrder.mockResolvedValue(ok(booking.totalPaise));
+
+      await capture(booking.totalPaise, 'evt_d1');
+      await capture(booking.totalPaise, 'evt_d2');
+
+      const [row] = await h.sql<{ n: string }[]>`
+        SELECT count(*)::text AS n FROM ledger_entries WHERE account = 'settlement_clearing'
+      `;
+      expect(row?.n).toBe('1');
+    });
+
+    it('posts nothing for an order that carried no transfer', async () => {
+      const booking = await bookWithTransfer(null);
+      razorpay.fetchOrder.mockResolvedValue(ok(booking.totalPaise));
+
+      await capture(booking.totalPaise, 'evt_no_transfer');
+
+      const [row] = await h.sql<{ n: string }[]>`
+        SELECT count(*)::text AS n FROM ledger_entries WHERE account = 'settlement_clearing'
+      `;
+      expect(row?.n).toBe('0');
+      expect(await ownerOwed()).toBe(booking.ownerEarningsPaise);
+    });
+
+    it('discharges a wash against the washer, under the parking booking', async () => {
+      const booking = await bookWithTransfer(null);
+      await h.sql`DELETE FROM payments`;
+      const washerId = await seedUser(h, 'washer');
+      const [job] = await h.sql<{ id: string }[]>`
+        INSERT INTO wash_jobs (booking_id, driver_user_id, washer_user_id, status, service_name,
+                               vehicle_type, price_paise, commission_rate, txn_id, space_location)
+        SELECT ${booking.id}, ${h.driverId}, ${washerId}, 'accepted', 'basic_exterior', 'car', 39900,
+               0.2, gen_random_uuid(), s.location
+        FROM spaces s JOIN bookings b ON b.space_id = s.id WHERE b.id = ${booking.id}
+        RETURNING id
+      `;
+      await h.sql`
+        INSERT INTO payments (booking_id, user_id, razorpay_order_id, expected_total_paise,
+                              status, purpose, wash_job_id, route_transfer_paise)
+        VALUES (${booking.id}, ${h.driverId}, ${ORDER_ID}, 50000, 'created', 'carwash',
+                ${job?.id ?? ''}, 31920)
+      `;
+      razorpay.fetchOrder.mockResolvedValue(ok(50_000));
+
+      await capture(50_000, 'evt_wash_1');
+      await capture(50_000, 'evt_wash_2');
+
+      const rows = await h.sql<
+        { account: string; direction: string; amount: string; cp: string | null }[]
+      >`
+        SELECT account, direction, amount_paise::text AS amount, counterparty_user_id AS cp
+        FROM ledger_entries
+        WHERE txn_id IN (SELECT txn_id FROM ledger_entries WHERE account = 'settlement_clearing')
+          AND booking_id = ${booking.id}
+        ORDER BY account
+      `;
+      expect(rows).toEqual([
+        { account: 'owner_payable', direction: 'debit', amount: '31920', cp: washerId },
+        { account: 'settlement_clearing', direction: 'credit', amount: '31920', cp: null },
+      ]);
     });
   });
 
