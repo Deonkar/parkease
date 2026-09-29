@@ -38,6 +38,12 @@ export const ACCOUNTS = {
   [LedgerAccount.PLATFORM_REVENUE]: { normalBalance: 'credit', kind: 'revenue' },
   [LedgerAccount.GATEWAY_FEES]: { normalBalance: 'debit', kind: 'expense' },
   [LedgerAccount.PROMO_EXPENSE]: { normalBalance: 'debit', kind: 'expense' },
+  /**
+   * Money in transit (task 16). Credited when it leaves us — a Route transfer
+   * at capture, a RazorpayX payout — and debited when the rail confirms it.
+   * A balance that survives past T+3 is a reconciliation mismatch.
+   */
+  [LedgerAccount.SETTLEMENT_CLEARING]: { normalBalance: 'credit', kind: 'liability' },
 } as const satisfies Record<LedgerAccount, AccountDefinition>;
 
 /**

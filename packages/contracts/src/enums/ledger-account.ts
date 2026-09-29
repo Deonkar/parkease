@@ -10,6 +10,7 @@ export const LEDGER_ACCOUNT_VALUES = [
   'gateway_fees',
   'refunds_payable',
   'promo_expense',
+  'settlement_clearing',
 ] as const;
 
 export const ledgerAccountSchema = z.enum(LEDGER_ACCOUNT_VALUES);
@@ -25,6 +26,7 @@ export const LedgerAccount = {
   GATEWAY_FEES: 'gateway_fees',
   REFUNDS_PAYABLE: 'refunds_payable',
   PROMO_EXPENSE: 'promo_expense',
+  SETTLEMENT_CLEARING: 'settlement_clearing',
 } as const satisfies Record<string, LedgerAccount>;
 
 type _MissingFromObject = Exclude<

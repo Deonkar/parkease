@@ -180,6 +180,8 @@ describe('ledger accounts match ADR-008 chart of accounts', () => {
       'gateway_fees',
       'refunds_payable',
       'promo_expense',
+      // ADR-030 (task 16): money in transit between "we owe it" and "it arrived".
+      'settlement_clearing',
     ]);
     expect(new Set(LEDGER_ACCOUNT_VALUES)).toEqual(expected);
   });
