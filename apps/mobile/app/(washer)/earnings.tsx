@@ -13,6 +13,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { PeriodTabs } from '@/features/shared/components/PeriodTabs';
 import { ReadableColumn } from '@/features/shared/components/ReadableColumn';
 import { RefreshNotice } from '@/features/shared/components/RefreshNotice';
+import { GetPaidRow } from '@/features/shared/get-paid/entry';
 import { resolveScreenState } from '@/features/shared/screen-state';
 import { loadFailureCopy } from '@/features/washer/api/errors';
 import { EarningsLine } from '@/features/washer/components/EarningsLine';
@@ -124,6 +125,7 @@ export default function WasherEarningsScreen() {
               ListHeaderComponent={
                 <View style={styles.listHeader}>
                   <EarningsSummary period={view.period} summary={view.summary} />
+                  <GetPaidRow href="/(washer)/get-paid" caption="Paid for each wash by Razorpay" />
                   {view.lines.length > 0 ? (
                     <Text style={styles.section} accessibilityRole="header">
                       COMPLETED WASHES

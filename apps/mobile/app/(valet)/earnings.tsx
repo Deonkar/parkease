@@ -3,6 +3,7 @@ import { ErrorState, Skeleton } from '@parkease/ui-native';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { GetPaidRow } from '@/features/shared/get-paid/entry';
 import { resolveScreenState } from '@/features/shared/screen-state';
 import { EarningsSummary } from '@/features/valet/components/EarningsSummary';
 import { useValetEarnings } from '@/features/valet/hooks/useValetQueries';
@@ -28,6 +29,7 @@ export default function ValetEarningsScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
+        <GetPaidRow href="/(valet)/get-paid" caption="Paid every Monday to your bank" />
         {screen === 'loading' ? (
           <View style={styles.skeletons} testID="earnings-skeleton">
             <Skeleton height={150} width="100%" />

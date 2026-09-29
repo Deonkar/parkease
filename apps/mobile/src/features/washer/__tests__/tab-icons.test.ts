@@ -17,9 +17,9 @@ const source = readFileSync(join(process.cwd(), 'app', '(washer)', '_layout.tsx'
 const screens = [...source.matchAll(/<Tabs\.Screen\b[\s\S]*?\/>/g)].map((m) => m[0]);
 
 describe('washer tab bar', () => {
-  it('declares the four bar tabs plus the hidden profile', () => {
+  it('declares the four bar tabs plus the hidden profile and get-paid', () => {
     const names = screens.map((s) => /name="([^"]+)"/.exec(s)?.[1]);
-    expect(names).toEqual(['offers', 'active', 'menu', 'earnings', 'profile']);
+    expect(names).toEqual(['offers', 'active', 'menu', 'earnings', 'profile', 'get-paid']);
   });
 
   it.each(['offers', 'active', 'menu', 'earnings'])(

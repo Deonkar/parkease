@@ -1,10 +1,6 @@
-import { EmptyState } from '@parkease/ui-native';
+import { RouteOnboardingScreen } from '@/features/shared/get-paid/RouteOnboardingScreen';
 
-export default function PayoutsScreen() {
-  return (
-    <EmptyState
-      title="No payouts yet"
-      body="Your payout history, bank details, and settlement schedule will appear here."
-    />
-  );
+/** Owner "Get paid": Route onboarding and status (task 16b). */
+export default function OwnerGetPaidScreen() {
+  return <RouteOnboardingScreen payee="owner" />;
 }
