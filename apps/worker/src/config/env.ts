@@ -8,6 +8,12 @@ const envSchema = z.object({
   // the webhook secret: nothing here verifies a webhook (R-ENV-03).
   RAZORPAY_KEY_ID: z.string().min(1),
   RAZORPAY_KEY_SECRET: z.string().min(1),
+  /**
+   * The RazorpayX current account payouts are drawn from (task 16a). Optional:
+   * absent means payouts are off — the weekly run logs and pays nobody — so a
+   * dev machine without a RazorpayX account still boots.
+   */
+  RAZORPAYX_ACCOUNT_NUMBER: z.string().min(1).optional(),
 });
 
 export type WorkerEnv = z.infer<typeof envSchema>;

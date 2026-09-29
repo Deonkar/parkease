@@ -38,7 +38,8 @@ export const ledgerEntries = pgTable(
       'ledger_entries_account_check',
       sql`${t.account} IN (
         'driver_receivable','owner_payable','platform_revenue','gst_payable',
-        'tcs_payable','tds_payable','gateway_fees','refunds_payable','promo_expense'
+        'tcs_payable','tds_payable','gateway_fees','refunds_payable','promo_expense',
+        'settlement_clearing'
       )`,
     ),
     check('ledger_entries_currency_check', sql`${t.currency} = 'INR'`),

@@ -65,6 +65,7 @@ export const LEDGER_ACCOUNT_VALUES = [
   'gateway_fees',
   'refunds_payable',
   'promo_expense',
+  'settlement_clearing',
 ] as const;
 
 export const LEDGER_DIRECTION_VALUES = ['debit', 'credit'] as const;
@@ -75,6 +76,7 @@ export const PAYOUT_STATUS_VALUES = [
   'paid',
   'failed',
   'reversed',
+  'cancelled',
 ] as const;
 
 export const VALET_JOB_STATUS_VALUES = [

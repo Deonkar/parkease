@@ -63,6 +63,7 @@ export class CreateOrderCommand {
         // than from the order we just got back. Comparing the capture against a
         // number the gateway supplied would compare the gateway with itself.
         expectedTotalPaise: booking.totalPaise,
+        routeTransferPaise: order.routeTransferPaise,
       });
     });
 

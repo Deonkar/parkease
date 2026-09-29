@@ -34,6 +34,21 @@ export interface OrderableWash {
   readonly washerEarningsPaise: number;
 }
 
+/**
+ * The order, plus the Route transfer it carries. Capture discharges exactly this
+ * amount from `owner_payable` (ADR-030), so it is reported by the code that
+ * attached it rather than re-derived from the fee model at capture.
+ */
+export type OrderWithTransfer = RazorpayOrder & { readonly routeTransferPaise: number | null };
+
+const withTransfer = async (
+  order: Promise<RazorpayOrder>,
+  transfers: readonly RouteTransfer[],
+): Promise<OrderWithTransfer> => ({
+  ...(await order),
+  routeTransferPaise: transfers[0]?.amountPaise ?? null,
+});
+
 @Injectable()
 export class OrderService {
   constructor(@Inject(RAZORPAY) private readonly razorpay: RazorpayClient) {}
@@ -54,7 +69,7 @@ export class OrderService {
   async createForBooking(
     booking: OrderableBooking,
     ownerLinkedAccountId: string,
-  ): Promise<RazorpayOrder> {
+  ): Promise<OrderWithTransfer> {
     const transfers = this.transfersFor(booking, ownerLinkedAccountId);
 
     // Route refuses any payment whose transfers exceed the captured amount.
@@ -67,12 +82,15 @@ export class OrderService {
       throw new TransferExceedsCaptureError(transferredPaise, booking.totalPaise);
     }
 
-    return this.razorpay.createOrder({
-      amountPaise: booking.totalPaise,
-      receipt: booking.id,
-      notes: { bookingId: booking.id, driverId: booking.driverId },
+    return withTransfer(
+      this.razorpay.createOrder({
+        amountPaise: booking.totalPaise,
+        receipt: booking.id,
+        notes: { bookingId: booking.id, driverId: booking.driverId },
+        transfers,
+      }),
       transfers,
-    });
+    );
   }
 
   /**
@@ -89,7 +107,10 @@ export class OrderService {
    * record (ADR-013). This calls an external service, so it is never invoked
    * inside a transaction (R-BE-04).
    */
-  async createForWash(wash: OrderableWash, washerLinkedAccountId: string): Promise<RazorpayOrder> {
+  async createForWash(
+    wash: OrderableWash,
+    washerLinkedAccountId: string,
+  ): Promise<OrderWithTransfer> {
     const transfers: readonly RouteTransfer[] =
       wash.washerEarningsPaise > 0
         ? [
@@ -115,12 +136,15 @@ export class OrderService {
       throw new TransferExceedsCaptureError(transferredPaise, wash.driverTotalPaise);
     }
 
-    return this.razorpay.createOrder({
-      amountPaise: wash.driverTotalPaise,
-      receipt: wash.id,
-      notes: { washJobId: wash.id, bookingId: wash.bookingId, driverId: wash.driverUserId },
+    return withTransfer(
+      this.razorpay.createOrder({
+        amountPaise: wash.driverTotalPaise,
+        receipt: wash.id,
+        notes: { washJobId: wash.id, bookingId: wash.bookingId, driverId: wash.driverUserId },
+        transfers,
+      }),
       transfers,
-    });
+    );
   }
 
   /**

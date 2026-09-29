@@ -55,6 +55,13 @@ export const payments = pgTable(
      */
     purpose: text('purpose').notNull().default('booking'),
     washJobId: uuid('wash_job_id').references(() => washJobs.id),
+    /**
+     * The Route transfer attached to this order, as we asked for it. Capture
+     * posts the `owner_payable` discharge from exactly this number and
+     * reconciliation compares Razorpay's transfer against it. NULL when the
+     * order carried no transfer.
+     */
+    routeTransferPaise: paise('route_transfer_paise'),
     ...timestamps,
   },
   (t) => [
@@ -70,6 +77,10 @@ export const payments = pgTable(
       .on(t.washJobId)
       .where(sql`${t.washJobId} IS NOT NULL`),
     check('payments_purpose_check', sql`${t.purpose} IN ('booking','carwash')`),
+    check(
+      'payments_route_transfer_paise_check',
+      sql`${t.routeTransferPaise} IS NULL OR ${t.routeTransferPaise} > 0`,
+    ),
     // The two columns cannot disagree. A 'carwash' payment with no job is an
     // order nobody can reconcile; a 'booking' payment carrying a job id is a
     // mislabelled row every purpose-scoped query would then answer wrongly.

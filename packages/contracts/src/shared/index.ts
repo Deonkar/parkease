@@ -30,3 +30,14 @@ export {
   uploadSignatureResponseSchema,
   type UploadSignatureResponse,
 } from './upload-signature.js';
+export {
+  updateBankDetailsSchema,
+  type UpdateBankDetails,
+  bankDetailsViewSchema,
+  type BankDetailsView,
+  payoutViewSchema,
+  type PayoutView,
+  payoutListQuerySchema,
+  type PayoutListQuery,
+  payoutPageSchema,
+} from './payouts.js';

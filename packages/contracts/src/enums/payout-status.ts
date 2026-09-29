@@ -6,6 +6,7 @@ export const PAYOUT_STATUS_VALUES = [
   'paid',
   'failed',
   'reversed',
+  'cancelled',
 ] as const;
 
 export const payoutStatusSchema = z.enum(PAYOUT_STATUS_VALUES);
@@ -17,6 +18,7 @@ export const PayoutStatus = {
   PAID: 'paid',
   FAILED: 'failed',
   REVERSED: 'reversed',
+  CANCELLED: 'cancelled',
 } as const satisfies Record<string, PayoutStatus>;
 
 type _MissingFromObject = Exclude<PayoutStatus, (typeof PayoutStatus)[keyof typeof PayoutStatus]>;

@@ -66,6 +66,8 @@ describe('worker schedule and handler coverage', () => {
       // from the duration on the winning partner's own menu row.
       CARWASH_ACCEPT_TIMEOUT_JOB,
       CARWASH_COMPLETE_REMINDER_JOB,
+      // Task 16a: committed by the weekly run with each payout row.
+      'payout.send',
     ]);
     const scheduledSet = new Set(scheduleNames);
 

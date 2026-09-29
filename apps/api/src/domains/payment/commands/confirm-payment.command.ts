@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { routeDischargeEntries } from '@parkease/contracts/money';
 
 import { DB, type Database } from '../../../platform/db/db.module.js';
 import { withTransaction } from '../../../platform/db/transaction.js';
@@ -7,6 +8,7 @@ import { logger } from '../../../platform/observability/logger.js';
 import { OutboxService } from '../../../platform/outbox/outbox.service.js';
 import { BookingService } from '../../booking/booking.service.js';
 import { BookingEvent, assertTransition } from '../../booking/lifecycle.js';
+import { LedgerService } from '../../ledger/ledger.service.js';
 import { AmountMismatchError } from '../errors.js';
 import { PaymentService } from '../payment.service.js';
 import { RAZORPAY, type RazorpayClient } from '../razorpay.client.js';
@@ -37,6 +39,7 @@ export class ConfirmPaymentCommand {
     private readonly bookings: BookingService,
     private readonly outbox: OutboxService,
     private readonly audit: AuditService,
+    private readonly ledger: LedgerService,
   ) {}
 
   /**
@@ -98,6 +101,19 @@ export class ConfirmPaymentCommand {
             method: input.method,
             at: new Date(),
           });
+
+          // Route paid the partner as this captured (ADR-030). Inside the same
+          // status guard as the capture, so a redelivery cannot post it twice.
+          if (payment.routeTransferPaise !== null) {
+            await this.ledger.post(tx, {
+              bookingId: payment.bookingId,
+              paymentId: payment.id,
+              entries: routeDischargeEntries(
+                payment.routeTransferPaise,
+                await this.payments.washerForJob(tx, payment.washJobId),
+              ),
+            });
+          }
         }
 
         return { outcome: 'carwash_captured', washJobId: payment.washJobId };
@@ -138,15 +154,21 @@ export class ConfirmPaymentCommand {
 
       await this.bookings.markStatus(tx, booking.id, nextStatus);
 
-      // No ledger entry. The receivable and its three credits were posted when
-      // the booking was created (task 8), and the ledger records obligations
-      // between parties rather than cash: capture does not change who owes whom,
-      // it changes where the money is sitting. The cash side — gateway fees and
-      // the settlement clearing entries — is posted by task 16's reconciliation
-      // job from Route's settlement reports.
+      // Route moved the owner's share as this captured, so we no longer owe it
+      // (ADR-030): owner_payable is discharged into settlement_clearing, which
+      // the daily reconciliation clears once Razorpay reports the transfer.
+      // Stamped with the DRIVER, like every owner-side row, so the owner-side
+      // predicate sees it. The receivable itself was posted at booking creation.
       //
-      // This is also why redelivery is safe to the paisa: there is nothing here
-      // to post twice.
+      // Redelivery is safe: a second capture finds the booking `confirmed` and
+      // returns `replayed` above, before reaching this.
+      if (payment.routeTransferPaise !== null) {
+        await this.ledger.post(tx, {
+          bookingId: booking.id,
+          paymentId: payment.id,
+          entries: routeDischargeEntries(payment.routeTransferPaise, booking.driverId),
+        });
+      }
 
       await this.outbox.enqueue(
         tx,

@@ -905,27 +905,6 @@ collected in v1 (T10-D2).
   `business_name` and makes `display_name NOT NULL`. A `PATCH /me` for an avatar is its own row
   if still wanted.
 
-### S-46 — `reversedPaise` will mislabel payouts once task 16 debits `owner_payable`
-
-- **Status:** `open`
-- **Found in:** task 14 task-3 / task-9 (earnings summary and screen)
-- **Surface:** api, contracts, mobile
-
-`washerEarningsSummarySchema.reversedPaise` (`packages/contracts/src/washer/job-view.ts`) is
-documented as "what cancellations clawed back". The earnings query counts every debit to the
-partner's `owner_payable` in the period. Today the only such debit is a cancellation reversal.
-Task 16's payouts will also debit `owner_payable`, and from then on a payout counts as
-`reversedPaise`. `EarningsSummary.tsx` would then tell a partner "After ₹X taken back for
-cancelled washes" about money they were paid.
-
-- **Why deferred:** payouts do not exist yet, so the figure is correct today. Splitting it now
-  would mean guessing the payout's ledger shape before task 16 designs it.
-- **Done means:** before task 16 ships, the earnings query separates payout debits from
-  cancellation reversals, for example by `txn` kind or account pair. The contract carries a
-  separate payouts figure (or excludes payouts from `reversedPaise`), and an integration test
-  posts a payout and a cancellation in the same period and checks that each lands in its own
-  figure.
-
 ### S-47 — Service prices: the DB CHECK is looser than the contract bound
 
 - **Status:** `open`
@@ -1753,24 +1732,6 @@ was chosen by the implementer, not specified anywhere.
 - **Why deferred:** needs a product decision, not code.
 - **Done means:** product confirms or changes the limit, and the policy table cites the decision.
 
-### S-92 — "Owed to you" includes unpaid checkouts; task 16 must not pay out from it as-is
-
-- **Status:** `open`
-- **Found in:** task 15 final review
-- **Surface:** api · money
-
-A booking posts its `owner_payable` credit at creation (the receivable), before the driver pays.
-For the checkout window, "Owed to you" and the today/month nets include money not yet collected,
-while the statement correctly omits `pending_payment` bookings; expiry reverses it. The figure
-self-corrects, but a payout computed from all-time `owner_payable` movement at the wrong instant
-would pay the owner for an abandoned checkout. Separately, if the balance ever goes negative
-(reversals exceeding credits), the card shows "−₹X" under copy written for money owed _to_ the owner.
-
-- **Why deferred:** display-only today, and the payout rule is task 16's decision (ADR-008 keeps the
-  ledger as the source; what counts as payable is a payout-policy question).
-- **Done means:** task 16's payout balance excludes receivables not yet captured (or pays only after
-  capture), with a test; the dashboard card's copy covers a negative balance.
-
 ### S-93 — A confirmed booking past its start, not yet checked in, is in neither booking group
 
 - **Status:** `open`
@@ -1799,3 +1760,257 @@ under the 48dp `touchTarget` token.
 - **Why deferred:** both pre-date task 15 (task 6) and sit outside the screens this task changed.
 - **Done means:** the rejection reason uses `errorInk` (or a surface background) with a contrast test,
   and the action button uses `touchTarget`, covered by the owner touch-target audit.
+
+### S-95 — The mobile app never loads Plus Jakarta Sans; every screen renders the system font
+
+- **Status:** `open`
+- **Found in:** launch series (brag) Task 2, building the video type system — 2026-09-28
+- **Surface:** mobile · tokens
+
+The Wayfinder direction (CLAUDE.md, chosen 2026-09-14) names Plus Jakarta Sans as the type, but no file
+in the repo references it: no `useFonts`, no `@expo-google-fonts/plus-jakarta-sans`, no font asset, no
+`fontFamily` token. Web captures of every role render the platform sans. The launch videos set their
+captions in Plus Jakarta Sans (OFL, `brag-output/_series/fonts/`), so the phone screens and the captions
+around them currently use different faces.
+
+- **Why deferred:** a design-system change across every screen, far outside a video task; it needs its
+  own design gate (weights, fallback, bundle size, Android font scaling).
+- **Done means:** `packages/tokens` exports `fontFamily` for the Wayfinder weights, the app loads them
+  before first render (splash held), every `Text` inherits them, and a test fails if a screen renders
+  without the family.
+
+### S-96 — Owner dev fixtures disagree with themselves: "This month" is ₹12,800 on the dashboard, ₹8,925 on Earnings
+
+- **Status:** `open`
+- **Found in:** launch series (brag) video 06 capture — 2026-09-29
+- **Surface:** mobile (dev-mock only)
+
+`apps/mobile/src/features/owner/api/dev-fixtures.ts`: `devDashboard` reports this month as ₹12,800 while
+`devEarnings` for the same month totals ₹8,925 over 58 bookings, and some `devTransactions` rows name a
+space ("Stilt Parking, Palm Meadows") the dev owner never created. Today (₹480, 3 bookings) agrees. The
+real API cannot disagree (both are one ledger query), but the fixtures are how screens are reviewed and
+filmed, and a reviewer comparing the two screens sees a bug that isn't there.
+
+- **Why deferred:** dev-only fixture data; the launch video avoids the Month view instead.
+- **Done means:** the owner fixtures derive the dashboard figures from the same transaction list the
+  earnings fixture serves, with a unit test asserting dashboard month = sum of earnings month.
+
+### S-97 — The owner's scan screen keeps re-posting check-in after a successful scan
+
+- **Status:** `open`
+- **Found in:** launch series (brag) owner video capture — 2026-09-29
+- **Surface:** mobile
+
+`app/(owner)/scan.tsx` disables `onBarcodeScanned` only while the mutation is pending. Once the success card
+is showing, the camera is still live on the same QR, so every `RESCAN_COOLDOWN_MS` the same token posts
+`/owner/bookings/:id/check-in` again: four POSTs in ~9s during capture. The server is idempotent, so no data
+is harmed, but it is wasted traffic, rate-limit budget, and a re-render under the owner's thumb.
+
+- **Why deferred:** found while filming; a behaviour change needs its own test.
+- **Done means:** scanning pauses while a result card is shown (until "Done" or a new-scan action), with a
+  component test asserting one POST per QR presentation.
+
+### S-97 — Task 16b: bank-details and payout-history screens, and the payout date the dashboards promised
+
+- **Status:** `open`
+- **Found in:** task 16 brainstorming, 2026-09-29 (the task was split: 16a backend, 16b mobile)
+- **Surface:** mobile · design gate
+
+16a shipped `PUT/GET /me/bank-details` and `GET /me/payouts[/:id]` for owner, valet and washer. No
+screen calls them yet. Three earlier hand-offs land on the same screens: S-84 (a real next payout
+date beside "Owed to you"), S-78 (the washer's settled balance and next payout date), and the copy
+half of the closed S-92 (the "Owed to you" card must read correctly when the balance is negative,
+which a refund after a Route transfer now produces, S-98).
+
+- **Why deferred:** significant new screens need 2–3 rendered directions first (design gate), and
+  the money backbone was worth merging on its own.
+- **Done means:** bank-details form (masked read, the "changing this cancels pending payouts"
+  warning, 422/503 copy) and payout history (FlashList, skeleton/error/empty) for all three roles,
+  each role's dashboard showing the next payout date from the payout schedule (never estimated
+  client-side), a negative-balance state, tests for every new screen, and the design audit.
+
+### S-98 — A refund after capture does not reverse the Route transfer
+
+- **Status:** `open`
+- **Found in:** task 16a design (ADR-030 consequences)
+- **Surface:** api · money
+
+Route moves the owner's (or washer's) share at capture, and task 16a now records that. A later
+refund reverses the booking's credits in the ledger, but the money already sits in the owner's
+Linked Account. Their balance goes negative and stays there, and nothing asks Razorpay to reverse
+the transfer. The payout job never pays a negative balance, so this cannot overpay. It can, however,
+leave us out of pocket.
+
+- **Why deferred:** needs `transfers.reverse` (an external call, so it goes through the outbox),
+  the reversal's own ledger posting, and a policy for partial refunds. That is a feature, not a fix.
+- **Done means:** a refund after capture enqueues a transfer reversal for the owner's share of the
+  refunded amount, the posting brings the balance back to zero, and an integration test covers a
+  full and a partial refund.
+
+### S-99 — Owners and washers have no rail for money Route cannot carry
+
+- **Status:** `open`
+- **Found in:** task 16a (ADR-030: one rail per payee)
+- **Surface:** worker · money
+
+RazorpayX pays only users without an activated Route Linked Account, so a positive residual owed
+to an owner or washer is never paid. Examples are a promotional credit, an admin adjustment or a
+dispute outcome. Nothing creates such a residual today.
+
+- **Why deferred:** the flows that create them are task 18's (admin adjustments) and task 17's
+  (disputes). Opening the rail now would reintroduce the double-payment risk for no present gain.
+- **Done means:** the payout query pays a Route-onboarded payee only rows the posting marks as
+  "not Route-settled" (for example an adjustment `txn` kind), with a test that a capture next to an
+  adjustment pays only the adjustment.
+
+### S-100 — A hijacked session can redirect next Monday's payout
+
+- **Status:** `open`
+- **Found in:** task 16a security review (finding 3)
+- **Surface:** api · mobile · security
+
+`PUT /me/bank-details` needs only a valid session. The defences are the notification and the
+cancellation of unsent payouts: after-the-fact, and the notification goes to the same device.
+
+- **Why deferred:** step-up auth needs a re-OTP flow in mobile (Firebase re-auth). A holdoff (for
+  example no payout within 72h of a change) is a product policy that delays legitimate payouts, so
+  it is a decision for the user, not a code-review fix.
+- **Done means:** the chosen control (re-OTP on change, a holdoff window, or both) plus a notice on
+  a second channel, with tests.
+
+### S-101 — The idempotency store hashes the bank-details body with unsalted SHA-256
+
+- **Status:** `open`
+- **Found in:** task 16a security review (finding 5)
+- **Surface:** api · platform/idempotency
+
+`idempotency_keys.request_hash` is SHA-256 of the canonical body, and for `PUT /me/bank-details`
+that body holds the account number. If the table leaked, account numbers could be brute-forced
+offline (9–18 digits with a known IFSC and name).
+
+- **Why deferred:** the fix changes a shared service for every route. Existing keys (24h TTL) would
+  mismatch across the deploy, which needs its own small plan.
+- **Done means:** `request_hash` is HMAC-SHA256 under a server secret, with a test that the stored
+  hash is not the plain SHA-256 of the body.
+
+### S-102 — A payout reversed after it was marked paid is never noticed
+
+- **Status:** `open`
+- **Found in:** task 16a silent-failure review (finding 5), plus the `ponytail:` ceiling on daily polling
+- **Surface:** worker · money
+
+Reconcile polls only `processing` payouts. RazorpayX can report `processed` and later `reversed`
+(the bank returned it), and by then the row is `paid` and cleared. The ledger says paid while the
+money came back. Status also lags up to a day because it is polled, not pushed.
+
+- **Why deferred:** the right fix is RazorpayX's `payout.*` webhook (a second verified webhook
+  endpoint), which also removes the lag.
+- **Done means:** a verified `payout.processed/reversed/failed` webhook drives the same transitions
+  as reconcile, a reversal after `paid` fails the payout and flags `payout_failed`, and reconcile
+  stays as the safety net.
+
+### S-103 — Payout and reconciliation queries scan more than they will need to
+
+- **Status:** `open`
+- **Found in:** task 16a database review, plus the per-payment `ponytail:` ceiling
+- **Surface:** db · worker
+
+Three places scan more than they will need to at volume:
+
+- The weekly candidate query aggregates every `owner_payable` row.
+- `notSettlement()` probes `ledger_entries_txn_id_idx` and a heap fetch per earnings row.
+- Reconcile makes one Razorpay call per uncleared capture, with no index on `payments.captured_at`.
+
+All are fine at launch volume.
+
+- **Why deferred:** each fix is a CONCURRENTLY index in its own migration, or an API switch, and
+  none is needed at launch volume.
+- **Done means:** when measured slow, add partial indexes on:
+
+  - `ledger_entries (counterparty_user_id) WHERE account = 'owner_payable'`
+  - `ledger_entries (txn_id) WHERE account = 'settlement_clearing'`
+  - `payments (captured_at) WHERE route_transfer_paise IS NOT NULL`
+
+  Also switch reconcile to `transfers.all({ from, to })`. Each change is justified by an EXPLAIN
+  before and after.
+
+### S-98 — The web map never renders a frame in headless capture (driver discovery, owner listing step 1)
+
+- **Status:** `open` — cause not found; environment-specific not ruled out
+- **Found in:** launch series (brag) capture — 2026-09-29
+- **Surface:** mobile (web build) · packages/ui-native `ParkMap.tsx`
+
+In the capture browser (Chrome 153 headless, real AMD GPU via ANGLE/D3D11) the MapLibre 6.9.0 canvas is sized
+(390x590), OSM tiles return 200 and decode (256x256), WebGL2 works with `failIfMajorPerformanceCaveat`, blob
+workers run, the page is visible and nothing logs an error — yet the canvas stays blank and every
+`.maplibregl-marker` keeps an identity transform at the container's top-left, i.e. the map never renders a
+frame. Forcing a viewport resize does not help. Not yet checked in a visible desktop browser.
+
+- **Why deferred:** web is not the shipping platform (Android uses maplibre-react-native); the launch video
+  works around it.
+- **Done means:** open the driver home in a visible desktop Chrome; if the map renders there, record the
+  headless cause in learnings.md; if it does not, fix ParkMap's web init with a Playwright check that a marker
+  gets a non-identity transform.
+
+### S-99 — Uncaught "12000ms timeout exceeded" from an icon font on the web build
+
+- **Status:** `open`
+- **Found in:** launch series (brag) driver probe — 2026-09-29
+- **Surface:** mobile (web build)
+
+LogBox shows an uncaught error from FontFaceObserver (`entry.bundle`, the `D.prototype.load` font loader) about 12s
+after the driver home loads: a font-load promise rejects with nobody handling it. On the web build this is a
+red-screen in dev; it may also mean an icon font never finishes loading.
+
+- **Why deferred:** web-only, found while filming.
+- **Done means:** the font load that times out is identified, its rejection is handled (R-FAIL-01: logged at
+  warn with context), and the icon font loads or falls back deliberately.
+
+### S-104 — The worker never creates its pg-boss queues, so it likely cannot boot
+
+- **Status:** `chip` (spawned 2026-09-29)
+- **Found in:** task 16a TypeScript review lens, confirmed against pg-boss 10.1.5's own DDL
+- **Surface:** worker
+
+pg-boss 10 foreign-keys `schedule.name` and `job.name` to `pgboss.queue`, and `schedule()` rethrows
+the FK violation as "Queue X not found". Nothing in `apps/` or `packages/` calls `boss.createQueue`,
+so `registerSchedule` should throw on `outbox.relay` at boot, and every outbox send should fail.
+This affects every job since task 4, including 16a's three payout jobs.
+
+- **Why deferred:** pre-existing and cross-cutting (all 17 queues). It needs its own boot-level
+  integration test against a real PgBoss, not a change folded into the payouts PR.
+- **Done means:** a Testcontainers test boots PgBoss, runs `registerHandlers` + `registerSchedule`
+  and sends one job per queue; every queue is created idempotently from one list shared by
+  `handlers.ts` and `schedule.ts`.
+
+### S-100 — On web, focusing a price input on listing step 4 shifts the whole step sideways
+
+- **Status:** `open`
+- **Found in:** launch series (brag) owner capture — 2026-09-29
+- **Surface:** mobile (web build) · owner listing wizard, step 4 "Set your pricing"
+
+With the two-wheeler "Hourly (required)" field focused, the input's focus box extends past the right edge and
+the whole step renders ~20px to the left ("Set your pricing" shows as "ur pricing"). Blurring restores the
+layout. Resetting `scrollLeft` on every element does not, so it is layout overflow, not a scrolled container.
+
+- **Why deferred:** web-only, found while filming; the video uses a blurred still.
+- **Done means:** the focused input stays inside its row (width constrained, focus ring inset), checked at 390px
+  width on web, and on Android with the keyboard open.
+
+### S-105 — `booking-concurrency` flaked once under full-suite load with a non-409 loser
+
+- **Status:** `open`
+- **Found in:** task 16a final gate run, 2026-09-29 (1 failure in 10 runs; 8 isolated runs green)
+- **Surface:** api · booking · a mandatory test (R-TEST-03)
+
+In "never oversells three slots", one of ten racing inserts into `bookings` failed with an error
+that was not `SlotUnavailableError`. The oversell invariant held (winners ≤ 3). The run was the
+whole API integration suite, sequentially, so the container was under more load than an isolated
+run. The log kept only Drizzle's "Failed query" wrapper, not the SQLSTATE; the likeliest candidate
+is a deadlock (40P01) between concurrent GiST exclusion checks, which the domain catch does not map.
+Task 16a changes nothing on the booking path (verified by diff).
+
+- **Why deferred:** pre-existing, unrelated to payouts, and the root cause needs the SQLSTATE first.
+- **Done means:** the test logs the cause code of any unexpected rejection; once seen, the create
+  path maps it (40P01/40001 → retry once or answer 409 SLOT_UNAVAILABLE), and 20 consecutive
+  full-suite runs stay green.

@@ -28,13 +28,6 @@ export {
   ownerEarningsViewSchema,
   type OwnerEarningsView,
 } from './earnings.js';
-export { payoutSchema, type Payout } from './payouts.js';
-export {
-  updateBankDetailsSchema,
-  type UpdateBankDetails,
-  bankDetailsResponseSchema,
-  type BankDetailsResponse,
-} from './bank-details.js';
 export {
   OWNER_BOOKING_GROUP_VALUES,
   ownerBookingGroupSchema,

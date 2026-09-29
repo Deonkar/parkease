@@ -18,6 +18,8 @@ import { UserRepository } from '../../src/domains/identity/repositories/user.rep
 import { LedgerModule } from '../../src/domains/ledger/ledger.module.js';
 import { PaymentModule } from '../../src/domains/payment/payment.module.js';
 import { RAZORPAY } from '../../src/domains/payment/razorpay.client.js';
+import { PayoutModule } from '../../src/domains/payout/payout.module.js';
+import { RAZORPAYX } from '../../src/domains/payout/razorpayx.client.js';
 import { PricingModule } from '../../src/domains/pricing/pricing.module.js';
 import { SpaceModule } from '../../src/domains/space/space.module.js';
 import { SurgeModule } from '../../src/domains/surge/surge.module.js';
@@ -49,6 +51,7 @@ import { OwnerDashboardController } from '../../src/roles/owner/dashboard.contro
 import { OwnerEarningsController } from '../../src/roles/owner/earnings.controller.js';
 import { RazorpayWebhookController } from '../../src/roles/public/webhooks/razorpay.controller.js';
 import { MeController } from '../../src/roles/shared/me.controller.js';
+import { MePayoutsController } from '../../src/roles/shared/payouts.controller.js';
 import { ValetAvailabilityController } from '../../src/roles/valet/availability.controller.js';
 import { ValetEarningsController } from '../../src/roles/valet/earnings.controller.js';
 import { ValetJobsController } from '../../src/roles/valet/jobs.controller.js';
@@ -134,6 +137,8 @@ class StubAuthGuard implements CanActivate {
     CarwashModule,
     // `/me/upload-signature` signs through the real CloudinaryService.
     StorageModule,
+    // `/me/bank-details` and `/me/payouts`. Its RazorpayX client is overridden below.
+    PayoutModule,
   ],
   controllers: [
     AdminSurgeController,
@@ -157,6 +162,7 @@ class StubAuthGuard implements CanActivate {
     WasherEarningsController,
     WasherProfileController,
     MeController,
+    MePayoutsController,
   ],
   providers: [
     /**
@@ -205,7 +211,11 @@ export interface HttpApp {
   }): Promise<{ status: number; body: unknown }>;
 }
 
-export async function startHttpApp(h: Harness, razorpay?: unknown): Promise<HttpApp> {
+export async function startHttpApp(
+  h: Harness,
+  razorpay?: unknown,
+  razorpayx?: unknown,
+): Promise<HttpApp> {
   const moduleRef = await Test.createTestingModule({ imports: [HttpTestModule] })
     .overrideProvider(DB)
     .useValue(h.db)
@@ -215,6 +225,8 @@ export async function startHttpApp(h: Harness, razorpay?: unknown): Promise<Http
     // No network in a test. A double also lets the gateway answer with an amount
     // that disagrees with ours, which is the only way to reach the mismatch path.
     .useValue(razorpay ?? {})
+    .overrideProvider(RAZORPAYX)
+    .useValue(razorpayx ?? {})
     .compile();
 
   // `rawBody: true` exactly as main.ts sets it. If these two drift apart, every
