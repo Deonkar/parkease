@@ -56,6 +56,12 @@ export interface ReceivableTotals {
   readonly ownerEarningsPaise: number;
   readonly parkeaseFeePaise: number;
   readonly gstPaise: number;
+  /**
+   * Commission funded from `promo_expense` for a commission-free owner (task 16c), else 0.
+   * Required, not optional: a reversal built from a booking row that forgot this column would
+   * not balance, and the compiler is the check.
+   */
+  readonly commissionWaiverPaise: number;
 }
 
 /**
@@ -98,6 +104,8 @@ export function bookingReceivableEntries(
 ): readonly LedgerEntryDraft[] {
   return [
     ...leg(Account.DRIVER_RECEIVABLE, 'debit', totals.driverTotalPaise, description),
+    // A commission-free owner's 15% is a cost ParkEase chose, so it shows as one (ADR-032).
+    ...leg(Account.PROMO_EXPENSE, 'debit', totals.commissionWaiverPaise, description),
     ...leg(Account.OWNER_PAYABLE, 'credit', totals.ownerEarningsPaise, description),
     ...leg(Account.PLATFORM_REVENUE, 'credit', totals.parkeaseFeePaise, description),
     ...leg(Account.GST_PAYABLE, 'credit', totals.gstPaise, description),
@@ -115,11 +123,13 @@ export const receivableTotalsOf = (booking: {
   ownerEarningsPaise: number;
   parkeaseFeePaise: number;
   gstPaise: number;
+  commissionWaiverPaise: number;
 }): ReceivableTotals => ({
   driverTotalPaise: booking.totalPaise,
   ownerEarningsPaise: booking.ownerEarningsPaise,
   parkeaseFeePaise: booking.parkeaseFeePaise,
   gstPaise: booking.gstPaise,
+  commissionWaiverPaise: booking.commissionWaiverPaise,
 });
 
 /**
@@ -235,6 +245,8 @@ function fullReversalLegs(
     ...leg(Account.GST_PAYABLE, 'debit', totals.gstPaise, description),
     ...leg(Account.REFUNDS_PAYABLE, 'credit', refundPaise, description),
     ...leg(Account.PLATFORM_REVENUE, 'credit', retainedPaise, description),
+    // The owner's subsidised share comes back to the account that funded it (task 16c).
+    ...leg(Account.PROMO_EXPENSE, 'credit', totals.commissionWaiverPaise, description),
   ];
 }
 
@@ -277,15 +289,23 @@ export function refundEntries(
       ];
 
     case RefundTier.ACTIVE_GRACE: {
+      const waiver = totals.commissionWaiverPaise;
+      // Allocated over what the driver paid; a commission-free owner's subsidised share comes
+      // back in the same fraction, through the same helper, so there is one rounding rule.
       const [ownerPaise = 0, feePaise = 0, gstPaise = 0] = allocateProportionally(
         outcome.refundPaise,
-        [totals.ownerEarningsPaise, totals.parkeaseFeePaise, totals.gstPaise],
+        [totals.ownerEarningsPaise - waiver, totals.parkeaseFeePaise, totals.gstPaise],
       );
+      const [waiverPaise = 0] =
+        waiver === 0
+          ? [0]
+          : allocateProportionally(outcome.refundPaise, [waiver, totals.driverTotalPaise - waiver]);
 
       return [
-        ...leg(Account.OWNER_PAYABLE, 'debit', ownerPaise, description),
+        ...leg(Account.OWNER_PAYABLE, 'debit', ownerPaise + waiverPaise, description),
         ...leg(Account.PLATFORM_REVENUE, 'debit', feePaise, description),
         ...leg(Account.GST_PAYABLE, 'debit', gstPaise, description),
+        ...leg(Account.PROMO_EXPENSE, 'credit', waiverPaise, description),
         ...leg(Account.REFUNDS_PAYABLE, 'credit', outcome.refundPaise, description),
       ];
     }

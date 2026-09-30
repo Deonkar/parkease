@@ -350,3 +350,73 @@ describe('promoBookingEntries — a discount never reaches the owner', () => {
     );
   });
 });
+
+describe('refunds of a commission-free booking (task 16c)', () => {
+  const WAIVED = quote({
+    basePaise: toPaise(6000),
+    surgeMultiplier: toRate(1),
+    commissionWaived: true,
+  });
+  const booking = { totalPaise: WAIVED.driverTotalPaise, startsAt: STARTS_AT };
+
+  it('before start: returns the whole waiver to promo_expense, balanced', () => {
+    const outcome = resolveRefund({
+      booking,
+      at: new Date(STARTS_AT.getTime() - 1_000),
+      cancelledBy: 'driver',
+    });
+    const entries = refundEntries(WAIVED, outcome, 'refund');
+    expect(rowsOf(entries)).toContain('promo_expense credit 900');
+    expect(rowsOf(entries)).toContain('owner_payable debit 6000');
+    expect(() => {
+      assertEntriesBalance(entries);
+    }).not.toThrow();
+  });
+
+  it('owner cancelled: returns the whole waiver, and the goodwill stays its own expense', () => {
+    const outcome = resolveRefund({ booking, at: STARTS_AT, cancelledBy: 'owner' });
+    const entries = refundEntries(WAIVED, outcome, 'refund');
+    expect(rowsOf(entries)).toContain('promo_expense credit 900');
+    expect(rowsOf(entries)).toContain('promo_expense debit 5000');
+    expect(() => {
+      assertEntriesBalance(entries);
+    }).not.toThrow();
+  });
+
+  it('active grace (50%): reverses the waiver in the same proportion', () => {
+    const outcome = resolveRefund({
+      booking,
+      at: new Date(STARTS_AT.getTime() + 60_000),
+      cancelledBy: 'driver',
+    });
+    const entries = refundEntries(WAIVED, outcome, 'refund');
+    expect(rowsOf(entries)).toEqual(
+      [
+        'gst_payable debit 81',
+        'owner_payable debit 3000', // 2550 of the driver's money + 450 of the waiver
+        'platform_revenue debit 450',
+        'promo_expense credit 450',
+        'refunds_payable credit 3081',
+      ].sort(),
+    );
+    expect(() => {
+      assertEntriesBalance(entries);
+    }).not.toThrow();
+  });
+
+  it('active grace on an odd total loses no paisa', () => {
+    const odd = quote({
+      basePaise: toPaise(6001),
+      surgeMultiplier: toRate(1),
+      commissionWaived: true,
+    });
+    const outcome = resolveRefund({
+      booking: { totalPaise: odd.driverTotalPaise, startsAt: STARTS_AT },
+      at: new Date(STARTS_AT.getTime() + 60_000),
+      cancelledBy: 'driver',
+    });
+    expect(() => {
+      assertEntriesBalance(refundEntries(odd, outcome, 'refund'));
+    }).not.toThrow();
+  });
+});

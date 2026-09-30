@@ -158,3 +158,35 @@ describe('assertEntriesBalance', () => {
     }).toThrow(UnbalancedLedgerError);
   });
 });
+
+describe('a commission-free booking (task 16c)', () => {
+  const rows = (entries: readonly { account: string; direction: string; amountPaise: number }[]) =>
+    entries.map((e) => `${e.account} ${e.direction} ${String(e.amountPaise)}`).sort();
+  const waived = quote({
+    basePaise: toPaise(6000),
+    surgeMultiplier: toRate(1),
+    commissionWaived: true,
+  });
+
+  it('funds the waived commission from promo_expense and credits the owner the full base', () => {
+    expect(rows(bookingReceivableEntries(waived))).toEqual(
+      [
+        'driver_receivable debit 6162',
+        'gst_payable credit 162',
+        'owner_payable credit 6000',
+        'platform_revenue credit 900',
+        'promo_expense debit 900',
+      ].sort(),
+    );
+    expect(() => {
+      assertEntriesBalance(bookingReceivableEntries(waived));
+    }).not.toThrow();
+  });
+
+  it('posts no promo leg for an unwaived booking', () => {
+    const plain = quote({ basePaise: toPaise(6000), surgeMultiplier: toRate(1) });
+    expect(
+      bookingReceivableEntries(plain).some((e) => e.account === LedgerAccount.PROMO_EXPENSE),
+    ).toBe(false);
+  });
+});
