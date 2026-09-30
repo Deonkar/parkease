@@ -40,4 +40,14 @@ export {
   payoutListQuerySchema,
   type PayoutListQuery,
   payoutPageSchema,
+  payoutSummaryViewSchema,
+  type PayoutSummaryView,
 } from './payouts.js';
+export {
+  submitRouteOnboardingSchema,
+  type SubmitRouteOnboarding,
+  routeRequirementSchema,
+  type RouteRequirement,
+  routeOnboardingViewSchema,
+  type RouteOnboardingView,
+} from './route-onboarding.js';

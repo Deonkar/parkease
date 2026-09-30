@@ -52,6 +52,11 @@ async function seedWasher(metresAway: number): Promise<string> {
     INSERT INTO wash_services (washer_user_id, service_name, vehicle_type, price_paise, duration_minutes)
     VALUES (${userId}, 'premium_wash', 'car', 39900, 40)
   `;
+  // Dispatch offers only partners Route can pay (task 16b).
+  await pg.sql`
+    INSERT INTO linked_accounts (user_id, razorpay_account_id, kyc_status)
+    VALUES (${userId}, ${`acc_w${userId.slice(-12)}`}, 'activated')
+  `;
   return userId;
 }
 

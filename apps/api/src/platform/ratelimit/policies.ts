@@ -35,7 +35,12 @@ export const RATE_LIMIT_POLICIES: Readonly<Record<string, RateLimitPolicy>> = {
   'PUT /api/v1/me/bank-details': { limit: 5, windowSeconds: 60, keyBy: 'user' },
   'GET /api/v1/me/bank-details': { limit: 60, windowSeconds: 60, keyBy: 'user' },
   'GET /api/v1/me/payouts': { limit: 60, windowSeconds: 60, keyBy: 'user' },
+  'GET /api/v1/me/payouts/summary': { limit: 60, windowSeconds: 60, keyBy: 'user' },
   'GET /api/v1/me/payouts/:id': { limit: 60, windowSeconds: 60, keyBy: 'user' },
+  // Task 16b. Each PUT is up to four Razorpay KYC calls; three a minute is plenty for a
+  // person correcting a typo, and too few to probe PANs with.
+  'PUT /api/v1/me/route-onboarding': { limit: 3, windowSeconds: 60, keyBy: 'user' },
+  'GET /api/v1/me/route-onboarding': { limit: 60, windowSeconds: 60, keyBy: 'user' },
   'POST /api/v1/driver/payments/orders': { limit: 10, windowSeconds: 60, keyBy: 'user' },
   'POST /api/v1/driver/payments/verify': { limit: 10, windowSeconds: 60, keyBy: 'user' },
   // Razorpay's own range, per security.md §4.3. Keyed by IP because there is no

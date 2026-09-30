@@ -84,6 +84,19 @@ describe('visibility', () => {
     });
   }
 
+  it('hides a space until its owner can be paid, and shows it once Route is activated', async () => {
+    // A driver must never reach a checkout that ends in OWNER_NOT_ONBOARDED (task 16b).
+    const id = await space({ title: 'Awaiting KYC' });
+    await h.sql`UPDATE linked_accounts SET kyc_status = 'under_review' WHERE user_id = ${h.ownerId}`;
+    try {
+      expect(idsOf(await search())).toEqual([]);
+    } finally {
+      await h.sql`UPDATE linked_accounts SET kyc_status = 'activated' WHERE user_id = ${h.ownerId}`;
+      h.redis.clear();
+    }
+    expect(idsOf(await search())).toEqual([id]);
+  });
+
   it('hides an active space that has been soft-deleted', async () => {
     await space({ deleted: true });
     expect(idsOf(await search())).toEqual([]);

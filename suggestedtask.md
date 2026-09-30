@@ -487,6 +487,11 @@ five apps at once, and the honest way to do that is its own branch with the full
 afterwards — not a drive-by at the end of a feature. Doing it here would also mean a PR whose
 diff is half car wash and half unrelated version bumps.
 
+Task 16b (2026-09-30), lockfile still identical to `main`: **63** (2 critical, 19 high, 35
+moderate, 7 low), **34** in production dependencies. The growth since task 13 is advisories
+published against unchanged versions (e.g. `sharp` 2026-09-08); both criticals are dev-only
+`vitest`.
+
 - **Why deferred:** pre-existing and orthogonal to this task; the fix is a lockfile change with
   a repo-wide blast radius.
 - **Done means:** `pnpm audit --prod` is clean, `pnpm audit` has no critical or high, the full
@@ -1499,6 +1504,10 @@ real question is "what is coming to me, and when": money that has settled into t
 balance, and the date of the next payout. Neither is on `WasherEarningsView`, and the period
 total mixes settled and not-yet-settled jobs.
 
+Task 16b changed the premise: a washer is paid by Route as each wash is paid (ADR-030), so
+there is no payout date to show, and Get paid says so. What remains is "paid to your bank"
+versus "not yet paid" (a wash whose driver has not paid, or a transfer not yet settled).
+
 - **Why deferred:** needs contract fields and a ledger query (payable balance, next payout
   date from the payout schedule), which is server work and task 16's payout surface.
 - **Done means:** the earnings view carries a settled balance and the next payout date from the
@@ -1610,21 +1619,22 @@ issue (no `(space_id, status, starts_at)` index; the owner scope arrives through
   aggregation over the owner's full history), and the performance spec's transaction p95 stays flat
   when the seeded owner grows from 10k to 100k bookings.
 
-### S-84 — Task 15 hand-offs: owner reviews list, and a real payout date on the dashboard
+### S-84 — Task 15 hand-off: owner reviews list
 
-- **Status:** `open`
+- **Status:** `open` (the payout-date half closed in task 16b — see below)
 - **Found in:** task 15 spec §2 and §6
 - **Surface:** api · mobile
 
 `GET /owner/reviews` and a reviews tab were cut from task 15: nothing writes reviews until task 17,
-so the endpoint would have been permanently empty. The dashboard shows "Owed to you" (the exact
-all-time `owner_payable` net) instead of the task file's "Next payout · Monday · est.", because the
-payout schedule is task 16's decision.
+so the endpoint would have been permanently empty.
 
-- **Why deferred:** each belongs to the task that creates its data (17: reviews; 16: payout schedule).
+Task 16b closed the other half differently from how it was written: owners are paid by Route as
+each booking is paid (ADR-030), so there is no "next payout date" to show. "Owed to you" now
+carries `owedCaption()` — paid as the driver pays, not yet paid, or a refund after payment.
+
+- **Why deferred:** belongs to the task that creates its data (17: reviews).
 - **Done means:** task 17 ships `GET /owner/reviews` (and respond) with a reviews section on the
-  listing detail; task 16 adds the next payout date beside "Owed to you", read from the payout
-  schedule, never estimated client-side.
+  listing detail.
 
 ### S-85 — Owner response contracts accept any string as `driverName`
 
@@ -1810,25 +1820,6 @@ is harmed, but it is wasted traffic, rate-limit budget, and a re-render under th
 - **Done means:** scanning pauses while a result card is shown (until "Done" or a new-scan action), with a
   component test asserting one POST per QR presentation.
 
-### S-97 — Task 16b: bank-details and payout-history screens, and the payout date the dashboards promised
-
-- **Status:** `open`
-- **Found in:** task 16 brainstorming, 2026-09-29 (the task was split: 16a backend, 16b mobile)
-- **Surface:** mobile · design gate
-
-16a shipped `PUT/GET /me/bank-details` and `GET /me/payouts[/:id]` for owner, valet and washer. No
-screen calls them yet. Three earlier hand-offs land on the same screens: S-84 (a real next payout
-date beside "Owed to you"), S-78 (the washer's settled balance and next payout date), and the copy
-half of the closed S-92 (the "Owed to you" card must read correctly when the balance is negative,
-which a refund after a Route transfer now produces, S-98).
-
-- **Why deferred:** significant new screens need 2–3 rendered directions first (design gate), and
-  the money backbone was worth merging on its own.
-- **Done means:** bank-details form (masked read, the "changing this cancels pending payouts"
-  warning, 422/503 copy) and payout history (FlashList, skeleton/error/empty) for all three roles,
-  each role's dashboard showing the next payout date from the payout schedule (never estimated
-  client-side), a negative-balance state, tests for every new screen, and the design audit.
-
 ### S-98 — A refund after capture does not reverse the Route transfer
 
 - **Status:** `open`
@@ -1886,7 +1877,8 @@ cancellation of unsent payouts: after-the-fact, and the notification goes to the
 
 `idempotency_keys.request_hash` is SHA-256 of the canonical body, and for `PUT /me/bank-details`
 that body holds the account number. If the table leaked, account numbers could be brute-forced
-offline (9–18 digits with a known IFSC and name).
+offline (9–18 digits with a known IFSC and name). Task 16b widens it: `PUT /me/route-onboarding`
+carries the PAN (5 letters, 4 digits, 1 letter — a small space) and the account number together.
 
 - **Why deferred:** the fix changes a shared service for every route. Existing keys (24h TTL) would
   mismatch across the deploy, which needs its own small plan.
@@ -2010,7 +2002,130 @@ run. The log kept only Drizzle's "Failed query" wrapper, not the SQLSTATE; the l
 is a deadlock (40P01) between concurrent GiST exclusion checks, which the domain catch does not map.
 Task 16a changes nothing on the booking path (verified by diff).
 
+Task 16b did the first half of "done means": the assertion now reports `pgSqlState` and
+`pgConstraintName` of any unexpected rejection. The 16b runs it appeared in did not flake, so the
+code is still unseen.
+
 - **Why deferred:** pre-existing, unrelated to payouts, and the root cause needs the SQLSTATE first.
 - **Done means:** the test logs the cause code of any unexpected rejection; once seen, the create
   path maps it (40P01/40001 → retry once or answer 409 SLOT_UNAVAILABLE), and 20 consecutive
   full-suite runs stay green.
+
+### S-112 — Route onboarding cannot recover a step whose response was lost, and two devices can race it
+
+- **Status:** `open`
+- **Found in:** task 16b review (silent-failure and security lenses), 2026-09-30
+- **Surface:** api · `SubmitRouteOnboardingCommand`
+
+Each Razorpay id is saved before the next call, so a _refused_ step resumes. But a step that
+Razorpay performed and whose response we never read (a 10s timeout, an unreadable 200) saves no
+id: the next submit POSTs again, Razorpay refuses the duplicate with a 400, and the user is told
+"check your PAN and bank account" on every retry. Separately, two PUTs from two devices with
+different Idempotency-Keys can both find no row and both create a Linked Account; the upsert
+keeps the second and orphans the first (a PAN-bearing stakeholder at Razorpay).
+
+- **Why deferred:** the recovery needs Razorpay's lookup behaviour verified first (fetch an
+  account by `reference_id`, or read the duplicate error's code) — research, not a guess. The
+  race needs two devices within seconds under a 3/min rate limit. The log now names the step and
+  the reason, so support can resolve a stuck payee by hand.
+- **Done means:** a POST that timed out or answered unreadably is recovered by looking the
+  resource up before re-creating it; a per-user claim (inserted before the first Razorpay call,
+  outside any transaction) serialises submits; an integration test covers both.
+
+### S-113 — A payout row cannot say which account it was paid to
+
+- **Status:** `open`
+- **Found in:** task 16b UI walk, 2026-09-30
+- **Surface:** db · contracts · mobile `PayoutRow`
+
+Payout history said "To bank ····6789" by stamping the _current_ bank on every row, so after a
+bank change every past payout named the new account. 16b now says "To your bank". `payouts` keeps
+`razorpayx_fund_account_id` but not the account's last 4.
+
+- **Why deferred:** needs a column and a backfill-free migration; "To your bank" is honest meanwhile.
+- **Done means:** `payouts.destination_last4` is written at payout creation, `payoutViewSchema`
+  carries it, and the row shows it, with a test that a bank change does not rename old rows.
+
+### S-114 — The one-rail rule reads the payee's status today, not how each entry was paid
+
+- **Status:** `open`
+- **Found in:** task 16b database review, 2026-09-30
+- **Surface:** db `partnerPayable`
+
+`partnerPayable` drops every `owner_payable` row of a payee whose Linked Account is activated
+_now_. A RazorpayX balance earned before activation would never be paid by either rail. The
+reviewer's second scenario (a suspended payee paid twice) is refuted: `routeDischargeEntries`
+debits `owner_payable` with the same counterparty at capture, so Route-paid rows net to zero.
+
+- **Why deferred:** unreachable today — 16b gates wash offers on activation, owners' rows are
+  owner-side and never in this predicate, and valets are never on Route. Nothing is live.
+- **Done means:** the predicate keys on the entry (a Route discharge marks what Route paid), not
+  on the payee's current status, with a test of a pre-activation balance being paid.
+
+### S-115 — `useIntent` reuses a key after a lost response even when the body changes
+
+- **Status:** `open`
+- **Found in:** task 16b React review, 2026-09-30
+- **Surface:** mobile · every mutation using `useIntent`
+
+The key resets only on success, which is right for a retry of the same intent. But if the server
+committed and the response was lost, and the user then edits the form and resubmits, the key
+comes back with a new body hash: a 422 "Something changed in that request" on every retry until
+they leave the screen.
+
+- **Why deferred:** project-wide (every mutation hook), not a Get paid defect.
+- **Done means:** `useIntent` mints a new key when the payload changes (stored body hash), with a
+  hook test for lost-response-then-edit.
+
+### S-116 — Owner earnings re-requests a failed page on every scroll
+
+- **Status:** `open`
+- **Found in:** task 16b React review (fixed in the valet Get paid screen), 2026-09-30
+- **Surface:** mobile `app/(owner)/earnings/index.tsx`
+
+`onEndReached` guards on `hasNextPage && !isFetchingNextPage` but not `isFetchNextPageError`, so
+after a failed page the footer's "Tap to retry" is bypassed by a scroll that re-requests it.
+
+- **Why deferred:** a different screen from 16b's.
+- **Done means:** the guard adds `!isFetchNextPageError`, as `ValetPayoutsScreen` does.
+
+### S-117 — Route onboarding only knows individuals
+
+- **Status:** `open`
+- **Found in:** task 16b design, 2026-09-29
+- **Surface:** api `RouteHttpClient` · mobile Get paid
+
+Every Linked Account is created with `business_type: 'individual'`. An owner who is a
+proprietorship, partnership or company cannot onboard correctly (their KYC is a GSTIN/business
+PAN, not a personal PAN).
+
+- **Why deferred:** P2P parking in the launch market is individuals; business owners need their
+  own form and document set.
+- **Done means:** a business-type choice on Get paid, the matching Razorpay fields, and tests.
+
+### S-118 — Chips are 6px, the Wayfinder direction says 8px
+
+- **Status:** `open`
+- **Found in:** task 16b design audit, 2026-09-30
+- **Surface:** packages/tokens · every chip
+
+CLAUDE.md fixes "10px radius, 8px chips"; `radius` has no 8 (`sm` is 6), and every chip in the app
+uses `radius.sm`, including 16b's payout status chips.
+
+- **Why deferred:** app-wide token change, not a 16b decision.
+- **Done means:** either a `radius.chip = 8` token used by every chip, or CLAUDE.md corrected to
+  6px — one of the two, decided once.
+
+### S-119 — The Get paid status card shows a stale status after a failed refetch
+
+- **Status:** `open`
+- **Found in:** task 16b silent-failure review, 2026-09-30
+- **Surface:** mobile `RouteOnboardingScreen`
+
+On the reviewing, active or blocked card, a background refetch that fails leaves the last status
+on screen with no sign it is old.
+
+- **Why deferred:** low impact — the status changes rarely and a push notification carries each
+  change.
+- **Done means:** a `RefreshNotice` above the card when `isError` with data, as the earnings
+  screens do.

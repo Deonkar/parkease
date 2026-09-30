@@ -1,102 +1,19 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { CARWASH_SERVICE_NAME_VALUES, type CarwashServiceName } from '@parkease/contracts/enums';
-import {
-  colors,
-  fontSize,
-  fontWeight,
-  lineHeight,
-  radius,
-  spacing,
-  touchTarget,
-} from '@parkease/tokens';
-import { useState, type ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native';
+import { colors, fontSize, fontWeight, radius, spacing, touchTarget } from '@parkease/tokens';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+
+import { FieldError } from '@/features/shared/components/FieldError';
+import { FieldBlock } from '@/features/shared/components/FormFields';
 
 import { SERVICE_LABELS } from '../labels';
 
-import { FieldError } from './FieldError';
-
-/**
- * The parts both registration forms are built from (§14.2), so the business
- * and gig forms read as one product.
- *
- * Every field is a block: a visible label (never a placeholder standing in for
- * one), an optional hint, the control, then the error UNDER the control. The
- * block carries `field-<id>`, the control `<id>-control`, the error
- * `<id>-error`, which is how the tests prove where an error lands.
- */
-
-export interface FieldBlockProps {
-  readonly id: string;
-  readonly label: string;
-  readonly hint?: string;
-  readonly error?: string | undefined;
-  readonly children: ReactNode;
-}
-
-export function FieldBlock({ id, label, hint, error, children }: FieldBlockProps) {
-  return (
-    <View style={styles.block} testID={`field-${id}`}>
-      <Text style={styles.label}>{label}</Text>
-      {hint === undefined ? null : <Text style={styles.hint}>{hint}</Text>}
-      {children}
-      {error === undefined ? null : <FieldError testID={`${id}-error`} message={error} />}
-    </View>
-  );
-}
-
-export interface TextFieldProps {
-  readonly id: string;
-  readonly label: string;
-  readonly value: string;
-  readonly onChangeText: (value: string) => void;
-  readonly hint?: string;
-  readonly error?: string | undefined;
-  readonly autoCapitalize?: TextInputProps['autoCapitalize'];
-  readonly autoComplete?: TextInputProps['autoComplete'];
-  readonly maxLength?: number;
-}
-
-export function TextField({
-  id,
-  label,
-  value,
-  onChangeText,
-  hint,
-  error,
-  autoCapitalize = 'words',
-  autoComplete = 'off',
-  maxLength,
-}: TextFieldProps) {
-  const [focused, setFocused] = useState(false);
-
-  return (
-    <FieldBlock id={id} label={label} {...(hint === undefined ? {} : { hint })} error={error}>
-      <TextInput
-        testID={`${id}-control`}
-        value={value}
-        onChangeText={onChangeText}
-        onFocus={() => {
-          setFocused(true);
-        }}
-        onBlur={() => {
-          setFocused(false);
-        }}
-        autoCapitalize={autoCapitalize}
-        autoComplete={autoComplete}
-        autoCorrect={false}
-        {...(maxLength === undefined ? {} : { maxLength })}
-        accessibilityLabel={label}
-        {...(error === undefined ? {} : { accessibilityHint: error })}
-        style={[
-          styles.input,
-          focused && styles.inputFocused,
-          error !== undefined && styles.inputError,
-        ]}
-      />
-    </FieldBlock>
-  );
-}
+export {
+  FieldBlock,
+  TextField,
+  type FieldBlockProps,
+  type TextFieldProps,
+} from '@/features/shared/components/FormFields';
 
 export interface ServiceChecklistProps {
   readonly label: string;
@@ -204,25 +121,6 @@ export function SubmitBlock({
 }
 
 const styles = StyleSheet.create({
-  block: { gap: spacing.sm },
-  label: { fontSize: fontSize.sm, fontWeight: fontWeight.semibold, color: colors.text },
-  hint: {
-    fontSize: fontSize.xs,
-    lineHeight: fontSize.xs * lineHeight.normal,
-    color: colors.textTertiary,
-  },
-  input: {
-    minHeight: touchTarget,
-    paddingHorizontal: spacing.md,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
-    backgroundColor: colors.surface,
-    fontSize: fontSize.base,
-    color: colors.text,
-  },
-  inputFocused: { borderColor: colors.borderFocused },
-  inputError: { borderColor: colors.error },
   checklist: {
     borderRadius: radius.md,
     borderWidth: 1,

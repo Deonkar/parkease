@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { SlotUnavailableError } from '../../src/domains/booking/errors.js';
+import { pgConstraintName, pgSqlState } from '../../src/platform/db/errors.js';
 
 import {
   type BookingStack,
@@ -121,7 +122,13 @@ describe('booking concurrency', () => {
     expect(won.length + lost.length).toBe(10);
 
     for (const rejection of lost) {
-      expect(rejection.reason).toBeInstanceOf(SlotUnavailableError);
+      // Name the SQLSTATE under Drizzle's "Failed query" wrapper, so a loser that is not a
+      // clean 409 says what it actually was (S-105) instead of printing the SQL text.
+      const reason: unknown = rejection.reason;
+      expect(
+        reason,
+        `loser rejected with SQLSTATE ${pgSqlState(reason) ?? 'none'}, constraint ${pgConstraintName(reason) ?? 'none'}`,
+      ).toBeInstanceOf(SlotUnavailableError);
     }
 
     expect(await heldSlots(spaceId)).toBe(won.length);

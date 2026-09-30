@@ -78,6 +78,7 @@ export default function ValetLayout() {
         name="profile"
         options={{ title: 'Profile', tabBarIcon: tabIcon('account-outline', 'account') }}
       />
+      <Tabs.Screen name="get-paid" options={{ href: null }} />
     </Tabs>
   );
 }

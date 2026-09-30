@@ -10,6 +10,7 @@ import { Alert, Linking, StyleSheet, Text, View } from 'react-native';
 
 import { ReadableColumn } from '@/features/shared/components/ReadableColumn';
 import { RefreshNotice } from '@/features/shared/components/RefreshNotice';
+import { PayoutSetupBanner } from '@/features/shared/get-paid/entry';
 import { useAnnounce } from '@/features/shared/hooks/useAnnounce';
 import { resolveScreenState } from '@/features/shared/screen-state';
 import { acceptOutcomeFor } from '@/features/washer/action-outcomes';
@@ -456,7 +457,12 @@ export default function WasherOffersScreen() {
     <View style={styles.root}>
       {/* The tab's own name (M13): the bar says Offers, so the header does. */}
       <WasherHeader title="Offers" />
-      <ReadableColumn>{content()}</ReadableColumn>
+      <ReadableColumn>
+        <View style={styles.setup}>
+          <PayoutSetupBanner payee="washer" href="/(washer)/get-paid" />
+        </View>
+        {content()}
+      </ReadableColumn>
     </View>
   );
 }
@@ -464,6 +470,7 @@ export default function WasherOffersScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.surfaceSecondary },
   body: { flex: 1 },
+  setup: { paddingHorizontal: spacing.base, paddingTop: spacing.sm },
   skeletons: { padding: spacing.base, gap: spacing.md },
   list: { paddingHorizontal: spacing.base, paddingBottom: spacing.xl },
   section: {

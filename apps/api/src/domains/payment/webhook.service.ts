@@ -9,6 +9,8 @@ import {
 
 import { IdempotencyService } from '../../platform/idempotency/idempotency.service.js';
 import { logger } from '../../platform/observability/logger.js';
+import { ApplyRouteStatusCommand } from '../payout/commands/apply-route-status.command.js';
+import { toRouteStatus } from '../payout/route.client.js';
 
 import { ConfirmPaymentCommand } from './commands/confirm-payment.command.js';
 import { FailPaymentCommand } from './commands/fail-payment.command.js';
@@ -32,6 +34,7 @@ export class WebhookService {
     private readonly confirmPayment: ConfirmPaymentCommand,
     private readonly failPayment: FailPaymentCommand,
     private readonly processRefund: ProcessRefundCommand,
+    private readonly routeStatus: ApplyRouteStatusCommand,
   ) {}
 
   /**
@@ -90,7 +93,7 @@ export class WebhookService {
     }
 
     try {
-      await this.dispatch(event);
+      await this.dispatch(event, eventId);
       await this.idempotency.store(eventId, 200, { received: true });
     } catch (error) {
       // Release the claim so Razorpay's retry can actually re-run. Holding it
@@ -102,7 +105,7 @@ export class WebhookService {
     }
   }
 
-  private async dispatch(parsed: RazorpayWebhookPayload): Promise<void> {
+  private async dispatch(parsed: RazorpayWebhookPayload, eventId: string): Promise<void> {
     switch (parsed.event) {
       case 'payment.captured': {
         const entity = parsed.payload.payment.entity;
@@ -139,6 +142,32 @@ export class WebhookService {
           // worker will have recorded the gateway's refund id.
           throw new Error(`No local refund recorded for ${entity.id} yet`);
         }
+        return;
+      }
+
+      case 'product.route.under_review':
+      case 'product.route.needs_clarification':
+      case 'product.route.activated':
+      case 'product.route.rejected':
+      case 'product.route.suspended': {
+        const product = parsed.payload.merchant_product.entity;
+        if (`product.route.${product.activation_status}` !== parsed.event) {
+          // The payload's status is what we apply; a name that disagrees is Razorpay drift.
+          logger.warn(
+            { eventId, event: parsed.event, status: product.activation_status },
+            'route webhook status disagrees with its event name',
+          );
+        }
+        await this.routeStatus.execute({
+          razorpayAccountId: parsed.payload.account_id,
+          eventId,
+          status: toRouteStatus(product.activation_status),
+          requirements: product.requirements.map((r) => ({
+            field: r.field_reference,
+            reason: r.reason_code,
+          })),
+          at: new Date(parsed.created_at * 1000),
+        });
         return;
       }
 

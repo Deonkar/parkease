@@ -27,6 +27,7 @@ import {
   REFUND_STATUS_VALUES,
   LEDGER_DIRECTION_VALUES,
   OUTBOX_STATUS_VALUES,
+  ROUTE_STATUS_VALUES,
 } from '../src/enums/index.js';
 
 let ctx: PgTestContext;
@@ -153,6 +154,12 @@ const enumMapping: Array<{
     tableName: 'ledger_entries',
     constraintLike: '%direction_check%',
     values: LEDGER_DIRECTION_VALUES,
+  },
+  {
+    name: 'route_status',
+    tableName: 'linked_accounts',
+    constraintLike: '%kyc_status_check%',
+    values: ROUTE_STATUS_VALUES,
   },
   {
     name: 'payout_status',

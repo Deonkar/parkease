@@ -90,6 +90,7 @@ export default function WasherLayout() {
             button in every tab's header. Popped to its top on blur (H2), so that
             button always opens the profile, never a registration left underneath. */}
         <Tabs.Screen name="profile" options={{ href: null, popToTopOnBlur: true }} />
+        <Tabs.Screen name="get-paid" options={{ href: null }} />
       </Tabs>
     </WasherPresenceProvider>
   );

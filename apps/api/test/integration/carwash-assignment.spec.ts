@@ -36,6 +36,8 @@ interface SeedWasherOptions {
   readonly roleStatus?: string;
   readonly userStatus?: string;
   readonly onLiveJob?: boolean;
+  /** The partner's Route Linked Account status (task 16b). Default: activated. */
+  readonly routeStatus?: string;
   /** Which `(service, vehicle)` pairs this partner prices. Default: premium car. */
   readonly menu?: readonly { service: string; vehicle: string; active?: boolean }[];
 }
@@ -59,6 +61,11 @@ async function seedWasher(opts: SeedWasherOptions): Promise<string> {
       ${opts.ratingAvgBp ?? null},
       ${ratingCount}
     )
+  `;
+
+  await h.sql`
+    INSERT INTO linked_accounts (user_id, razorpay_account_id, kyc_status)
+    VALUES (${userId}, ${`acc_w${userId.slice(-12)}`}, ${opts.routeStatus ?? 'activated'})
   `;
 
   if (opts.roleStatus !== undefined) {
@@ -219,6 +226,11 @@ describe('distance', () => {
 describe('eligibility', () => {
   it('excludes a partner who is not verified', async () => {
     await seedWasher({ metresAway: 500, verification: 'pending' });
+    expect(await find()).toHaveLength(0);
+  });
+
+  it('excludes a partner Route cannot pay yet — an offer they could accept but never be paid for', async () => {
+    await seedWasher({ metresAway: 500, routeStatus: 'under_review' });
     expect(await find()).toHaveLength(0);
   });
 

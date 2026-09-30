@@ -68,7 +68,52 @@ const refundProcessedSchema = z.object({
   payload: z.object({ refund: z.object({ entity: refundEntitySchema }) }),
 });
 
-const HANDLED_EVENTS = ['payment.captured', 'payment.failed', 'refund.processed'] as const;
+/**
+ * A Route Linked Account's product moved (task 16b). Razorpay's documented path for both:
+ * `payload.account_id` and `payload.merchant_product.entity.activation_status`.
+ */
+export const ROUTE_PRODUCT_EVENTS = [
+  'product.route.under_review',
+  'product.route.needs_clarification',
+  'product.route.activated',
+  'product.route.rejected',
+  'product.route.suspended',
+] as const;
+
+/** Razorpay ids are `acc_…`-shaped; anything else never reaches a URL path or a query. */
+const razorpayId = z.string().regex(/^[A-Za-z0-9_]+$/);
+
+const routeProductSchema = z.object({
+  ...envelopeShape,
+  /** Required here: status writes are ordered by it (task 16b review). Unix seconds. */
+  created_at: z.number().int().positive(),
+  event: z.enum(ROUTE_PRODUCT_EVENTS),
+  payload: z.object({
+    account_id: razorpayId,
+    merchant_product: z.object({
+      entity: z.object({
+        activation_status: z.enum([
+          'requested',
+          'under_review',
+          'needs_clarification',
+          'activated',
+          'rejected',
+          'suspended',
+        ]),
+        requirements: z
+          .array(z.object({ field_reference: z.string(), reason_code: z.string() }))
+          .default([]),
+      }),
+    }),
+  }),
+});
+
+const HANDLED_EVENTS = [
+  'payment.captured',
+  'payment.failed',
+  'refund.processed',
+  ...ROUTE_PRODUCT_EVENTS,
+] as const;
 
 /**
  * Anything else Razorpay sends. It still has to be a well-formed envelope with
@@ -109,7 +154,12 @@ const taggedUnhandledSchema = unhandledSchema.transform((parsed) => ({
 }));
 
 export const razorpayWebhookPayloadSchema = z.union([
-  z.discriminatedUnion('event', [capturedSchema, failedSchema, refundProcessedSchema]),
+  z.discriminatedUnion('event', [
+    capturedSchema,
+    failedSchema,
+    refundProcessedSchema,
+    routeProductSchema,
+  ]),
   taggedUnhandledSchema,
 ]);
 
