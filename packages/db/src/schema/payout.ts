@@ -143,7 +143,7 @@ export const reconciliationMismatches = pgTable(
       .where(sql`${t.resolvedAt} IS NULL`),
     check(
       'reconciliation_mismatches_kind_check',
-      sql`${t.kind} IN ('amount_mismatch','missing_transfer','payout_failed')`,
+      sql`${t.kind} IN ('amount_mismatch','missing_transfer','payout_failed','missing_ledger_entry')`,
     ),
   ],
 );

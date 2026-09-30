@@ -73,15 +73,61 @@ export interface RouteTransfer {
   readonly status: string;
 }
 
-/** The Route transfers Razorpay made from one captured payment (task 16a reconciliation). */
+/** A transfer as the account-wide list reports it: where it came from and where it went. */
+export interface SourcedTransfer extends RouteTransfer {
+  /** The payment (`pay_…`) or order (`order_…`) it was made from. */
+  readonly source: string;
+  /** The Linked Account (`acc_…`) it went to. */
+  readonly recipient: string;
+}
+
+const sourcedTransferPageSchema = z.object({
+  items: z.array(
+    z.object({
+      id: z.string().min(1),
+      source: z.string().min(1),
+      recipient: z.string().min(1),
+      amount: gatewayPaise,
+      status: z.string().min(1),
+    }),
+  ),
+});
+
+/** Razorpay's page-size ceiling for list endpoints. */
+const PAGE = 100;
+
+/** The Route transfers Razorpay made (task 16 reconciliation, both directions). */
 export interface TransferGateway {
+  /** From one captured payment: is what we recorded what moved? */
   forPayment(razorpayPaymentId: string): Promise<readonly RouteTransfer[]>;
+  /** Every transfer created between `from` and `to`, unix seconds: did anything move we never recorded? */
+  since(from: number, to: number): Promise<readonly SourcedTransfer[]>;
 }
 
 export const razorpayTransfers: TransferGateway = {
   async forPayment(razorpayPaymentId) {
     const page = transferListSchema.parse(await sdk().payments.fetchTransfer(razorpayPaymentId));
     return page.items.map((t) => ({ id: t.id, amountPaise: t.amount, status: t.status }));
+  },
+
+  async since(from, to) {
+    const all: SourcedTransfer[] = [];
+    // A transfer on a window edge may be listed by two runs; reconciliation flags each once.
+    for (let skip = 0; ; skip += PAGE) {
+      const page = sourcedTransferPageSchema.parse(
+        await sdk().transfers.all({ from, to, count: PAGE, skip }),
+      );
+      all.push(
+        ...page.items.map((t) => ({
+          id: t.id,
+          source: t.source,
+          recipient: t.recipient,
+          amountPaise: t.amount,
+          status: t.status,
+        })),
+      );
+      if (page.items.length < PAGE) return all;
+    }
   },
 };
 
