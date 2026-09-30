@@ -2,6 +2,8 @@ import { colors, duration, elevation, radius, stagger } from '@parkease/tokens';
 import { useEffect, useRef } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 
+import { MAPLIBRE_CSS, initWebMap } from './web-map.js';
+
 export interface MapLocation {
   lat: number;
   lng: number;
@@ -112,6 +114,7 @@ interface WebMarkerInstance {
 interface MaplibreGl {
   Map: new (options: Record<string, unknown>) => WebMapInstance;
   Marker: new (options: { element: unknown; draggable: boolean }) => WebMarkerInstance;
+  setWorkerUrl(url: string): void;
 }
 
 // Why the map could not load, surfaced in the fallback UI rather than swallowed (R-FAIL-01).
@@ -147,7 +150,6 @@ if (!isWeb) {
 }
 
 // --- Web: MapLibre GL JS ---
-type MaybeWebExports = Partial<MaplibreGl> & { default?: MaplibreGl };
 
 let maplibregl: MaplibreGl | null = null;
 let webMapAvailable = false;
@@ -155,15 +157,12 @@ let webMapAvailable = false;
 if (isWeb) {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports -- conditional web module
-    const mod = require('maplibre-gl') as MaybeWebExports;
-    // maplibre-gl ships a dual ESM/CJS build; the CJS path nests it under `default`.
-    maplibregl = typeof mod.Map === 'function' ? (mod as MaplibreGl) : (mod.default ?? null);
-    webMapAvailable = typeof maplibregl?.Map === 'function';
-    if (webMapAvailable) {
-      injectMaplibreCss();
-    } else {
-      mapUnavailableReason = 'maplibre-gl loaded but the Map constructor is missing';
-    }
+    const init = initWebMap(require('maplibre-gl'));
+    // initWebMap checked the Map constructor; the rest of MaplibreGl is the library's own API.
+    maplibregl = init.gl as MaplibreGl | null;
+    webMapAvailable = maplibregl !== null;
+    if (webMapAvailable) injectMaplibreCss();
+    else mapUnavailableReason = init.reason;
   } catch (error) {
     mapUnavailableReason = describe(error);
   }
@@ -196,24 +195,7 @@ function injectMaplibreCss() {
   if (doc.getElementById('maplibre-gl-css')) return;
   const style = doc.createElement('style');
   style.id = 'maplibre-gl-css';
-  style.textContent = [
-    '.maplibregl-map{font:12px/20px Helvetica,Arial,sans-serif;overflow:hidden;position:relative;-webkit-tap-highlight-color:rgba(0,0,0,0)}',
-    '.maplibregl-canvas{position:absolute;left:0;top:0}',
-    '.maplibregl-canvas-container{overflow:hidden;position:relative}',
-    '.maplibregl-ctrl-bottom-left,.maplibregl-ctrl-bottom-right,.maplibregl-ctrl-top-left,.maplibregl-ctrl-top-right{position:absolute;pointer-events:none;z-index:2}',
-    '.maplibregl-ctrl-top-left{top:0;left:0}.maplibregl-ctrl-top-right{top:0;right:0}',
-    '.maplibregl-ctrl-bottom-left{bottom:0;left:0}.maplibregl-ctrl-bottom-right{bottom:0;right:0}',
-    '.maplibregl-ctrl{pointer-events:auto}',
-    '.maplibregl-ctrl-attrib{background-color:hsla(0,0%,100%,.5);font-size:10px;padding:0 5px}',
-    '.maplibregl-marker{position:absolute;top:0;left:0;will-change:transform;opacity:1;transition:opacity .2s}',
-    // Marker entrance: compositor-only (transform + opacity), staggered by the
-    // per-marker animation-delay set below.
-    `@keyframes parkease-marker-in{from{opacity:0;transform:scale(0.6) translateY(6px)}to{opacity:1;transform:scale(1) translateY(0)}}`,
-    `.parkease-marker{animation:parkease-marker-in ${String(duration.base)}ms cubic-bezier(0.05,0.7,0.1,1) both}`,
-    `.parkease-marker{transition:transform ${String(duration.fast)}ms cubic-bezier(0.2,0,0,1)}`,
-    // Reduced motion: state changes instantly, nothing moves.
-    '@media (prefers-reduced-motion: reduce){.parkease-marker{animation:none!important;transition:none!important}}',
-  ].join('\n');
+  style.textContent = MAPLIBRE_CSS;
   doc.head.appendChild(style);
 }
 
