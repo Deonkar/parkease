@@ -5,6 +5,7 @@ import type { SubmitRouteOnboarding } from '@parkease/contracts/shared';
 import { DB, type Database } from '../../../platform/db/db.module.js';
 import { withTransaction } from '../../../platform/db/transaction.js';
 import { logger } from '../../../platform/observability/logger.js';
+import { CommissionWaiverService } from '../../pricing/commission-waiver.service.js';
 import {
   PayoutProviderUnavailableError,
   RouteDetailsRejectedError,
@@ -48,6 +49,7 @@ export class SubmitRouteOnboardingCommand {
     @Inject(DB) private readonly db: Database,
     @Inject(ROUTE) private readonly route: RouteClient,
     private readonly payouts: PayoutService,
+    private readonly waivers: CommissionWaiverService,
   ) {}
 
   async execute(input: SubmitRouteOnboardingInput): Promise<LinkedAccountRow> {
@@ -97,8 +99,8 @@ export class SubmitRouteOnboardingCommand {
         settlementLast4: form.accountNumber.slice(-4),
         settlementIfscPrefix: form.ifsc.slice(0, 4),
       });
-      await withTransaction(this.db, (tx) =>
-        this.payouts.applyRouteStatus(
+      await withTransaction(this.db, async (tx) => {
+        const result = await this.payouts.applyRouteStatus(
           tx,
           { userId },
           {
@@ -107,8 +109,16 @@ export class SubmitRouteOnboardingCommand {
             at: sentAt,
             stamp: false,
           },
-        ),
-      );
+        );
+        // Razorpay can answer `activated` straight away; the grant must not wait for a webhook.
+        if (
+          result.outcome === 'applied' &&
+          settled.status === 'activated' &&
+          result.previous !== 'activated'
+        ) {
+          await this.waivers.grantIfEligible(tx, userId, sentAt);
+        }
+      });
       return (await this.payouts.linkedFor(userId)) ?? saved;
     } catch (error) {
       if (!(error instanceof RazorpayApiError)) throw error;

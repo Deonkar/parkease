@@ -87,5 +87,5 @@ export {
   settlementClearedEntries,
 } from './ledger-entries.js';
 
-export { MINIMUM_PAYOUT_PAISE, nextPayoutOn } from './payout-schedule.js';
+export { istDateOf, MINIMUM_PAYOUT_PAISE, nextPayoutOn } from './payout-schedule.js';
 export * from './commission-waiver.js';

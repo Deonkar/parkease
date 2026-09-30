@@ -48,7 +48,7 @@ export function buildBookingStack(h: Harness): BookingStack {
   const outbox = new OutboxService();
   const quotes = new PricingQuoteService(
     new SurgeService(h.redis.asClient()),
-    new CommissionWaiverService(h.db),
+    new CommissionWaiverService(h.db, outbox),
   );
   const payments = new PaymentService(h.db);
   const refunds = new RefundService(ledger, payments, outbox);

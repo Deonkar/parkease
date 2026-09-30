@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { OutboxModule } from '../../platform/outbox/outbox.module.js';
 import { LedgerModule } from '../ledger/ledger.module.js';
+import { PricingModule } from '../pricing/pricing.module.js';
 
 import { ApplyRouteStatusCommand } from './commands/apply-route-status.command.js';
 import { SubmitRouteOnboardingCommand } from './commands/submit-route-onboarding.command.js';
@@ -15,7 +16,7 @@ import { ROUTE, RouteHttpClient } from './route.client.js';
  * job (`jobs/payout/`), not an endpoint: nobody can trigger one by hand.
  */
 @Module({
-  imports: [LedgerModule, OutboxModule],
+  imports: [LedgerModule, OutboxModule, PricingModule],
   providers: [
     PayoutService,
     UpsertBankDetailsCommand,
