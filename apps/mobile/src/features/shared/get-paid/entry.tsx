@@ -90,6 +90,7 @@ export function PayoutSetupBanner({
       onPress={() => {
         router.push(href);
       }}
+      android_ripple={{ color: colors.borderStrong }}
       style={styles.banner}
     >
       <MaterialCommunityIcons name="alert-circle-outline" size={22} color={colors.warning} />

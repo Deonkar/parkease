@@ -13,7 +13,7 @@ import {
 import { Button, ErrorState, Skeleton } from '@parkease/ui-native';
 import { FlashList } from '@shopify/flash-list';
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { formatDayMonthIST } from '@/lib/format';
 import { formatPaise } from '@/lib/money';
@@ -115,6 +115,7 @@ export function ValetPayoutsScreen() {
           testID="bank-retry"
           accessibilityRole="button"
           onPress={() => void bank.refetch()}
+          android_ripple={{ color: colors.surfaceTertiary }}
           style={styles.retry}
         >
           <Text style={styles.retryText}>Couldn&apos;t load your bank account. Tap to retry.</Text>
@@ -177,6 +178,7 @@ export function ValetPayoutsScreen() {
                 testID="payouts-more-retry"
                 accessibilityRole="button"
                 onPress={() => void payouts.fetchNextPage()}
+                android_ripple={{ color: colors.surfaceTertiary }}
                 style={styles.retry}
               >
                 <Text style={styles.retryText}>Couldn&apos;t load more. Tap to retry.</Text>
@@ -201,6 +203,8 @@ export function ValetPayoutsScreen() {
             ) : (
               <View style={styles.empty} testID="payouts-empty">
                 <MaterialCommunityIcons
+                  accessibilityElementsHidden
+                  importantForAccessibility="no"
                   name="calendar-clock"
                   size={40}
                   color={colors.textTertiary}
@@ -245,68 +249,76 @@ function BankForm({
   return (
     <View style={styles.root}>
       <ScreenHeader title="Bank account" {...(firstTime ? {} : { onBack: onDone })} />
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        <ReadableColumn style={styles.column}>
-          <Text style={styles.note}>
-            Your payouts go here every Monday. The account number is encrypted and only ever shown
-            as its last 4 digits.
-          </Text>
-          <TextField
-            id="accountHolderName"
-            label="Account holder name"
-            value={holder}
-            onChangeText={setHolder}
-            error={errors.accountHolderName}
-            autoComplete="name"
-          />
-          <TextField
-            id="accountNumber"
-            label="Account number"
-            value={account}
-            onChangeText={(v) => {
-              setAccount(v.replace(/\D/g, ''));
-            }}
-            error={errors.accountNumber}
-            keyboardType="number-pad"
-            maxLength={18}
-          />
-          <TextField
-            id="ifscCode"
-            label="IFSC"
-            hint="11 characters, on your cheque book or bank app"
-            value={ifsc}
-            onChangeText={(v) => {
-              setIfsc(v.toUpperCase().replace(/\s/g, ''));
-            }}
-            error={errors.ifscCode}
-            autoCapitalize="characters"
-            maxLength={11}
-          />
-          {firstTime ? null : (
-            <View style={styles.warning} testID="bank-change-warning">
-              <MaterialCommunityIcons name="alert-outline" size={20} color={colors.warning} />
-              <Text style={styles.warningText}>
-                Changing your bank cancels any payout not yet sent. It goes out the next Monday, to
-                the new account. We&apos;ll notify you either way.
-              </Text>
-            </View>
-          )}
-          {save.isError ? (
-            <FieldError testID="bank-save-error" message={toApiFailure(save.error).message} />
-          ) : null}
-          <Button
-            label="Save bank account"
-            loading={save.isPending}
-            onPress={() => {
-              if (!parsed.success) {
-                setShowErrors(true);
-                return;
-              }
-              save.mutate(parsed.data, { onSuccess: onDone });
-            }}
-          />
-        </ReadableColumn>
-      </ScrollView>
+      <KeyboardAvoidingView style={styles.root} behavior="height">
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+          <ReadableColumn style={styles.column}>
+            <Text style={styles.note}>
+              Your payouts go here every Monday. The account number is encrypted and only ever shown
+              as its last 4 digits.
+            </Text>
+            <TextField
+              id="accountHolderName"
+              label="Account holder name"
+              value={holder}
+              onChangeText={setHolder}
+              error={errors.accountHolderName}
+              autoComplete="name"
+            />
+            <TextField
+              id="accountNumber"
+              label="Account number"
+              value={account}
+              onChangeText={(v) => {
+                setAccount(v.replace(/\D/g, ''));
+              }}
+              error={errors.accountNumber}
+              keyboardType="number-pad"
+              maxLength={18}
+            />
+            <TextField
+              id="ifscCode"
+              label="IFSC"
+              hint="11 characters, on your cheque book or bank app"
+              value={ifsc}
+              onChangeText={(v) => {
+                setIfsc(v.toUpperCase().replace(/\s/g, ''));
+              }}
+              error={errors.ifscCode}
+              autoCapitalize="characters"
+              maxLength={11}
+            />
+            {firstTime ? null : (
+              <View style={styles.warning} testID="bank-change-warning">
+                <MaterialCommunityIcons
+                  accessibilityElementsHidden
+                  importantForAccessibility="no"
+                  name="alert-outline"
+                  size={20}
+                  color={colors.warning}
+                />
+                <Text style={styles.warningText}>
+                  Changing your bank cancels any payout not yet sent. It goes out the next Monday,
+                  to the new account. We&apos;ll notify you either way.
+                </Text>
+              </View>
+            )}
+            {save.isError ? (
+              <FieldError testID="bank-save-error" message={toApiFailure(save.error).message} />
+            ) : null}
+            <Button
+              label="Save bank account"
+              loading={save.isPending}
+              onPress={() => {
+                if (!parsed.success) {
+                  setShowErrors(true);
+                  return;
+                }
+                save.mutate(parsed.data, { onSuccess: onDone });
+              }}
+            />
+          </ReadableColumn>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }

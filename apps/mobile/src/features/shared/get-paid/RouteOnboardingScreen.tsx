@@ -13,7 +13,15 @@ import {
 import { Button, ErrorState, Skeleton } from '@parkease/ui-native';
 import { type Href, router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { BackHandler, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  BackHandler,
+  KeyboardAvoidingView,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { toApiFailure } from '../api/errors';
 import { FieldError } from '../components/FieldError';
@@ -203,114 +211,117 @@ export function RouteOnboardingScreen({ payee }: { readonly payee: RoutePayee })
             setShowErrors(false);
           }}
         />
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <ReadableColumn style={styles.column}>
-            {open === 'details' ? (
-              <>
+        {/* The last field (PIN code, IFSC) stays above the keyboard, as on the washer form. */}
+        <KeyboardAvoidingView style={styles.root} behavior="height">
+          <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+            <ReadableColumn style={styles.column}>
+              {open === 'details' ? (
+                <>
+                  <TextField
+                    id="legalName"
+                    label="Name as on your PAN"
+                    value={draft.legalName}
+                    onChangeText={set('legalName')}
+                    error={errors.legalName}
+                    autoComplete="name"
+                  />
+                  <TextField
+                    id="email"
+                    label="Email"
+                    value={draft.email}
+                    onChangeText={set('email')}
+                    error={errors.email}
+                    autoCapitalize="none"
+                    autoComplete="email"
+                    keyboardType="email-address"
+                  />
+                  <TextField
+                    id="street"
+                    label="Street address"
+                    value={draft.street}
+                    onChangeText={set('street')}
+                    error={errors.street}
+                    autoComplete="street-address"
+                  />
+                  <TextField
+                    id="city"
+                    label="City"
+                    value={draft.city}
+                    onChangeText={set('city')}
+                    error={errors.city}
+                  />
+                  <TextField
+                    id="state"
+                    label="State"
+                    value={draft.state}
+                    onChangeText={set('state')}
+                    error={errors.state}
+                  />
+                  <TextField
+                    id="postalCode"
+                    label="PIN code"
+                    value={draft.postalCode}
+                    onChangeText={set('postalCode')}
+                    error={errors.postalCode}
+                    keyboardType="number-pad"
+                    maxLength={6}
+                    autoComplete="postal-code"
+                  />
+                </>
+              ) : open === 'pan' ? (
                 <TextField
-                  id="legalName"
-                  label="Name as on your PAN"
-                  value={draft.legalName}
-                  onChangeText={set('legalName')}
-                  error={errors.legalName}
-                  autoComplete="name"
-                />
-                <TextField
-                  id="email"
-                  label="Email"
-                  value={draft.email}
-                  onChangeText={set('email')}
-                  error={errors.email}
-                  autoCapitalize="none"
-                  autoComplete="email"
-                  keyboardType="email-address"
-                />
-                <TextField
-                  id="street"
-                  label="Street address"
-                  value={draft.street}
-                  onChangeText={set('street')}
-                  error={errors.street}
-                  autoComplete="street-address"
-                />
-                <TextField
-                  id="city"
-                  label="City"
-                  value={draft.city}
-                  onChangeText={set('city')}
-                  error={errors.city}
-                />
-                <TextField
-                  id="state"
-                  label="State"
-                  value={draft.state}
-                  onChangeText={set('state')}
-                  error={errors.state}
-                />
-                <TextField
-                  id="postalCode"
-                  label="PIN code"
-                  value={draft.postalCode}
-                  onChangeText={set('postalCode')}
-                  error={errors.postalCode}
-                  keyboardType="number-pad"
-                  maxLength={6}
-                  autoComplete="postal-code"
-                />
-              </>
-            ) : open === 'pan' ? (
-              <TextField
-                id="pan"
-                label="PAN"
-                hint="10 characters, like ABCDE1234F"
-                value={draft.pan}
-                onChangeText={set('pan')}
-                error={errors.pan}
-                autoCapitalize="characters"
-                maxLength={10}
-              />
-            ) : (
-              <>
-                <Text style={styles.note}>
-                  The account must be in your name — the same as on your PAN.
-                </Text>
-                <TextField
-                  id="accountNumber"
-                  label="Account number"
-                  value={draft.accountNumber}
-                  onChangeText={set('accountNumber')}
-                  error={errors.accountNumber}
-                  keyboardType="number-pad"
-                  maxLength={18}
-                />
-                <TextField
-                  id="ifsc"
-                  label="IFSC"
-                  hint="11 characters, on your cheque book or bank app"
-                  value={draft.ifsc}
-                  onChangeText={set('ifsc')}
-                  error={errors.ifsc}
+                  id="pan"
+                  label="PAN"
+                  hint="10 characters, like ABCDE1234F"
+                  value={draft.pan}
+                  onChangeText={set('pan')}
+                  error={errors.pan}
                   autoCapitalize="characters"
-                  maxLength={11}
+                  maxLength={10}
                 />
-              </>
-            )}
-            <Button
-              label="Save and continue"
-              onPress={() => {
-                if (!stepComplete(draft, open)) {
-                  setShowErrors(true);
-                  return;
-                }
-                setEdited((s) => new Set(s).add(open));
-                setShowErrors(false);
-                // The last send's error was about the details just changed.
-                submit.reset();
-                setOpen(null);
-              }}
-            />
-          </ReadableColumn>
-        </ScrollView>
+              ) : (
+                <>
+                  <Text style={styles.note}>
+                    The account must be in your name — the same as on your PAN.
+                  </Text>
+                  <TextField
+                    id="accountNumber"
+                    label="Account number"
+                    value={draft.accountNumber}
+                    onChangeText={set('accountNumber')}
+                    error={errors.accountNumber}
+                    keyboardType="number-pad"
+                    maxLength={18}
+                  />
+                  <TextField
+                    id="ifsc"
+                    label="IFSC"
+                    hint="11 characters, on your cheque book or bank app"
+                    value={draft.ifsc}
+                    onChangeText={set('ifsc')}
+                    error={errors.ifsc}
+                    autoCapitalize="characters"
+                    maxLength={11}
+                  />
+                </>
+              )}
+              <Button
+                label="Save and continue"
+                onPress={() => {
+                  if (!stepComplete(draft, open)) {
+                    setShowErrors(true);
+                    return;
+                  }
+                  setEdited((s) => new Set(s).add(open));
+                  setShowErrors(false);
+                  // The last send's error was about the details just changed.
+                  submit.reset();
+                  setOpen(null);
+                }}
+              />
+            </ReadableColumn>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </View>
     );
   }
@@ -335,7 +346,13 @@ export function RouteOnboardingScreen({ payee }: { readonly payee: RoutePayee })
       <ScrollView contentContainerStyle={styles.scroll}>
         <ReadableColumn style={styles.column}>
           <View style={styles.banner} accessibilityRole="summary" testID="get-paid-banner">
-            <MaterialCommunityIcons name="alert-circle-outline" size={22} color={colors.warning} />
+            <MaterialCommunityIcons
+              accessibilityElementsHidden
+              importantForAccessibility="no"
+              name="alert-circle-outline"
+              size={22}
+              color={colors.warning}
+            />
             <View style={styles.bannerText}>
               <Text style={styles.bannerTitle}>{banner.title}</Text>
               <Text style={styles.bannerBody}>{banner.body}</Text>
@@ -480,7 +497,13 @@ function Explainer({
 }) {
   return (
     <View style={styles.explainer}>
-      <MaterialCommunityIcons name={icon} size={20} color={colors.primary} />
+      <MaterialCommunityIcons
+        accessibilityElementsHidden
+        importantForAccessibility="no"
+        name={icon}
+        size={20}
+        color={colors.primary}
+      />
       <Text style={styles.explainerText}>{text}</Text>
     </View>
   );
@@ -518,6 +541,8 @@ function StatusCard({
   return (
     <View style={styles.status} testID={`get-paid-${phase}`}>
       <MaterialCommunityIcons
+        accessibilityElementsHidden
+        importantForAccessibility="no"
         name={copy.icon}
         size={32}
         color={phase === 'blocked' ? colors.errorInk : colors.primary}
