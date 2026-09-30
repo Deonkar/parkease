@@ -1,0 +1,74 @@
+<!doctype html>
+<html>
+  <head><meta charset="UTF-8" /></head>
+  <body>
+    <template>
+      <style>
+        @font-face { font-family: "Plus Jakarta Sans"; src: url("fonts/PlusJakartaSans-VF.ttf") format("truetype"); font-weight: 200 800; }
+        #sting-root { position: absolute; inset: 0; container-type: size; background: #F8FAFC; overflow: hidden;
+          font-family: "Plus Jakarta Sans", sans-serif; }
+        #sting-map { position: absolute; inset: -4%; width: 108%; height: 108%; }
+        #sting-stage { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5cqmin; }
+        #sting-pin { position: relative; width: 22cqmin; height: 19.6cqmin; }
+        #sting-chip { position: absolute; left: 0; top: 0; width: 22cqmin; height: 15cqmin; border-radius: 2.6cqmin;
+          background: #0284C7; border: 0.7cqmin solid #FFFFFF; box-sizing: border-box;
+          box-shadow: 0 1.2cqmin 3cqmin rgba(15, 23, 42, 0.18);
+          display: flex; align-items: center; justify-content: center; color: #FFFFFF; font-weight: 800; font-size: 9cqmin; }
+        #sting-tail { position: absolute; left: 50%; top: 14.2cqmin; width: 4cqmin; height: 4cqmin; margin-left: -2cqmin;
+          background: #0284C7; border-right: 0.7cqmin solid #FFFFFF; border-bottom: 0.7cqmin solid #FFFFFF; box-sizing: border-box; rotate: 45deg; }
+        #sting-shadow { position: absolute; left: 50%; bottom: -1.2cqmin; width: 12cqmin; height: 2.4cqmin; margin-left: -6cqmin;
+          border-radius: 50%; background: rgba(15, 23, 42, 0.16); }
+        #sting-ring { position: absolute; left: 50%; bottom: -3.9cqmin; opacity: 0; width: 16cqmin; height: 8cqmin; margin-left: -8cqmin;
+          border-radius: 50%; border: 0.5cqmin solid #0284C7; box-sizing: border-box; }
+        #sting-word { font-size: 9cqmin; font-weight: 800; letter-spacing: -0.03em; color: #0F172A; line-height: 1; }
+        #sting-word span { color: #0369A1; }
+      </style>
+
+      <div id="sting-root" data-composition-id="sting" data-width="1080" data-height="1920">
+        <svg id="sting-map" data-layout-allow-overflow viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+          <rect width="1000" height="1000" fill="#F8FAFC" />
+          <g fill="#EEF2F7">
+            <rect x="80" y="90" width="230" height="170" rx="10" /><rect x="360" y="90" width="280" height="170" rx="10" />
+            <rect x="690" y="90" width="240" height="170" rx="10" /><rect x="80" y="320" width="150" height="260" rx="10" />
+            <rect x="690" y="320" width="240" height="120" rx="10" /><rect x="690" y="480" width="240" height="100" rx="10" />
+            <rect x="80" y="640" width="330" height="270" rx="10" /><rect x="460" y="640" width="180" height="270" rx="10" />
+            <rect x="690" y="640" width="240" height="270" rx="10" />
+          </g>
+          <g stroke="#E2E8F0" stroke-linecap="round" fill="none">
+            <path d="M0 290 H1000 M0 610 H1000 M335 0 V1000 M665 0 V1000" stroke-width="22" />
+            <path d="M0 75 H1000 M0 925 H1000 M55 0 V1000 M945 0 V1000 M255 290 V610 M665 460 H1000" stroke-width="10" />
+            <path d="M-40 1040 L1040 -40" stroke-width="16" />
+          </g>
+        </svg>
+        <div id="sting-stage">
+          <div id="sting-pin">
+            <div id="sting-ring"></div>
+            <div id="sting-shadow"></div>
+            <div id="sting-tail"></div>
+            <div id="sting-chip">P</div>
+          </div>
+          <div id="sting-word">Park<span>Ease</span></div>
+        </div>
+      </div>
+
+      <script>
+        // Series motion tokens — the same block opens every spine file; see docs/launch/brag-series.md.
+        const DUR = { fast: 0.18, base: 0.32, slow: 0.6 };
+        const EASE = { out: "power3.out", in: "power2.in", land: "back.out(1.6)" };
+
+        const tl = gsap.timeline({ paused: true });
+        tl.fromTo("#sting-map", { scale: 1.06 }, { scale: 1, duration: 1.8, ease: "none" }, 0);
+        // Drop, land with one measured settle, ripple from the landing point.
+        tl.fromTo(["#sting-chip", "#sting-tail"], { y: "-60cqh", opacity: 0 },
+          { y: 0, opacity: 1, duration: 0.42, ease: EASE.in }, 0.04);
+        tl.fromTo("#sting-shadow", { scale: 0.2, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.42, ease: EASE.in }, 0.04);
+        tl.fromTo("#sting-chip", { scaleY: 0.86, scaleX: 1.08, transformOrigin: "50% 100%" },
+          { scaleY: 1, scaleX: 1, duration: DUR.base, ease: EASE.land }, 0.46);
+        // immediateRender off: the ring must not sit on the map before the pin lands.
+        tl.fromTo("#sting-ring", { scale: 0.5, opacity: 0.7 }, { scale: 2.1, opacity: 0, duration: DUR.slow, ease: EASE.out, immediateRender: false }, 0.46);
+        tl.fromTo("#sting-word", { y: "3cqmin", opacity: 0 }, { y: 0, opacity: 1, duration: DUR.base, ease: EASE.out }, 0.66);
+        window.__timelines["sting"] = tl;
+      </script>
+    </template>
+  </body>
+</html>

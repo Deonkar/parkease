@@ -1,0 +1,1 @@
+ParkEase v1 showed a parking-space owner three different earnings for one booking: ₹82.47, ₹51.00 and ₹42.50. Now every figure on the owner dashboard is one ledger query in one read-only snapshot, and an integration test proves the screens agree.

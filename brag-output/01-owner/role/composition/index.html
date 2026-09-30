@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1920" />
+    <title>ParkEase 01 — For parking space owners</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      @font-face { font-family: "Plus Jakarta Sans"; src: url("fonts/PlusJakartaSans-VF.ttf") format("truetype"); font-weight: 200 800; }
+      body { margin: 0; background: #F8FAFC; }
+      #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: #F8FAFC;
+        font-family: "Plus Jakarta Sans", sans-serif; color: #0F172A; }
+
+      /* Audience card */
+      #aud { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center;
+        padding: 0 96px; box-sizing: border-box; }
+      #aud-for { display: inline-flex; align-self: flex-start; align-items: center; gap: 14px; padding: 12px 22px;
+        border-radius: 8px; background: rgba(3, 105, 161, 0.08); color: #0369A1; font-size: 34px; font-weight: 700; }
+      #aud-for i { width: 16px; height: 16px; border-radius: 50%; background: #0284C7; display: block; }
+      #aud-h { margin-top: 34px; font-size: 104px; font-weight: 800; letter-spacing: -0.04em; line-height: 1.02; text-wrap: balance; }
+      #aud-sub { margin-top: 34px; font-size: 52px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; color: #0F172A; text-wrap: balance; }
+      #aud-ex { margin-top: 44px; padding-top: 34px; border-top: 3px solid #E2E8F0; font-size: 36px; font-weight: 500;
+        line-height: 1.4; color: #475569; text-wrap: pretty; }
+
+      /* Capability header: progress chip + one plain sentence */
+      #chip { position: absolute; left: 90px; top: 108px; display: flex; align-items: center; gap: 18px; opacity: 0; }
+      #chip-n { width: 64px; height: 64px; border-radius: 50%; background: #0369A1; color: #FFFFFF; display: flex;
+        align-items: center; justify-content: center; font-size: 30px; font-weight: 800; }
+      .chip-label { position: absolute; left: 82px; top: 0; height: 64px; display: flex; align-items: center;
+        white-space: nowrap; font-size: 34px; font-weight: 700; color: #0369A1; opacity: 0; }
+      #chip-labels { position: relative; width: 700px; height: 64px; }
+      #bar { position: absolute; left: 90px; right: 90px; top: 196px; height: 6px; display: flex; gap: 10px; opacity: 0; }
+      #bar i { flex: 1; border-radius: 3px; background: #E2E8F0; position: relative; overflow: hidden; }
+      #bar i b { position: absolute; inset: 0; background: #0369A1; transform-origin: 0 50%; transform: scaleX(0); }
+      .cap { position: absolute; left: 90px; right: 90px; top: 222px; height: 160px; display: flex; align-items: center;
+        font-size: 58px; font-weight: 700; letter-spacing: -0.025em; line-height: 1.12; text-wrap: balance; opacity: 0; }
+
+      /* Phone: 680px screen showing 1170x2532 captures (x1.7436 CSS px) */
+      #phone { position: absolute; left: 186px; top: 410px; width: 708px; height: 1500px; border-radius: 70px;
+        background: #0F172A; box-shadow: 0 40px 90px rgba(15, 23, 42, 0.18), 0 8px 24px rgba(15, 23, 42, 0.10); opacity: 0; }
+      #screen { position: absolute; left: 14px; top: 14px; width: 680px; height: 1472px; border-radius: 58px; overflow: hidden; background: #F8FAFC; }
+      .layer { position: absolute; inset: 0; opacity: 0; }
+      .layer img, .layer video { position: absolute; left: 0; top: 0; width: 680px; height: 1472px; }
+      .scrim { position: absolute; left: 0; right: 0; bottom: 0; background: linear-gradient(to bottom, rgba(248, 250, 252, 0), #F8FAFC 90px); }
+      .hl { position: absolute; border-radius: 17px; background: rgba(3, 105, 161, 0.07); box-shadow: 0 0 0 4px rgba(3, 105, 161, 0.55); opacity: 0; }
+      .row { position: absolute; border-radius: 8px; background: rgba(3, 105, 161, 0.08); opacity: 0; }
+      .row::before { content: ""; position: absolute; left: -8px; top: 6px; bottom: 6px; width: 5px; border-radius: 3px; background: #0369A1; }
+      #topscrim { position: absolute; left: 0; right: 0; top: 0; height: 400px; opacity: 0;
+        background: linear-gradient(to bottom, #F8FAFC 0, #F8FAFC 330px, rgba(248, 250, 252, 0)); }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="owner-role" data-start="0" data-width="1080" data-height="1920" data-duration="29.6">
+      <div id="sting" data-composition-id="sting" data-composition-src="compositions/sting.html"
+        data-start="0" data-duration="1.8" data-track-index="1" data-width="1080" data-height="1920"></div>
+
+      <div id="aud">
+        <div id="aud-for"><i></i>ParkEase for owners</div>
+        <div id="aud-h">For parking space owners</div>
+        <div id="aud-sub">Earn from the parking spot you’re not using.</div>
+        <div id="aud-ex">ParkEase is a parking marketplace for India. Drivers find your spot on a map and book it by the hour. Here’s what you can do.</div>
+      </div>
+
+      <div id="phone"><div id="screen">
+        <div class="layer" id="s1a"><img src="assets/screens/00-wizard-step2-filled.png" alt="" /></div>
+        <div class="layer" id="s1b"><img src="assets/screens/00-wizard-step3-filled.png" alt="" /></div>
+        <div class="layer" id="s1c"><img src="assets/screens/00-wizard-step5.png" alt="" /></div>
+        <div class="layer" id="s1d"><img src="assets/screens/04-listings.png" alt="" /></div>
+        <div class="layer" id="s2"><img src="assets/screens/00-wizard-step4-filled.png" alt="" /></div>
+        <video id="s3v" class="layer" style="width: 680px; height: 1472px" muted playsinline data-start="14" data-duration="3.8"
+          data-media-start="1.2" data-track-index="2" src="assets/screens/05-scan-checkin.mp4"></video>
+        <div class="layer" id="s3"><img src="assets/screens/05b-checked-in.png" alt="" /></div>
+        <div class="layer" id="s4"><img src="assets/screens/02b-statement.png" alt="" /></div>
+        <div class="layer" id="s5a"><img src="assets/screens/03-earnings-today.png" alt="" /><div class="scrim" style="top: 850px"></div></div>
+        <div class="layer" id="s5b"><img src="assets/screens/03c-earnings-week.png" alt="" /><div class="scrim" style="top: 1066px"></div></div>
+
+        <!-- Highlights, screen px = capture CSS px x 1.7436 -->
+        <div class="hl" id="h-pending" style="left: 26px; top: 134px; width: 621px; height: 199px"></div>
+        <div class="row" id="r-car" style="left: 20px; top: 237px; width: 644px; height: 73px"></div>
+        <div class="row" id="r-bike" style="left: 20px; top: 492px; width: 644px; height: 73px"></div>
+        <div class="hl" id="h-checkin" style="left: 28px; top: 854px; width: 624px; height: 492px"></div>
+        <div class="row" id="r-base" style="left: 42px; top: 241px; width: 596px; height: 40px"></div>
+        <div class="row" id="r-fee" style="left: 42px; top: 288px; width: 596px; height: 40px"></div>
+        <div class="row" id="r-earned" style="left: 42px; top: 347px; width: 596px; height: 51px"></div>
+      </div></div>
+
+      <div id="topscrim"></div>
+      <div id="chip">
+        <div id="chip-n">1</div>
+        <div id="chip-labels">
+          <div class="chip-label" id="cl1">List your space</div>
+          <div class="chip-label" id="cl2">Set your price</div>
+          <div class="chip-label" id="cl3">Check drivers in</div>
+          <div class="chip-label" id="cl4">See every booking</div>
+          <div class="chip-label" id="cl5">Track your earnings</div>
+        </div>
+      </div>
+      <div id="bar"><i><b></b></i><i><b></b></i><i><b></b></i><i><b></b></i><i><b></b></i></div>
+      <div class="cap" id="c1">List your space in 5 quick steps.</div>
+      <div class="cap" id="c2">Set your own price per hour, for cars and bikes.</div>
+      <div class="cap" id="c3">Driver arrives? Scan their QR code to check them in.</div>
+      <div class="cap" id="c4">Every booking, line by line: price, fee, what you earned.</div>
+      <div class="cap" id="c5">See what you earned today and this week.</div>
+
+      <div id="endcard" data-composition-id="endcard" data-composition-src="compositions/endcard.html"
+        data-start="25.4" data-duration="4.2" data-track-index="1" data-width="1080" data-height="1920"
+        data-variable-values='{"line":"For parking space owners.","cta":"Coming soon to Android"}'></div>
+
+      <!-- Narration: Kokoro af_heart, one line per scene -->
+      <audio id="vo0" data-start="2.1" data-duration="4.42" data-track-index="3" data-volume="1" src="assets/voice/r0.wav"></audio>
+      <audio id="vo1" data-start="7.25" data-duration="2.07" data-track-index="3" data-volume="1" src="assets/voice/r1.wav"></audio>
+      <audio id="vo2" data-start="10.6" data-duration="3.01" data-track-index="3" data-volume="1" src="assets/voice/r2.wav"></audio>
+      <audio id="vo3" data-start="14.2" data-duration="3.39" data-track-index="3" data-volume="1" src="assets/voice/r3.wav"></audio>
+      <audio id="vo4" data-start="18.4" data-duration="3.67" data-track-index="3" data-volume="1" src="assets/voice/r4.wav"></audio>
+      <audio id="vo5" data-start="22.8" data-duration="2.18" data-track-index="3" data-volume="1" src="assets/voice/r5.wav"></audio>
+      <audio id="vo6" data-start="25.6" data-duration="3.61" data-track-index="3" data-volume="1" src="assets/voice/r6.wav"></audio>
+      <!-- Music ducks under the voice from 2.0s -->
+      <audio id="music" data-start="0" data-duration="29.6" data-track-index="10" data-volume="1"
+        data-automation="{&quot;version&quot;:1,&quot;lanes&quot;:[{&quot;target&quot;:&quot;volume&quot;,&quot;points&quot;:[{&quot;t&quot;:0,&quot;v&quot;:0},{&quot;t&quot;:0.5,&quot;v&quot;:0.3},{&quot;t&quot;:1.8,&quot;v&quot;:0.3},{&quot;t&quot;:2.1,&quot;v&quot;:0.12},{&quot;t&quot;:28.4,&quot;v&quot;:0.12},{&quot;t&quot;:29.6,&quot;v&quot;:0}]}]}"
+        src="assets/music/happy-beats-business-moves-vol-12-by-ende-dot-app.mp3"></audio>
+      <audio id="sfx-land" data-start="0.46" data-duration="0.183" data-track-index="11" data-volume="0.55" src="assets/sfx/impactSoft_medium_001.ogg"></audio>
+      <audio id="sfx-checkin" data-start="16.0" data-duration="0.122" data-track-index="12" data-volume="0.4" src="assets/sfx/bong_001.ogg"></audio>
+      <audio id="sfx-earned" data-start="21.3" data-duration="0.122" data-track-index="12" data-volume="0.4" src="assets/sfx/bong_001.ogg"></audio>
+      <audio id="sfx-end" data-start="25.45" data-duration="0.147" data-track-index="11" data-volume="0.45" src="assets/sfx/impactSoft_medium_004.ogg"></audio>
+    </div>
+
+    <script>
+      // Series motion tokens (docs/launch/brag-series.md) — no hand-tuned timings below.
+      const DUR = { fast: 0.18, base: 0.32, slow: 0.6 };
+      const EASE = { out: "power3.out", in: "power2.in", land: "back.out(1.6)", move: "power2.inOut" };
+
+      const tl = gsap.timeline({ paused: true });
+      const show = (sel, at, d = DUR.base) => tl.fromTo(sel, { opacity: 0 }, { opacity: 1, duration: d, ease: EASE.out }, at);
+      const rise = (sel, at, d = DUR.slow) => tl.fromTo(sel, { opacity: 0, y: 28 }, { opacity: 1, y: 0, duration: d, ease: EASE.out }, at);
+      const hide = (sel, at, d = DUR.base) => tl.to(sel, { opacity: 0, duration: d, ease: EASE.in }, at);
+
+      tl.to("#sting", { opacity: 0, duration: DUR.base, ease: EASE.in }, 1.42);
+
+      // Who it's for (1.8–7.0)
+      tl.set("#aud > *", { opacity: 0 }, 0.01);
+      rise("#aud-for", 1.85); rise("#aud-h", 2.05); rise("#aud-sub", 3.0); rise("#aud-ex", 4.3);
+      hide("#aud", 6.65);
+
+      // Capability scaffold in: chip, progress bar, phone
+      show(["#chip", "#bar"], 7.0);
+      tl.fromTo("#phone", { y: 160, opacity: 0 }, { y: 0, opacity: 1, duration: DUR.slow * 1.4, ease: EASE.out }, 7.0);
+
+      // One capability = chip number + label + caption + progress segment
+      const step = (n, at, end) => {
+        tl.set("#chip-n", { textContent: String(n) }, at);
+        show(`#cl${n}`, at); show(`#c${n}`, at + 0.05);
+        tl.to(`#bar i:nth-child(${n}) b`, { scaleX: 1, duration: end - at - 0.3, ease: "none" }, at);
+        hide([`#cl${n}`, `#c${n}`], end - DUR.base);
+      };
+      step(1, 7.0, 10.4); step(2, 10.4, 14.0); step(3, 14.0, 18.2); step(4, 18.2, 22.6); step(5, 22.6, 25.4);
+
+      // 1 — List your space: the wizard, then the new listing waiting for approval
+      show("#s1a", 7.1, DUR.fast); show("#s1b", 7.95, DUR.fast); show("#s1c", 8.75, DUR.fast); show("#s1d", 9.5, DUR.fast);
+      show("#h-pending", 9.7); hide("#h-pending", 10.2, DUR.fast);
+
+      // 2 — Set your price: the two hourly rates
+      show("#s2", 10.4, DUR.fast);
+      show("#r-car", 11.4); show("#r-bike", 12.3);
+      hide(["#r-car", "#r-bike"], 13.7, DUR.fast);
+
+      // 3 — Check drivers in: the real scan, then Vikas P. checked in
+      hide(["#s1a", "#s1b", "#s1c", "#s1d", "#s2"], 14.0, DUR.fast);
+      show("#s3v", 14.0, DUR.fast);
+      tl.set("#s3", { opacity: 1 }, 17.75);
+      show("#h-checkin", 16.2); hide("#h-checkin", 17.9, DUR.fast);
+
+      // 4 — See every booking: push in, rows light as the voice names them
+      show("#s4", 18.2, DUR.fast);
+      // Top of the zoomed phone must clear the two-line caption (ends y≈382): 694 − 284×1.4 + 110 ≈ 408.
+      tl.to("#phone", { scale: 1.4, y: 110, transformOrigin: "354px 284px", duration: 0.9, ease: EASE.move }, 18.3);
+      show("#r-base", 19.6); show("#r-fee", 20.4); show("#r-earned", 21.3);
+      hide(["#r-base", "#r-fee", "#r-earned"], 22.3, DUR.fast);
+      tl.to("#phone", { scale: 1, y: 0, duration: 0.7, ease: EASE.move }, 22.35);
+
+      // 5 — Track your earnings: today, then the week as the voice says it
+      show("#s5a", 22.6, DUR.fast);
+      tl.to("#phone", { scale: 1.2, y: 70, transformOrigin: "354px 371px", duration: 0.8, ease: EASE.move }, 23.05);
+      show("#s5b", 24.2);
+
+      // Dip, then the end card names the audience again
+      hide(["#phone", "#chip", "#bar"], 25.05);
+      tl.fromTo("#endcard", { opacity: 0 }, { opacity: 1, duration: DUR.base, ease: EASE.out }, 25.4);
+
+      window.__timelines["owner-role"] = tl;
+    </script>
+  </body>
+</html>

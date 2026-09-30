@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>ParkEase 06 — The statement (engineering)</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      @font-face { font-family: "Plus Jakarta Sans"; src: url("fonts/PlusJakartaSans-VF.ttf") format("truetype"); font-weight: 200 800; }
+      @font-face { font-family: "JetBrains Mono"; src: url("fonts/JetBrainsMono-400.woff2") format("woff2"); font-weight: 400; }
+      @font-face { font-family: "JetBrains Mono"; src: url("fonts/JetBrainsMono-700.woff2") format("woff2"); font-weight: 700; }
+      body { margin: 0; background: #F8FAFC; }
+      #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: #F8FAFC;
+        font-family: "Plus Jakarta Sans", sans-serif; color: #0F172A; }
+      .scene { position: absolute; inset: 0; }
+      #s2, #s3, #s4 { opacity: 0; }
+      .mono { font-family: "JetBrains Mono", monospace; }
+      .panel { position: absolute; background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 16px;
+        box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08); }
+      .path { position: absolute; left: 0; right: 0; top: 0; height: 58px; border-bottom: 1px solid #E2E8F0;
+        display: flex; align-items: center; padding: 0 28px; font-size: 19px; color: #475569; }
+      .hlrow { position: absolute; border-radius: 8px; background: rgba(3, 105, 161, 0.08); opacity: 0; }
+      .hlrow::before { content: ""; position: absolute; left: -7px; top: 5px; bottom: 5px; width: 5px; border-radius: 3px; background: #0369A1; }
+      .pill { position: absolute; padding: 8px 16px; border-radius: 8px; background: #0369A1; color: #FFFFFF;
+        font-size: 22px; font-weight: 700; opacity: 0; white-space: nowrap; }
+
+      /* Scene 1 — three answers */
+      #e1-copy { position: absolute; left: 140px; top: 300px; width: 820px; }
+      .e1-line { font-size: 96px; font-weight: 800; letter-spacing: -0.035em; line-height: 1.08; }
+      #e1-sub { margin-top: 34px; font-size: 32px; color: #475569; font-weight: 500; }
+      .card { position: absolute; left: 1060px; width: 700px; height: 170px; background: #FFFFFF; border: 1px solid #E2E8F0;
+        border-radius: 16px; box-shadow: 0 14px 40px rgba(15, 23, 42, 0.07); display: flex; align-items: center;
+        justify-content: space-between; padding: 0 44px; box-sizing: border-box; }
+      .card .lab { font-size: 28px; color: #475569; font-weight: 600; }
+      .card .fig { position: relative; font-size: 72px; font-weight: 800; letter-spacing: -0.03em; }
+      .strike { position: absolute; left: -8px; right: -8px; top: 50%; height: 7px; margin-top: -3px; border-radius: 4px;
+        background: #0F172A; transform-origin: 0 50%; }
+      #c2-ring { position: absolute; left: 1060px; top: 455px; width: 700px; height: 170px; border-radius: 16px;
+        box-shadow: 0 0 0 5px #0369A1; opacity: 0; }
+
+      /* Scene 2 — one query */
+      #e2-head { position: absolute; left: 100px; top: 78px; font-size: 56px; font-weight: 800; letter-spacing: -0.03em; }
+      #code { left: 90px; top: 188px; width: 1310px; height: 660px; }
+      #code-body { position: absolute; left: 0; right: 0; top: 58px; padding: 26px 34px 0 34px; font-size: 23px; line-height: 48px; }
+      .ln { display: flex; white-space: pre; position: relative; }
+      .ln .n { width: 56px; flex: none; color: #475569; }
+      .kw { color: #475569; }
+      .call { color: #0369A1; font-weight: 700; }
+      .str { color: #475569; }
+      #phone { position: absolute; left: 1456px; top: 170px; width: 414px; height: 868px; border-radius: 50px; background: #0F172A;
+        box-shadow: 0 30px 70px rgba(15, 23, 42, 0.16); }
+      #screen { position: absolute; left: 12px; top: 12px; width: 390px; height: 844px; border-radius: 40px; overflow: hidden; }
+      #screen img { position: absolute; left: 0; top: 0; width: 390px; height: 844px; }
+      .ring { position: absolute; border-radius: 11px; background: rgba(3, 105, 161, 0.07); box-shadow: 0 0 0 3px rgba(3, 105, 161, 0.6); opacity: 0; }
+
+      /* Scene 3 — the owner's line */
+      #card-img { position: absolute; left: 110px; top: 250px; width: 900px; height: 415px; border-radius: 18px;
+        box-shadow: 0 18px 50px rgba(15, 23, 42, 0.10); }
+      #e3-copy { position: absolute; left: 1110px; top: 285px; width: 700px; }
+      #e3-h { font-size: 58px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; text-wrap: balance; }
+      #e3-sub { margin-top: 26px; font-size: 34px; font-weight: 500; color: #475569; line-height: 1.3; text-wrap: balance; }
+      #rates { left: 110px; top: 745px; width: 1700px; height: 196px; }
+      #rates-body { position: absolute; left: 0; right: 0; top: 58px; padding: 18px 36px 0 36px; font-size: 22px; line-height: 44px; }
+
+      /* Scene 4 — proof */
+      #term { position: absolute; left: 150px; top: 130px; width: 1620px; height: 820px; border-radius: 18px; background: #0F172A;
+        box-shadow: 0 30px 80px rgba(15, 23, 42, 0.22); }
+      #term-title { position: absolute; left: 0; right: 0; top: 0; height: 64px; border-bottom: 1px solid #1E293B; display: flex;
+        align-items: center; padding: 0 34px; font-size: 19px; color: #94A3B8; }
+      #term-body { position: absolute; left: 0; right: 0; top: 64px; padding: 26px 34px 0 34px; font-size: 19px; line-height: 44px; color: #E2E8F0; }
+      .t { white-space: pre; opacity: 0; position: relative; }
+      .t .ok { color: #F8FAFC; font-weight: 700; }
+      .t .dim { color: #94A3B8; }
+      #t-hl { position: absolute; left: 22px; top: 90px; width: 1576px; height: 44px; border-radius: 8px;
+        background: rgba(2, 132, 199, 0.22); opacity: 0; }
+      #role-tag { position: absolute; right: 100px; top: 36px; padding: 10px 20px; border-radius: 8px; background: rgba(3, 105, 161, 0.08);
+        color: #0369A1; font-size: 26px; font-weight: 700; opacity: 0; }
+      #t-hl::before { content: ""; position: absolute; left: -6px; top: 5px; bottom: 5px; width: 5px; border-radius: 3px; background: #0284C7; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="engineering" data-start="0" data-width="1920" data-height="1080" data-duration="26.4">
+      <div id="sting" data-composition-id="sting" data-composition-src="compositions/sting.html"
+        data-start="0" data-duration="1.8" data-track-index="1" data-width="1920" data-height="1080"></div>
+
+      <!-- Scene 1 — One booking. Three answers. (v1 history, paraphrased) -->
+      <div class="scene" id="s1">
+        <div id="e1-copy">
+          <div class="e1-line" id="e1-a">One booking.</div>
+          <div class="e1-line" id="e1-b">Three answers.</div>
+          <div id="e1-sub">ParkEase v1, the same surged booking</div>
+        </div>
+        <div class="card" id="c1" style="top: 205px"><span class="lab">Dashboard</span><span class="fig">₹82.47<i class="strike" id="k1"></i></span></div>
+        <div class="card" id="c2" style="top: 455px"><span class="lab">Earnings screen</span><span class="fig">₹51.00</span></div>
+        <div class="card" id="c3" style="top: 705px"><span class="lab">Payout job</span><span class="fig">₹42.50<i class="strike" id="k3"></i></span></div>
+        <div id="c2-ring"></div>
+        <div class="pill" id="c2-tag" style="left: 1060px; top: 400px">The ledger’s answer</div>
+      </div>
+
+      <!-- Scene 2 — Now every figure is one ledger read. owner-dashboard.ts @ fca625c -->
+      <div class="scene" id="s2">
+        <div id="e2-head">Now every figure is one ledger read.</div>
+        <div class="panel" id="code">
+          <div class="path mono">apps/api/src/domains/ledger/queries/owner-dashboard.ts</div>
+          <div id="code-body" class="mono">
+            <div class="ln ctx"><span class="n">39</span><span><span class="kw">async</span> forOwner(ownerId: string): Promise&lt;OwnerDashboardData&gt; {</span></div>
+            <div class="ln ctx"><span class="n">40</span><span>  <span class="kw">return</span> this.db.transaction(</span></div>
+            <div class="ln ctx"><span class="n">41</span><span>    <span class="kw">async</span> (tx) =&gt; {</span></div>
+            <div class="ln"><span class="n"> </span><span class="kw">      ⋮</span></div>
+            <div class="ln"><span class="n">47</span><span>      <span class="kw">const</span> owed = <span class="kw">await</span> <span class="call">this.balance.movement</span>(ownerId, undefined, tx);</span></div>
+            <div class="ln"><span class="n">48</span><span>      <span class="kw">const</span> today = <span class="kw">await</span> <span class="call">this.balance.movement</span>(ownerId, periodBound(at, <span class="str">'today'</span>), tx);</span></div>
+            <div class="ln"><span class="n">49</span><span>      <span class="kw">const</span> month = <span class="kw">await</span> <span class="call">this.balance.movement</span>(ownerId, periodBound(at, <span class="str">'month'</span>), tx);</span></div>
+            <div class="ln"><span class="n">50</span><span>      <span class="kw">const</span> lastMonth = <span class="kw">await</span> <span class="call">this.balance.movement</span>(ownerId, lastMonthToDate(at), tx);</span></div>
+            <div class="ln"><span class="n"> </span><span class="kw">      ⋮</span></div>
+            <div class="ln"><span class="n">86</span><span>    { isolationLevel: <span class="str">'repeatable read'</span>, accessMode: <span class="str">'read only'</span> },</span></div>
+          </div>
+          <!-- rows: body top 58 + padding 26 + index x 48 -->
+          <div class="hlrow" id="L47" style="left: 28px; top: 276px; width: 1254px; height: 48px"></div>
+          <div class="hlrow" id="L48" style="left: 28px; top: 324px; width: 1254px; height: 48px"></div>
+          <div class="hlrow" id="L49" style="left: 28px; top: 372px; width: 1254px; height: 48px"></div>
+          <div class="hlrow" id="L50" style="left: 28px; top: 420px; width: 1254px; height: 48px"></div>
+          <div class="hlrow" id="L86" style="left: 28px; top: 516px; width: 1254px; height: 48px"></div>
+          <div class="pill" id="snap-tag" style="left: 900px; top: 578px; font-size: 26px">one read-only snapshot</div>
+        </div>
+        <div id="phone"><div id="screen">
+          <img src="assets/screens/01-dashboard-top.png" alt="" />
+          <div class="ring" id="p-owed" style="left: 16px; top: 88px; width: 358px; height: 130px"></div>
+          <div class="ring" id="p-today" style="left: 16px; top: 240px; width: 172px; height: 120px"></div>
+          <div class="ring" id="p-month" style="left: 202px; top: 240px; width: 172px; height: 120px"></div>
+        </div></div>
+      </div>
+
+      <!-- Scene 3 — the owner's line. rates.ts @ fca625c -->
+      <div class="scene" id="s3">
+        <img id="card-img" src="assets/screens/statement-card.png" alt="" />
+        <div class="hlrow" id="r-base" style="left: 130px; top: 421px; width: 860px; height: 44px"></div>
+        <div class="hlrow" id="r-fee" style="left: 130px; top: 488px; width: 860px; height: 44px"></div>
+        <div class="hlrow" id="r-earned" style="left: 130px; top: 579px; width: 860px; height: 50px"></div>
+        <div id="e3-copy">
+          <div id="e3-h">Base, minus the 15% fee.</div>
+          <div id="e3-sub">Surge goes to the platform, never into the owner’s line.</div>
+        </div>
+        <div class="panel" id="rates">
+          <div class="path mono">packages/contracts/src/money/rates.ts</div>
+          <div id="rates-body" class="mono">
+            <div class="ln"><span class="n">21</span><span>    rate: toRate(<span class="call">0.15</span>),</span></div>
+            <div class="ln"><span class="n">23</span><span>    note: <span class="str">'Launch rate. 15% of base, charged once, deducted from the owner payout.'</span>,</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scene 4 — proof: real output, captures/test-owner-dashboard-http.txt (2026-09-29) -->
+      <div class="scene" id="s4">
+        <div id="term" class="mono">
+          <div id="term-title">$ vitest run --config vitest.integration.config.ts test/integration/owner-dashboard-http.spec.ts</div>
+          <div id="t-hl"></div>
+          <div id="term-body">
+            <div class="t"><span class="ok">✓</span> owner dashboard HTTP &gt; dashboard and earnings agree on owner earnings <span class="dim">710ms</span></div>
+            <div class="t"><span class="ok">✓</span> owner dashboard HTTP &gt; keeps a wash on a recent booking out of the dashboard and the statement (C1) <span class="dim">429ms</span></div>
+            <div class="t"><span class="ok">✓</span> owner dashboard HTTP &gt; shows a surged booking as base, fee and net — no surge, GST or total</div>
+            <div class="t"><span class="ok">✓</span> owner dashboard HTTP &gt; shows a no-surge booking with the same shape</div>
+            <div class="t"><span class="ok">✓</span> owner dashboard HTTP &gt; pages upcoming bookings soonest-first, no duplicates, and rejects a past cursor replayed against upcoming</div>
+            <div class="t"><span class="ok">✓</span> owner dashboard HTTP &gt; lists bookings on one space, and 404s another owner’s space</div>
+            <div class="t"><span class="ok">✓</span> owner dashboard HTTP &gt; has no domain-partitioned bookings route (v1 duplicate)</div>
+            <div class="t"><span class="ok">✓</span> owner dashboard HTTP &gt; refuses a driver-only token on every owner route</div>
+            <div class="t"><span class="ok">✓</span> owner dashboard HTTP &gt; answers an unknown period with 400</div>
+            <div class="t"><span class="ok">✓</span> owner dashboard HTTP &gt; shows occupancy and live status per space on the dashboard</div>
+            <div class="t"> </div>
+            <div class="t"><span class="dim"> Test Files </span> <span class="ok">1 passed</span> <span class="dim">(1)</span></div>
+            <div class="t"><span class="dim">      Tests </span> <span class="ok">10 passed</span> <span class="dim">(10)</span></div>
+          </div>
+        </div>
+        <div class="pill" id="agree-tag" style="left: 206px; top: 560px; font-size: 32px; padding: 10px 22px">the screens agree</div>
+      </div>
+
+      <div id="role-tag">Owner app · under the hood</div>
+
+      <div id="endcard" data-composition-id="endcard" data-composition-src="compositions/endcard.html"
+        data-start="22.5" data-duration="3.9" data-track-index="1" data-width="1920" data-height="1080"
+        data-variable-values='{"line":"Every figure is one query.","cta":"github.com/Deonkar/parkease"}'></div>
+
+      <audio id="music" data-start="0" data-duration="26.4" data-track-index="10" data-volume="1"
+        data-automation="{&quot;version&quot;:1,&quot;lanes&quot;:[{&quot;target&quot;:&quot;volume&quot;,&quot;points&quot;:[{&quot;t&quot;:0,&quot;v&quot;:0},{&quot;t&quot;:0.5,&quot;v&quot;:0.3},{&quot;t&quot;:1.8,&quot;v&quot;:0.3},{&quot;t&quot;:2.0,&quot;v&quot;:0.12},{&quot;t&quot;:25.2,&quot;v&quot;:0.12},{&quot;t&quot;:26.4,&quot;v&quot;:0}]}]}"
+        src="assets/music/happy-beats-business-moves-vol-11-by-ende-dot-app.mp3"></audio>
+      <!-- Narration: Kokoro af_heart -->
+      <audio id="vo0" data-start="2.0" data-duration="3.90" data-track-index="3" data-volume="1" src="assets/voice/e0.wav"></audio>
+      <audio id="vo1" data-start="6.6" data-duration="5.16" data-track-index="3" data-volume="1" src="assets/voice/e1.wav"></audio>
+      <audio id="vo2" data-start="12.45" data-duration="5.33" data-track-index="3" data-volume="1" src="assets/voice/e2.wav"></audio>
+      <audio id="vo3" data-start="18.2" data-duration="3.86" data-track-index="3" data-volume="1" src="assets/voice/e3.wav"></audio>
+      <audio id="vo4" data-start="22.7" data-duration="3.41" data-track-index="3" data-volume="1" src="assets/voice/e4.wav"></audio>
+      <audio id="sfx-land" data-start="0.46" data-duration="0.183" data-track-index="11" data-volume="0.55" src="assets/sfx/impactSoft_medium_001.ogg"></audio>
+      <audio id="sfx-c1" data-start="2.4" data-duration="0.122" data-track-index="12" data-volume="0.4" src="assets/sfx/bong_001.ogg"></audio>
+      <audio id="sfx-c2" data-start="2.95" data-duration="0.122" data-track-index="12" data-volume="0.4" src="assets/sfx/bong_001.ogg"></audio>
+      <audio id="sfx-c3" data-start="3.5" data-duration="0.122" data-track-index="12" data-volume="0.4" src="assets/sfx/bong_001.ogg"></audio>
+      <audio id="sfx-ledger" data-start="4.75" data-duration="0.122" data-track-index="12" data-volume="0.5" src="assets/sfx/bong_001.ogg"></audio>
+      <audio id="sfx-l47" data-start="8.9" data-duration="0.01" data-track-index="13" data-volume="0.35" src="assets/sfx/click_003.ogg"></audio>
+      <audio id="sfx-l48" data-start="9.5" data-duration="0.01" data-track-index="13" data-volume="0.35" src="assets/sfx/click_003.ogg"></audio>
+      <audio id="sfx-l49" data-start="10.1" data-duration="0.01" data-track-index="13" data-volume="0.35" src="assets/sfx/click_003.ogg"></audio>
+      <audio id="sfx-l50" data-start="10.7" data-duration="0.01" data-track-index="13" data-volume="0.35" src="assets/sfx/click_003.ogg"></audio>
+      <audio id="sfx-agree" data-start="20.0" data-duration="0.183" data-track-index="11" data-volume="0.45" src="assets/sfx/impactSoft_medium_001.ogg"></audio>
+      <audio id="sfx-end" data-start="22.55" data-duration="0.147" data-track-index="11" data-volume="0.5" src="assets/sfx/impactSoft_medium_004.ogg"></audio>
+    </div>
+
+    <script>
+      // Series motion tokens (docs/launch/brag-series.md) — no hand-tuned timings below.
+      const DUR = { fast: 0.18, base: 0.32, slow: 0.6 };
+      const EASE = { out: "power3.out", in: "power2.in", land: "back.out(1.6)", move: "power2.inOut" };
+
+      const tl = gsap.timeline({ paused: true });
+      const show = (sel, at, d = DUR.base) => tl.fromTo(sel, { opacity: 0 }, { opacity: 1, duration: d, ease: EASE.out }, at);
+      const rise = (sel, at, d = DUR.base) => tl.fromTo(sel, { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: d, ease: EASE.out }, at);
+      const hide = (sel, at, d = DUR.base) => tl.to(sel, { opacity: 0, duration: d, ease: EASE.in }, at);
+
+      tl.to("#sting", { opacity: 0, duration: DUR.base, ease: EASE.in }, 1.42);
+      show("#role-tag", 1.9); hide("#role-tag", 22.15);
+
+      // Scene 1 (1.8–6.3)
+      rise("#e1-a", 1.85, DUR.slow);
+      rise("#e1-b", 2.1, DUR.slow);
+      show("#e1-sub", 2.5, DUR.slow);
+      rise("#c1", 2.4); rise("#c2", 2.95); rise("#c3", 3.5);
+      tl.fromTo(["#k1", "#k3"], { scaleX: 0 }, { scaleX: 1, duration: DUR.base, ease: EASE.out, stagger: 0.12 }, 4.5);
+      tl.to(["#c1", "#c3"], { opacity: 0.35, duration: DUR.slow, ease: EASE.out }, 4.65);
+      show("#c2-ring", 4.75); rise("#c2-tag", 4.75);
+      hide("#s1", 6.0);
+
+      // Scene 2 (6.3–12.3)
+      show("#s2", 6.3, DUR.slow);
+      tl.fromTo("#phone", { y: 60 }, { y: 0, duration: DUR.slow * 1.4, ease: EASE.out }, 6.3);
+      [["#L47", "#p-owed", 8.9], ["#L48", "#p-today", 9.5], ["#L49", "#p-month", 10.1]].forEach(([line, ring, at]) => {
+        show(line, at); show(ring, at); hide(ring, at + 0.55, DUR.fast);
+      });
+      show("#L50", 10.7);
+      // Context lines recede while 47–50 are the subject.
+      tl.to("#code-body .ctx", { opacity: 0.4, duration: DUR.base, ease: EASE.out }, 8.9);
+      show("#L86", 11.3); rise("#snap-tag", 11.3);
+      hide("#s2", 12.0);
+
+      // Scene 3 (12.3–17.3)
+      show("#s3", 12.3, DUR.slow);
+      tl.fromTo("#card-img", { y: 30 }, { y: 0, duration: DUR.slow * 1.4, ease: EASE.out }, 12.3);
+      show("#r-base", 13.2); show("#r-fee", 13.7); show("#r-earned", 14.2);
+      tl.fromTo("#rates", { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: DUR.slow, ease: EASE.out }, 14.8);
+      hide("#s3", 17.7);
+
+      // Scene 4 (17.3–21.8)
+      show("#s4", 18.0, DUR.base);
+      tl.fromTo("#term", { y: 30 }, { y: 0, duration: DUR.slow, ease: EASE.out }, 18.0);
+      tl.fromTo(".t", { opacity: 0 }, { opacity: 1, duration: DUR.fast, ease: "none", stagger: 0.1 }, 18.3);
+      show("#t-hl", 19.8);
+      tl.to("#term", { scale: 1.75, y: 230, transformOrigin: "40px 112px", duration: 0.9, ease: EASE.move }, 19.8);
+      tl.to([".t:not(:first-child)", "#term-title"], { opacity: 0, duration: DUR.slow, ease: EASE.in }, 19.8); // the proof line alone
+      rise("#agree-tag", 20.6);
+      hide("#s4", 22.15);
+
+      tl.fromTo("#endcard", { opacity: 0 }, { opacity: 1, duration: DUR.base, ease: EASE.out }, 22.5);
+      window.__timelines["engineering"] = tl;
+    </script>
+  </body>
+</html>

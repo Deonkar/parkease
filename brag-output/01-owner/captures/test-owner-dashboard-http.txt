@@ -1,0 +1,1069 @@
+
+ RUN  v2.1.8 C:/Users/onkar/Desktop/parkease/apps/api
+
+stdout | test/integration/owner-dashboard-http.spec.ts > owner dashboard HTTP
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '42710',
+  message: 'extension "postgis" already exists, skipping',
+  file: 'extension.c',
+  line: '2117',
+  routine: 'CreateExtension'
+}
+
+stdout | test/integration/owner-dashboard-http.spec.ts > owner dashboard HTTP
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'zone_id backfill: 0 row(s) to repair',
+  where: 'PL/pgSQL function inline_code_block line 16 at RAISE',
+  file: 'pl_exec.c',
+  line: '3909',
+  routine: 'exec_stmt_raise'
+}
+
+stdout | test/integration/owner-dashboard-http.spec.ts > owner dashboard HTTP > dashboard and earnings agree on owner earnings
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "payments"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "ledger_entries"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "valet_jobs"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "wash_jobs"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "reviews"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "refunds"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "valet_job_offers"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "wash_job_offers"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+
+stdout | test/integration/owner-dashboard-http.spec.ts > owner dashboard HTTP > keeps a wash on a recent booking out of the dashboard and the statement (C1)
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "payments"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "ledger_entries"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "valet_jobs"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "wash_jobs"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "reviews"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "refunds"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "valet_job_offers"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "wash_job_offers"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+
+ ✓ test/integration/owner-dashboard-http.spec.ts > owner dashboard HTTP > dashboard and earnings agree on owner earnings 710ms
+stdout | test/integration/owner-dashboard-http.spec.ts > owner dashboard HTTP > shows a surged booking as base, fee and net — no surge, GST or total
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "payments"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "ledger_entries"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "valet_jobs"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "wash_jobs"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "reviews"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "refunds"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "valet_job_offers"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "wash_job_offers"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+
+ ✓ test/integration/owner-dashboard-http.spec.ts > owner dashboard HTTP > keeps a wash on a recent booking out of the dashboard and the statement (C1) 429ms
+stdout | test/integration/owner-dashboard-http.spec.ts > owner dashboard HTTP > shows a no-surge booking with the same shape
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "payments"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "ledger_entries"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "valet_jobs"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "wash_jobs"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "reviews"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "refunds"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "valet_job_offers"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "wash_job_offers"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+
+ ✓ test/integration/owner-dashboard-http.spec.ts > owner dashboard HTTP > shows a surged booking as base, fee and net — no surge, GST or total
+stdout | test/integration/owner-dashboard-http.spec.ts > owner dashboard HTTP > pages upcoming bookings soonest-first, no duplicates, and rejects a past cursor replayed against upcoming
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "payments"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "ledger_entries"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "valet_jobs"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "wash_jobs"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "reviews"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "refunds"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "valet_job_offers"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "wash_job_offers"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+
+ ✓ test/integration/owner-dashboard-http.spec.ts > owner dashboard HTTP > shows a no-surge booking with the same shape
+stdout | test/integration/owner-dashboard-http.spec.ts > owner dashboard HTTP > lists bookings on one space, and 404s another owner’s space
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "payments"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "ledger_entries"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "valet_jobs"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "wash_jobs"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "reviews"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "refunds"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "valet_job_offers"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "wash_job_offers"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+
+ ✓ test/integration/owner-dashboard-http.spec.ts > owner dashboard HTTP > pages upcoming bookings soonest-first, no duplicates, and rejects a past cursor replayed against upcoming
+stdout | test/integration/owner-dashboard-http.spec.ts > owner dashboard HTTP > has no domain-partitioned bookings route (v1 duplicate)
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "payments"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "ledger_entries"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "valet_jobs"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "wash_jobs"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "reviews"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "refunds"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "valet_job_offers"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "wash_job_offers"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+
+ ✓ test/integration/owner-dashboard-http.spec.ts > owner dashboard HTTP > lists bookings on one space, and 404s another owner’s space
+stdout | test/integration/owner-dashboard-http.spec.ts > owner dashboard HTTP > refuses a driver-only token on every owner route
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "payments"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "ledger_entries"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "valet_jobs"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "wash_jobs"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "reviews"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "refunds"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "valet_job_offers"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "wash_job_offers"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+
+ ✓ test/integration/owner-dashboard-http.spec.ts > owner dashboard HTTP > has no domain-partitioned bookings route (v1 duplicate)
+stdout | test/integration/owner-dashboard-http.spec.ts > owner dashboard HTTP > answers an unknown period with 400
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "payments"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "ledger_entries"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "valet_jobs"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "wash_jobs"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "reviews"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "refunds"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "valet_job_offers"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "wash_job_offers"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+
+ ✓ test/integration/owner-dashboard-http.spec.ts > owner dashboard HTTP > refuses a driver-only token on every owner route
+stdout | test/integration/owner-dashboard-http.spec.ts > owner dashboard HTTP > shows occupancy and live status per space on the dashboard
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "payments"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "ledger_entries"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "valet_jobs"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "wash_jobs"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "reviews"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "refunds"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "valet_job_offers"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'truncate cascades to table "wash_job_offers"',
+  file: 'tablecmds.c',
+  line: '2037',
+  routine: 'ExecuteTruncateGuts'
+}
+
+ ✓ test/integration/owner-dashboard-http.spec.ts > owner dashboard HTTP > answers an unknown period with 400
+ ✓ test/integration/owner-dashboard-http.spec.ts > owner dashboard HTTP > shows occupancy and live status per space on the dashboard
+[21:35:30.689] [31mERROR[39m (6412): [36mrequest failed[39m
+    [35mcode[39m: "INVALID_CURSOR"
+    [35mtraceId[39m: "untraced"
+    err: {
+      "type": "BadRequestException",
+      "message": "That page link is no longer valid. Pull to refresh.",
+      "stack":
+          BadRequestException: That page link is no longer valid. Pull to refresh.
+              at BookingService.listForOwner (C:\Users\onkar\Desktop\parkease\apps\api\src\domains\booking\booking.service.ts:354:15)
+              at OwnerBookingsController.page (C:\Users\onkar\Desktop\parkease\apps\api\src\roles\owner\bookings.controller.ts:91:38)
+              at OwnerBookingsController.forSpace (C:\Users\onkar\Desktop\parkease\apps\api\src\roles\owner\bookings.controller.ts:87:17)
+              at processTicksAndRejections (node:internal/process/task_queues:103:5)
+      "response": {
+        "type": "Object",
+        "message": "That page link is no longer valid. Pull to refresh.",
+        "stack":
+            
+        "error": "INVALID_CURSOR"
+      },
+      "status": 400,
+      "options": {},
+      "name": "BadRequestException"
+    }
+[21:35:30.827] [31mERROR[39m (6412): [36mrequest failed[39m
+    [35mcode[39m: "NOT_FOUND"
+    [35mtraceId[39m: "untraced"
+    err: {
+      "type": "NotFoundException",
+      "message": "Space not found.",
+      "stack":
+          NotFoundException: Space not found.
+              at OwnerBookingsController.forSpace (C:\Users\onkar\Desktop\parkease\apps\api\src\roles\owner\bookings.controller.ts:85:13)
+              at processTicksAndRejections (node:internal/process/task_queues:103:5)
+      "response": {
+        "type": "Object",
+        "message": "Space not found.",
+        "stack":
+            
+        "error": "Not Found",
+        "statusCode": 404
+      },
+      "status": 404,
+      "options": {},
+      "name": "NotFoundException"
+    }
+[21:35:30.882] [31mERROR[39m (6412): [36mrequest failed[39m
+    [35mcode[39m: "NOT_FOUND"
+    [35mtraceId[39m: "untraced"
+    err: {
+      "type": "NotFoundException",
+      "message": "Cannot GET /api/v1/bookings/space/01a0e9f1-c441-7207-9c07-0b772446c2de",
+      "stack":
+          NotFoundException: Cannot GET /api/v1/bookings/space/01a0e9f1-c441-7207-9c07-0b772446c2de
+              at callback (file:///C:/Users/onkar/Desktop/parkease/node_modules/@nestjs/core/router/routes-resolver.js:82:19)
+              at Object.<anonymous> (file:///C:/Users/onkar/Desktop/parkease/node_modules/@nestjs/core/router/router-proxy.js:6:23)
+              at preHandlerCallbackInner (C:\Users\onkar\Desktop\parkease\node_modules\fastify\lib\handle-request.js:203:24)
+              at preHandlerCallback (C:\Users\onkar\Desktop\parkease\node_modules\fastify\lib\handle-request.js:168:5)
+              at validationCompleted (C:\Users\onkar\Desktop\parkease\node_modules\fastify\lib\handle-request.js:158:5)
+              at preValidationCallback (C:\Users\onkar\Desktop\parkease\node_modules\fastify\lib\handle-request.js:135:5)
+              at handler (C:\Users\onkar\Desktop\parkease\node_modules\fastify\lib\handle-request.js:105:7)
+              at Object.handleRequest (C:\Users\onkar\Desktop\parkease\node_modules\fastify\lib\handle-request.js:36:5)
+              at runPreParsing (C:\Users\onkar\Desktop\parkease\node_modules\fastify\lib\route.js:658:19)
+              at next (C:\Users\onkar\Desktop\parkease\node_modules\fastify\lib\hooks.js:236:9)
+      "response": {
+        "type": "Object",
+        "message": "Cannot GET /api/v1/bookings/space/01a0e9f1-c441-7207-9c07-0b772446c2de",
+        "stack":
+            
+        "error": "Not Found",
+        "statusCode": 404
+      },
+      "status": 404,
+      "options": {},
+      "name": "NotFoundException"
+    }
+[21:35:30.929] [31mERROR[39m (6412): [36mrequest failed[39m
+    [35mcode[39m: "FORBIDDEN"
+    [35mtraceId[39m: "untraced"
+    err: {
+      "type": "ForbiddenException",
+      "message": "You don't have permission to do that.",
+      "stack":
+          ForbiddenException: You don't have permission to do that.
+              at RolesGuard.canActivate (C:\Users\onkar\Desktop\parkease\apps\api\src\platform\rbac\roles.guard.ts:36:13)
+              at GuardsConsumer.tryActivate (file:///C:/Users/onkar/Desktop/parkease/node_modules/@nestjs/core/guards/guards-consumer.js:12:34)
+              at canActivateFn (file:///C:/Users/onkar/Desktop/parkease/node_modules/@nestjs/core/router/router-execution-context.js:154:59)
+              at file:///C:/Users/onkar/Desktop/parkease/node_modules/@nestjs/core/router/router-execution-context.js:46:37
+              at Object.<anonymous> (file:///C:/Users/onkar/Desktop/parkease/node_modules/@nestjs/core/router/router-proxy.js:6:23)
+              at preHandlerCallbackInner (C:\Users\onkar\Desktop\parkease\node_modules\fastify\lib\handle-request.js:203:24)
+              at preHandlerCallback (C:\Users\onkar\Desktop\parkease\node_modules\fastify\lib\handle-request.js:168:5)
+              at validationCompleted (C:\Users\onkar\Desktop\parkease\node_modules\fastify\lib\handle-request.js:158:5)
+              at preValidationCallback (C:\Users\onkar\Desktop\parkease\node_modules\fastify\lib\handle-request.js:135:5)
+              at handler (C:\Users\onkar\Desktop\parkease\node_modules\fastify\lib\handle-request.js:105:7)
+      "response": {
+        "type": "Object",
+        "message": "You don't have permission to do that.",
+        "stack":
+            
+        "error": "Forbidden",
+        "statusCode": 403
+      },
+      "status": 403,
+      "options": {},
+      "name": "ForbiddenException"
+    }
+[21:35:30.932] [31mERROR[39m (6412): [36mrequest failed[39m
+    [35mcode[39m: "FORBIDDEN"
+    [35mtraceId[39m: "untraced"
+    err: {
+      "type": "ForbiddenException",
+      "message": "You don't have permission to do that.",
+      "stack":
+          ForbiddenException: You don't have permission to do that.
+              at RolesGuard.canActivate (C:\Users\onkar\Desktop\parkease\apps\api\src\platform\rbac\roles.guard.ts:36:13)
+              at GuardsConsumer.tryActivate (file:///C:/Users/onkar/Desktop/parkease/node_modules/@nestjs/core/guards/guards-consumer.js:12:34)
+              at canActivateFn (file:///C:/Users/onkar/Desktop/parkease/node_modules/@nestjs/core/router/router-execution-context.js:154:59)
+              at file:///C:/Users/onkar/Desktop/parkease/node_modules/@nestjs/core/router/router-execution-context.js:46:37
+              at Object.<anonymous> (file:///C:/Users/onkar/Desktop/parkease/node_modules/@nestjs/core/router/router-proxy.js:6:23)
+              at preHandlerCallbackInner (C:\Users\onkar\Desktop\parkease\node_modules\fastify\lib\handle-request.js:203:24)
+              at preHandlerCallback (C:\Users\onkar\Desktop\parkease\node_modules\fastify\lib\handle-request.js:168:5)
+              at validationCompleted (C:\Users\onkar\Desktop\parkease\node_modules\fastify\lib\handle-request.js:158:5)
+              at preValidationCallback (C:\Users\onkar\Desktop\parkease\node_modules\fastify\lib\handle-request.js:135:5)
+              at handler (C:\Users\onkar\Desktop\parkease\node_modules\fastify\lib\handle-request.js:105:7)
+      "response": {
+        "type": "Object",
+        "message": "You don't have permission to do that.",
+        "stack":
+            
+        "error": "Forbidden",
+        "statusCode": 403
+      },
+      "status": 403,
+      "options": {},
+      "name": "ForbiddenException"
+    }
+[21:35:30.934] [31mERROR[39m (6412): [36mrequest failed[39m
+    [35mcode[39m: "FORBIDDEN"
+    [35mtraceId[39m: "untraced"
+    err: {
+      "type": "ForbiddenException",
+      "message": "You don't have permission to do that.",
+      "stack":
+          ForbiddenException: You don't have permission to do that.
+              at RolesGuard.canActivate (C:\Users\onkar\Desktop\parkease\apps\api\src\platform\rbac\roles.guard.ts:36:13)
+              at GuardsConsumer.tryActivate (file:///C:/Users/onkar/Desktop/parkease/node_modules/@nestjs/core/guards/guards-consumer.js:12:34)
+              at canActivateFn (file:///C:/Users/onkar/Desktop/parkease/node_modules/@nestjs/core/router/router-execution-context.js:154:59)
+              at file:///C:/Users/onkar/Desktop/parkease/node_modules/@nestjs/core/router/router-execution-context.js:46:37
+              at Object.<anonymous> (file:///C:/Users/onkar/Desktop/parkease/node_modules/@nestjs/core/router/router-proxy.js:6:23)
+              at preHandlerCallbackInner (C:\Users\onkar\Desktop\parkease\node_modules\fastify\lib\handle-request.js:203:24)
+              at preHandlerCallback (C:\Users\onkar\Desktop\parkease\node_modules\fastify\lib\handle-request.js:168:5)
+              at validationCompleted (C:\Users\onkar\Desktop\parkease\node_modules\fastify\lib\handle-request.js:158:5)
+              at preValidationCallback (C:\Users\onkar\Desktop\parkease\node_modules\fastify\lib\handle-request.js:135:5)
+              at handler (C:\Users\onkar\Desktop\parkease\node_modules\fastify\lib\handle-request.js:105:7)
+      "response": {
+        "type": "Object",
+        "message": "You don't have permission to do that.",
+        "stack":
+            
+        "error": "Forbidden",
+        "statusCode": 403
+      },
+      "status": 403,
+      "options": {},
+      "name": "ForbiddenException"
+    }
+[21:35:30.935] [31mERROR[39m (6412): [36mrequest failed[39m
+    [35mcode[39m: "FORBIDDEN"
+    [35mtraceId[39m: "untraced"
+    err: {
+      "type": "ForbiddenException",
+      "message": "You don't have permission to do that.",
+      "stack":
+          ForbiddenException: You don't have permission to do that.
+              at RolesGuard.canActivate (C:\Users\onkar\Desktop\parkease\apps\api\src\platform\rbac\roles.guard.ts:36:13)
+              at GuardsConsumer.tryActivate (file:///C:/Users/onkar/Desktop/parkease/node_modules/@nestjs/core/guards/guards-consumer.js:12:34)
+              at canActivateFn (file:///C:/Users/onkar/Desktop/parkease/node_modules/@nestjs/core/router/router-execution-context.js:154:59)
+              at file:///C:/Users/onkar/Desktop/parkease/node_modules/@nestjs/core/router/router-execution-context.js:46:37
+              at Object.<anonymous> (file:///C:/Users/onkar/Desktop/parkease/node_modules/@nestjs/core/router/router-proxy.js:6:23)
+              at preHandlerCallbackInner (C:\Users\onkar\Desktop\parkease\node_modules\fastify\lib\handle-request.js:203:24)
+              at preHandlerCallback (C:\Users\onkar\Desktop\parkease\node_modules\fastify\lib\handle-request.js:168:5)
+              at validationCompleted (C:\Users\onkar\Desktop\parkease\node_modules\fastify\lib\handle-request.js:158:5)
+              at preValidationCallback (C:\Users\onkar\Desktop\parkease\node_modules\fastify\lib\handle-request.js:135:5)
+              at handler (C:\Users\onkar\Desktop\parkease\node_modules\fastify\lib\handle-request.js:105:7)
+      "response": {
+        "type": "Object",
+        "message": "You don't have permission to do that.",
+        "stack":
+            
+        "error": "Forbidden",
+        "statusCode": 403
+      },
+      "status": 403,
+      "options": {},
+      "name": "ForbiddenException"
+    }
+[21:35:30.936] [31mERROR[39m (6412): [36mrequest failed[39m
+    [35mcode[39m: "FORBIDDEN"
+    [35mtraceId[39m: "untraced"
+    err: {
+      "type": "ForbiddenException",
+      "message": "You don't have permission to do that.",
+      "stack":
+          ForbiddenException: You don't have permission to do that.
+              at RolesGuard.canActivate (C:\Users\onkar\Desktop\parkease\apps\api\src\platform\rbac\roles.guard.ts:36:13)
+              at GuardsConsumer.tryActivate (file:///C:/Users/onkar/Desktop/parkease/node_modules/@nestjs/core/guards/guards-consumer.js:12:34)
+              at canActivateFn (file:///C:/Users/onkar/Desktop/parkease/node_modules/@nestjs/core/router/router-execution-context.js:154:59)
+              at file:///C:/Users/onkar/Desktop/parkease/node_modules/@nestjs/core/router/router-execution-context.js:46:37
+              at Object.<anonymous> (file:///C:/Users/onkar/Desktop/parkease/node_modules/@nestjs/core/router/router-proxy.js:6:23)
+              at preHandlerCallbackInner (C:\Users\onkar\Desktop\parkease\node_modules\fastify\lib\handle-request.js:203:24)
+              at preHandlerCallback (C:\Users\onkar\Desktop\parkease\node_modules\fastify\lib\handle-request.js:168:5)
+              at validationCompleted (C:\Users\onkar\Desktop\parkease\node_modules\fastify\lib\handle-request.js:158:5)
+              at preValidationCallback (C:\Users\onkar\Desktop\parkease\node_modules\fastify\lib\handle-request.js:135:5)
+              at handler (C:\Users\onkar\Desktop\parkease\node_modules\fastify\lib\handle-request.js:105:7)
+      "response": {
+        "type": "Object",
+        "message": "You don't have permission to do that.",
+        "stack":
+            
+        "error": "Forbidden",
+        "statusCode": 403
+      },
+      "status": 403,
+      "options": {},
+      "name": "ForbiddenException"
+    }
+[21:35:30.975] [31mERROR[39m (6412): [36mrequest failed[39m
+    [35mcode[39m: "VALIDATION_FAILED"
+    [35mtraceId[39m: "untraced"
+    err: {
+      "type": "ZodError",
+      "message": "[\n  {\n    \"received\": \"all\",\n    \"code\": \"invalid_enum_value\",\n    \"options\": [\n      \"today\",\n      \"week\",\n      \"month\"\n    ],\n    \"path\": [\n      \"period\"\n    ],\n    \"message\": \"Invalid enum value. Expected 'today' | 'week' | 'month', received 'all'\"\n  }\n]",
+      "stack":
+          ZodError: [
+            {
+              "received": "all",
+              "code": "invalid_enum_value",
+              "options": [
+                "today",
+                "week",
+                "month"
+              ],
+              "path": [
+                "period"
+              ],
+              "message": "Invalid enum value. Expected 'today' | 'week' | 'month', received 'all'"
+            }
+          ]
+              at Object.get error [as error] (file:///C:/Users/onkar/Desktop/parkease/node_modules/zod/lib/index.mjs:587:31)
+              at ZodObject.parse (file:///C:/Users/onkar/Desktop/parkease/node_modules/zod/lib/index.mjs:663:22)
+              at OwnerEarningsController.summary (C:\Users\onkar\Desktop\parkease\apps\api\src\roles\owner\earnings.controller.ts:31:49)
+              at file:///C:/Users/onkar/Desktop/parkease/node_modules/@nestjs/core/router/router-execution-context.js:42:29
+              at processTicksAndRejections (node:internal/process/task_queues:103:5)
+      "aggregateErrors": [
+        {
+          "type": "Object",
+          "message": "Invalid enum value. Expected 'today' | 'week' | 'month', received 'all'",
+          "stack":
+              
+          "received": "all",
+          "code": "invalid_enum_value",
+          "options": [
+            "today",
+            "week",
+            "month"
+          ],
+          "path": [
+            "period"
+          ]
+        }
+      ],
+      "issues": [
+        {
+          "received": "all",
+          "code": "invalid_enum_value",
+          "options": [
+            "today",
+            "week",
+            "month"
+          ],
+          "path": [
+            "period"
+          ],
+          "message": "Invalid enum value. Expected 'today' | 'week' | 'month', received 'all'"
+        }
+      ],
+      "name": "ZodError"
+    }
+
+ Test Files  1 passed (1)
+      Tests  10 passed (10)
+   Start at  03:05:06
+   Duration  25.35s (transform 2.37s, setup 0ms, collect 7.47s, tests 17.39s, environment 0ms, prepare 167ms)
+

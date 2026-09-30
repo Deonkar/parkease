@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1920" />
+    <title>ParkEase 06 — The statement (consumer)</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      @font-face { font-family: "Plus Jakarta Sans"; src: url("fonts/PlusJakartaSans-VF.ttf") format("truetype"); font-weight: 200 800; }
+      body { margin: 0; background: #F8FAFC; }
+      #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: #F8FAFC;
+        font-family: "Plus Jakarta Sans", sans-serif; color: #0F172A; }
+
+      /* Phone: a 600px-wide screen showing 1170x2532 captures (390 CSS px x3). */
+      #phone { position: absolute; left: 186px; top: 400px; width: 708px; height: 1500px; border-radius: 70px;
+        background: #0F172A; box-shadow: 0 40px 90px rgba(15, 23, 42, 0.18), 0 8px 24px rgba(15, 23, 42, 0.10); }
+      #screen { position: absolute; left: 14px; top: 14px; width: 680px; height: 1472px; border-radius: 58px;
+        overflow: hidden; background: #F8FAFC; }
+      .layer { position: absolute; inset: 0; }
+      #l2, #l3, #l3w, #l4 { opacity: 0; } /* hidden until their scene */
+      .layer img, .layer video { position: absolute; left: 0; top: 0; width: 680px; height: 1472px; }
+      /* Focus treatment for the earnings scene: the lower list fades to the app's ground. */
+      .scrim { position: absolute; left: 0; right: 0; bottom: 0;
+        background: linear-gradient(to bottom, rgba(248, 250, 252, 0), #F8FAFC 90px); }
+
+      .hl { position: absolute; border-radius: 17px; background: rgba(3, 105, 161, 0.07);
+        box-shadow: 0 0 0 4px rgba(3, 105, 161, 0.55); opacity: 0; }
+      .row { position: absolute; border-radius: 8px; background: rgba(3, 105, 161, 0.08); opacity: 0; }
+      .row::before { content: ""; position: absolute; left: -8px; top: 6px; bottom: 6px; width: 5px;
+        border-radius: 3px; background: #0369A1; }
+
+      #topscrim { position: absolute; left: 0; right: 0; top: 0; height: 440px; opacity: 0;
+        background: linear-gradient(to bottom, #F8FAFC 0, #F8FAFC 340px, rgba(248, 250, 252, 0)); }
+      .cap { position: absolute; left: 90px; right: 90px; top: 150px; height: 180px; display: flex;
+        align-items: center; justify-content: center; text-align: center; opacity: 0;
+        font-size: 62px; font-weight: 700; letter-spacing: -0.025em; line-height: 1.12; text-wrap: balance; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="consumer" data-start="0" data-width="1080" data-height="1920" data-duration="21.6">
+      <div id="sting" data-composition-id="sting" data-composition-src="compositions/sting.html"
+        data-start="0" data-duration="1.8" data-track-index="1" data-width="1080" data-height="1920"></div>
+
+      <div id="phone">
+        <div id="screen">
+          <div class="layer" id="l1"><img src="assets/screens/01-dashboard-top.png" alt="" /></div>
+          <video id="l2v" class="layer" style="width: 680px; height: 1472px" muted playsinline data-start="6.3" data-duration="3.1" data-track-index="2"
+            src="assets/screens/02-dashboard-to-statement.mp4"></video>
+          <div class="layer" id="l2"><img src="assets/screens/02b-statement.png" alt="" /></div>
+          <div class="layer" id="l3"><img src="assets/screens/03-earnings-today.png" alt="" />
+            <div class="scrim" style="top: 850px"></div></div>
+          <div class="layer" id="l3w"><img src="assets/screens/03c-earnings-week.png" alt="" />
+            <div class="scrim" style="top: 1066px"></div></div>
+          <div class="layer" id="l4"><img src="assets/screens/04b-listing-detail.png" alt="" /></div>
+
+          <!-- Highlights, in screen px (CSS px of the capture x 1.7436). -->
+          <div class="hl" id="h-owed" style="left: 28px; top: 153px; width: 624px; height: 227px"></div>
+          <div class="hl" id="h-today" style="left: 28px; top: 418px; width: 300px; height: 209px"></div>
+          <div class="row" id="r-base" style="left: 42px; top: 241px; width: 596px; height: 40px"></div>
+          <div class="row" id="r-fee" style="left: 42px; top: 288px; width: 596px; height: 40px"></div>
+          <div class="row" id="r-earned" style="left: 42px; top: 347px; width: 596px; height: 51px"></div>
+          <div class="row" id="r-rohit" style="left: 20px; top: 764px; width: 640px; height: 136px"></div>
+          <div class="row" id="r-fatima" style="left: 20px; top: 936px; width: 640px; height: 131px"></div>
+          <div class="row" id="r-vikas" style="left: 20px; top: 1133px; width: 640px; height: 129px"></div>
+        </div>
+      </div>
+
+      <div id="topscrim"></div>
+      <div class="cap" id="cap1">Know what your spot earned.</div>
+      <div class="cap" id="cap2">Every booking, line by line.</div>
+      <div class="cap" id="cap3">Today. This week. At a glance.</div>
+      <div class="cap" id="cap4">See who’s parked, and who’s next.</div>
+
+      <div id="endcard" data-composition-id="endcard" data-composition-src="compositions/endcard.html"
+        data-start="19" data-duration="2.6" data-track-index="1" data-width="1080" data-height="1920"
+        data-variable-values='{"line":"Your spot. Your statement.","cta":"Coming soon to Android"}'></div>
+
+      <audio id="music" data-start="0" data-duration="21.6" data-track-index="10" data-volume="1"
+        data-automation="{&quot;version&quot;:1,&quot;lanes&quot;:[{&quot;target&quot;:&quot;volume&quot;,&quot;points&quot;:[{&quot;t&quot;:0,&quot;v&quot;:0},{&quot;t&quot;:0.6,&quot;v&quot;:0.3},{&quot;t&quot;:20.2,&quot;v&quot;:0.3},{&quot;t&quot;:21.6,&quot;v&quot;:0}]}]}"
+        src="assets/music/happy-beats-business-moves-vol-12-by-ende-dot-app.mp3"></audio>
+      <audio id="sfx-land" data-start="0.46" data-duration="0.19" data-track-index="11" data-volume="0.55" src="assets/sfx/impactSoft_medium_001.ogg"></audio>
+      <audio id="sfx-owed" data-start="3.2" data-duration="0.13" data-track-index="12" data-volume="0.5" src="assets/sfx/bong_001.ogg"></audio>
+      <audio id="sfx-earned" data-start="10.9" data-duration="0.13" data-track-index="12" data-volume="0.5" src="assets/sfx/bong_001.ogg"></audio>
+      <audio id="sfx-booking" data-start="16.5" data-duration="0.13" data-track-index="12" data-volume="0.45" src="assets/sfx/bong_001.ogg"></audio>
+      <audio id="sfx-end" data-start="19.05" data-duration="0.15" data-track-index="11" data-volume="0.5" src="assets/sfx/impactSoft_medium_004.ogg"></audio>
+    </div>
+
+    <script>
+      // Series motion tokens (docs/launch/brag-series.md) — no hand-tuned timings below.
+      const DUR = { fast: 0.18, base: 0.32, slow: 0.6 };
+      const EASE = { out: "power3.out", in: "power2.in", land: "back.out(1.6)", move: "power2.inOut" };
+      const XFADE = DUR.slow; // polished: soft 0.6s crossfades
+
+      const tl = gsap.timeline({ paused: true });
+      const show = (sel, at, d = XFADE) => tl.fromTo(sel, { opacity: 0 }, { opacity: 1, duration: d, ease: EASE.out }, at);
+      const hide = (sel, at, d = XFADE) => tl.to(sel, { opacity: 0, duration: d, ease: EASE.in }, at);
+
+      // Sting out, phone in.
+      tl.to("#sting", { opacity: 0, duration: DUR.base, ease: EASE.in }, 1.42); // dip: sting fully out before the phone
+      tl.fromTo("#phone", { y: 180, opacity: 0 }, { y: 0, opacity: 1, duration: DUR.slow * 1.4, ease: EASE.out }, 1.8);
+
+      // Scene 1 — the glance (1.8–6.3).
+      show("#cap1", 2.0);
+      show("#h-owed", 3.1, DUR.base);
+      hide("#h-owed", 4.3, DUR.base);
+      show("#h-today", 4.4, DUR.base);
+      hide("#h-today", 5.9, DUR.base);
+      hide("#cap1", 6.05, DUR.base);
+
+      // Scene 2 — line by line (6.3–11.5). The clip plays, then its last frame holds as the still.
+      hide("#l1", 6.3, DUR.fast);
+      show("#cap2", 6.4);
+      tl.set("#l2", { opacity: 1 }, 9.38);
+      tl.to("#phone", { scale: 1.4, y: 40, transformOrigin: "354px 284px", duration: 0.9, ease: EASE.move }, 9.45);
+      show("#r-base", 10.0, DUR.base);
+      show("#r-fee", 10.45, DUR.base);
+      show("#r-earned", 10.9, DUR.base);
+      hide(["#r-base", "#r-fee", "#r-earned"], 11.25, DUR.base);
+      hide("#cap2", 11.3, DUR.base);
+      tl.to("#phone", { scale: 1, y: 0, duration: 0.7, ease: EASE.move }, 11.35);
+
+      // Scene 3 — over time (11.5–15.5): Today, then Week on the strong cue near 13.11.
+      show("#l3", 11.5);
+      show("#cap3", 11.7);
+      tl.to("#phone", { scale: 1.2, transformOrigin: "354px 371px", duration: 0.9, ease: EASE.move }, 12.1);
+      show("#l3w", 13.05, DUR.base * 1.5);
+      hide("#cap3", 15.25, DUR.base);
+
+      // Scene 4 — who's parked (15.5–19.0): push onto the bookings, rows one by one.
+      show("#l4", 15.45);
+      tl.to("#phone", { scale: 1.25, y: -216, transformOrigin: "354px 976px", duration: 1.0, ease: EASE.move }, 15.5);
+      show("#topscrim", 15.5, DUR.slow);
+      show("#cap4", 15.7);
+      show("#r-rohit", 16.5, DUR.base);
+      show("#r-fatima", 17.0, DUR.base);
+      show("#r-vikas", 17.5, DUR.base);
+      hide("#cap4", 18.4, DUR.base);
+
+      // Dip: phone and scrim out, then the end card in.
+      hide(["#phone", "#topscrim"], 18.6, DUR.base);
+      tl.fromTo("#endcard", { opacity: 0 }, { opacity: 1, duration: DUR.base, ease: EASE.out }, 19.0);
+
+      window.__timelines["consumer"] = tl;
+    </script>
+  </body>
+</html>

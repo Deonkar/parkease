@@ -1,0 +1,55 @@
+<!doctype html>
+<html
+  data-composition-variables='[
+    {"id":"line","type":"string","label":"Closing line","default":"Parking, found."},
+    {"id":"cta","type":"string","label":"Call to action","default":"Coming soon to Android"}
+  ]'
+>
+  <head><meta charset="UTF-8" /></head>
+  <body>
+    <template>
+      <style>
+        @font-face { font-family: "Plus Jakarta Sans"; src: url("fonts/PlusJakartaSans-VF.ttf") format("truetype"); font-weight: 200 800; }
+        #endcard-root { position: absolute; inset: 0; container-type: size; background: #F8FAFC; overflow: hidden;
+          font-family: "Plus Jakarta Sans", sans-serif; color: #0F172A; }
+        #endcard-stage { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+          gap: 4.5cqmin; padding: 0 8cqw; text-align: center; }
+        #endcard-lockup { display: flex; align-items: center; gap: 2.2cqmin; }
+        #endcard-chip { width: 9cqmin; height: 6.2cqmin; border-radius: 1.2cqmin; background: #0284C7; border: 0.4cqmin solid #FFFFFF;
+          box-sizing: border-box; box-shadow: 0 0.6cqmin 1.6cqmin rgba(15, 23, 42, 0.16);
+          display: flex; align-items: center; justify-content: center; color: #FFFFFF; font-weight: 800; font-size: 3.8cqmin; }
+        #endcard-word { font-size: 6.4cqmin; font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
+        #endcard-word span { color: #0369A1; }
+        #endcard-line { font-size: 7.4cqmin; font-weight: 700; letter-spacing: -0.025em; line-height: 1.12; max-width: min(86cqw, 150cqmin); text-wrap: balance; }
+        #endcard-cta { font-size: 3.4cqmin; font-weight: 700; color: #FFFFFF; background: #0369A1; border-radius: 1cqmin;
+          padding: 1.8cqmin 3.6cqmin; }
+        #endcard-rule { width: 12cqmin; height: 0.5cqmin; border-radius: 0.25cqmin; background: #E2E8F0; }
+      </style>
+
+      <div id="endcard-root" data-composition-id="endcard" data-width="1920" data-height="1080">
+        <div id="endcard-stage">
+          <div id="endcard-lockup">
+            <div id="endcard-chip">P</div>
+            <div id="endcard-word">Park<span>Ease</span></div>
+          </div>
+          <div id="endcard-rule"></div>
+          <div id="endcard-line" data-var-text="line">Parking, found.</div>
+          <div id="endcard-cta" data-var-text="cta">Coming soon to Android</div>
+        </div>
+      </div>
+
+      <script>
+        // Series motion tokens — the same block opens every spine file; see docs/launch/brag-series.md.
+        const DUR = { fast: 0.18, base: 0.32, slow: 0.6 };
+        const EASE = { out: "power3.out", in: "power2.in", land: "back.out(1.6)" };
+
+        const tl = gsap.timeline({ paused: true });
+        tl.fromTo("#endcard-lockup", { y: "2cqmin", opacity: 0 }, { y: 0, opacity: 1, duration: DUR.base, ease: EASE.out }, 0.05);
+        tl.fromTo("#endcard-rule", { scaleX: 0 }, { scaleX: 1, duration: DUR.base, ease: EASE.out }, 0.2);
+        tl.fromTo("#endcard-line", { y: "2.5cqmin", opacity: 0 }, { y: 0, opacity: 1, duration: DUR.base, ease: EASE.out }, 0.26);
+        tl.fromTo("#endcard-cta", { y: "2cqmin", opacity: 0 }, { y: 0, opacity: 1, duration: DUR.base, ease: EASE.out }, 0.44);
+        window.__timelines["endcard"] = tl;
+      </script>
+    </template>
+  </body>
+</html>

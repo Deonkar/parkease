@@ -1,0 +1,1 @@
+Every booking on your parking spot, line by line: the base price, the ParkEase fee, and what you earned. ParkEase, coming soon to Android.

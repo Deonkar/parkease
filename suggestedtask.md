@@ -1805,7 +1805,7 @@ filmed, and a reviewer comparing the two screens sees a bug that isn't there.
 - **Done means:** the owner fixtures derive the dashboard figures from the same transaction list the
   earnings fixture serves, with a unit test asserting dashboard month = sum of earnings month.
 
-### S-97 — The owner's scan screen keeps re-posting check-in after a successful scan
+### S-106 — The owner's scan screen keeps re-posting check-in after a successful scan
 
 - **Status:** `open`
 - **Found in:** launch series (brag) owner video capture — 2026-09-29
@@ -1926,25 +1926,21 @@ All are fine at launch volume.
   Also switch reconcile to `transfers.all({ from, to })`. Each change is justified by an EXPLAIN
   before and after.
 
-### S-98 — The web map never renders a frame in headless capture (driver discovery, owner listing step 1)
+### S-107 — The web map never renders a frame (driver discovery, owner listing step 1)
 
-- **Status:** `open` — cause not found; environment-specific not ruled out
+- **Status:** `fixed on fix/web-map (905016f)` — PR pending; close when it merges
 - **Found in:** launch series (brag) capture — 2026-09-29
 - **Surface:** mobile (web build) · packages/ui-native `ParkMap.tsx`
 
-In the capture browser (Chrome 153 headless, real AMD GPU via ANGLE/D3D11) the MapLibre 6.9.0 canvas is sized
-(390x590), OSM tiles return 200 and decode (256x256), WebGL2 works with `failIfMajorPerformanceCaveat`, blob
-workers run, the page is visible and nothing logs an error — yet the canvas stays blank and every
-`.maplibregl-marker` keeps an identity transform at the container's top-left, i.e. the map never renders a
-frame. Forcing a viewport resize does not help. Not yet checked in a visible desktop browser.
+Blank since task 6. Three stacked causes, each confirmed by instrumenting the running page (learnings.md,
+"The web map was blank since task 6"): MapLibre 6's worker resolved against the Metro bundle URL and got
+Expo's HTML fallback; the injected CSS clipped `.maplibregl-canvas-container` (zero height) with
+`overflow:hidden`; the marker entrance animated `transform` on the element MapLibre positions, pinning every
+marker to the top-left.
 
-- **Why deferred:** web is not the shipping platform (Android uses maplibre-react-native); the launch video
-  works around it.
-- **Done means:** open the driver home in a visible desktop Chrome; if the map renders there, record the
-  headless cause in learnings.md; if it does not, fix ParkMap's web init with a Playwright check that a marker
-  gets a non-identity transform.
+- **Done means:** fix/web-map merged; the driver map shows every marker at its own position on web.
 
-### S-99 — Uncaught "12000ms timeout exceeded" from an icon font on the web build
+### S-108 — Uncaught "12000ms timeout exceeded" from an icon font on the web build
 
 - **Status:** `open`
 - **Found in:** launch series (brag) driver probe — 2026-09-29
@@ -1975,7 +1971,7 @@ This affects every job since task 4, including 16a's three payout jobs.
   and sends one job per queue; every queue is created idempotently from one list shared by
   `handlers.ts` and `schedule.ts`.
 
-### S-100 — On web, focusing a price input on listing step 4 shifts the whole step sideways
+### S-109 — On web, focusing a price input on listing step 4 shifts the whole step sideways
 
 - **Status:** `open`
 - **Found in:** launch series (brag) owner capture — 2026-09-29
@@ -2010,6 +2006,38 @@ code is still unseen.
 - **Done means:** the test logs the cause code of any unexpected rejection; once seen, the create
   path maps it (40P01/40001 → retry once or answer 409 SLOT_UNAVAILABLE), and 20 consecutive
   full-suite runs stay green.
+
+### S-110 — A MapLibre runtime error on web leaves a blank map instead of the fallback
+
+- **Status:** `open`
+- **Found in:** fix/web-map review (silent-failure lens) — 2026-09-29
+- **Surface:** mobile (web build) · packages/ui-native `ParkMap.tsx`
+
+`WebMap` registers no `map.on('error')`. If the worker files are missing at runtime (install scripts skipped,
+a deploy that never ran postinstall) or the style fails, the map is blank with no reason shown. Not done in
+fix/web-map because MapLibre also emits `error` for every transient tile failure: flipping the whole map to
+"Map unavailable" on a tile hiccup would be a new bug. It needs a design for which errors are fatal.
+
+- **Why deferred:** needs its own design (fatal vs transient errors); fix/web-map already makes install fail
+  loudly when the worker cannot be copied.
+- **Done means:** worker/style failures switch ParkMap to its fallback with the reason (R-FAIL-01); transient
+  tile errors do not; a test covers both.
+
+
+### S-111 — Driver map: price pins overlap at the default zoom, and clustering does not merge them
+
+- **Status:** `open`
+- **Found in:** fix/web-map UI audit (mobile-app-design lens) — 2026-09-29, first time the web map rendered
+- **Surface:** mobile · `features/driver/clustering.ts`, `ParkMap` markers
+
+At the driver home's default zoom over Koramangala, about eight of the 21 sample pins overlap in the centre:
+their prices are unreadable and their 48px hit areas overlap, so which space a tap selects is ambiguous
+(Material asks for 8dp between targets). Clustering only merges above `CLUSTER_MAX_ZOOM`'s threshold, so
+nearby-but-distinct pins stay separate and stacked. Contrast and target sizes themselves pass.
+
+- **Why deferred:** pre-existing and shared with native; a clustering/zoom design question, outside the fix.
+- **Done means:** pins that would overlap at the current zoom merge into a count cluster (or the initial zoom
+  frames them apart), checked with the dev fixtures at 390px, with a clustering unit test for overlap.
 
 ### S-112 — Route onboarding cannot recover a step whose response was lost, and two devices can race it
 
