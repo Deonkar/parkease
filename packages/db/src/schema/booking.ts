@@ -38,6 +38,8 @@ export const bookings = pgTable(
     gstPaise: paise('gst_paise').notNull(),
     totalPaise: paise('total_paise').notNull(),
     ownerEarningsPaise: paise('owner_earnings_paise').notNull(),
+    /** Commission funded from promo_expense for a commission-free owner (task 16c); 0 otherwise. */
+    commissionWaiverPaise: paise('commission_waiver_paise').notNull().default(0),
 
     checkedInAt: timestamp('checked_in_at', { withTimezone: true }),
     checkInMethod: text('check_in_method').$type<CheckInMethod>(),
@@ -53,6 +55,7 @@ export const bookings = pgTable(
     index('bookings_status_starts_at_idx').on(t.status, t.startsAt),
     check('bookings_window_check', sql`${t.endsAt} > ${t.startsAt}`),
     check('bookings_total_check', sql`${t.totalPaise} > 0`),
+    check('bookings_commission_waiver_check', sql`${t.commissionWaiverPaise} >= 0`),
     check(
       'bookings_balance_check',
       sql`${t.totalPaise} = ${t.basePaise} + ${t.surgePremiumPaise} + ${t.gstPaise}`,
