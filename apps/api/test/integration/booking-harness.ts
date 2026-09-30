@@ -7,6 +7,7 @@ import { ExtendBookingCommand } from '../../src/domains/booking/commands/extend-
 import { LedgerService } from '../../src/domains/ledger/ledger.service.js';
 import { PaymentService } from '../../src/domains/payment/payment.service.js';
 import { RefundService } from '../../src/domains/payment/refund.service.js';
+import { CommissionWaiverService } from '../../src/domains/pricing/commission-waiver.service.js';
 import { PricingQuoteService } from '../../src/domains/pricing/quote.service.js';
 import { SpaceService } from '../../src/domains/space/space.service.js';
 import { SurgeService } from '../../src/domains/surge/surge.service.js';
@@ -45,7 +46,10 @@ export function buildBookingStack(h: Harness): BookingStack {
   const availability = new AvailabilityService();
   const ledger = new LedgerService();
   const outbox = new OutboxService();
-  const quotes = new PricingQuoteService(new SurgeService(h.redis.asClient()));
+  const quotes = new PricingQuoteService(
+    new SurgeService(h.redis.asClient()),
+    new CommissionWaiverService(h.db),
+  );
   const payments = new PaymentService(h.db);
   const refunds = new RefundService(ledger, payments, outbox);
 

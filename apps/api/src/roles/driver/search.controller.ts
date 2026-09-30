@@ -103,7 +103,7 @@ export class DriverSearchController {
    * Reserves nothing. The slot is only held once the driver actually commits.
    */
   private async priceDefault(
-    space: { pricing: SpacePricing; schedule: SpaceSchedule; zoneId: string },
+    space: { ownerId: string; pricing: SpacePricing; schedule: SpaceSchedule; zoneId: string },
     availableNow: { car: number; twoWheeler: number },
     now: Date,
   ): Promise<DefaultBooking | null> {
@@ -116,6 +116,7 @@ export class DriverSearchController {
     if (window === undefined) return null;
 
     const quote = await this.quotes.forBooking({
+      ownerId: space.ownerId,
       pricing: space.pricing,
       zoneId: space.zoneId,
       vehicleType: window.vehicleType,

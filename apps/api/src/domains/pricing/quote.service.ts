@@ -7,6 +7,7 @@ import { toPaise } from '@parkease/contracts/primitives';
 
 import { SurgeService } from '../surge/surge.service.js';
 
+import { CommissionWaiverService } from './commission-waiver.service.js';
 import { basePriceFor } from './duration.js';
 import { surgeRateOf } from './surge-rate.js';
 
@@ -17,6 +18,10 @@ export interface QuoteForBookingInput {
   readonly durationType: DurationType;
   readonly startsAt: Date;
   readonly endsAt: Date;
+  /** The space's owner: a commission-free owner is priced with the waiver (task 16c). */
+  readonly ownerId: string;
+  /** When the quote is made; the waiver window is judged at this moment. Defaults to now. */
+  readonly at?: Date;
 }
 
 export interface QuoteForExtensionInput {
@@ -28,6 +33,8 @@ export interface QuoteForExtensionInput {
   readonly newEndsAt: Date;
   /** The multiplier frozen onto the original booking, in basis points. */
   readonly surgeMultiplierBp: number;
+  readonly ownerId: string;
+  readonly at?: Date;
 }
 
 /**
@@ -43,7 +50,10 @@ export interface BookingQuote extends Quote {
 
 @Injectable()
 export class PricingQuoteService {
-  constructor(private readonly surge: SurgeService) {}
+  constructor(
+    private readonly surge: SurgeService,
+    private readonly waivers: CommissionWaiverService,
+  ) {}
 
   /**
    * Reads the surge multiplier once and freezes it into the quote. A
@@ -55,7 +65,10 @@ export class PricingQuoteService {
    * pools die (R-BE-04).
    */
   async forBooking(input: QuoteForBookingInput): Promise<BookingQuote> {
-    const snapshots = await this.surge.multipliersFor([input.zoneId]);
+    const [snapshots, waiver] = await Promise.all([
+      this.surge.multipliersFor([input.zoneId]),
+      this.waivers.activeFor(input.ownerId, input.at ?? new Date()),
+    ]);
     const snapshot = snapshots.get(input.zoneId) ?? NO_SURGE_SNAPSHOT;
 
     const basePaise = basePriceFor(
@@ -67,7 +80,11 @@ export class PricingQuoteService {
     );
 
     return {
-      ...quote({ basePaise, surgeMultiplier: surgeRateOf(snapshot.multiplierBp) }),
+      ...quote({
+        basePaise,
+        surgeMultiplier: surgeRateOf(snapshot.multiplierBp),
+        commissionWaived: waiver !== null,
+      }),
       surgeBadge: snapshot.badge,
     };
   }
@@ -82,10 +99,10 @@ export class PricingQuoteService {
    * costs one more hour, because the third hour was already going to be billed
    * whole.
    *
-   * No Redis read here, which is why it is synchronous — there is no current
-   * multiplier to consult, by design.
+   * No Redis read here — there is no current multiplier to consult, by design. It reads the
+   * database once: the extension is quoted now, so a commission waiver is judged now (task 16c).
    */
-  forExtension(input: QuoteForExtensionInput): Quote {
+  async forExtension(input: QuoteForExtensionInput): Promise<Quote> {
     const surgeMultiplier = surgeRateOf(input.surgeMultiplierBp);
 
     const priceUpTo = (endsAt: Date): number =>
@@ -93,6 +110,12 @@ export class PricingQuoteService {
 
     const deltaBasePaise = priceUpTo(input.newEndsAt) - priceUpTo(input.currentEndsAt);
 
-    return quote({ basePaise: toPaise(Math.max(0, deltaBasePaise)), surgeMultiplier });
+    const waiver = await this.waivers.activeFor(input.ownerId, input.at ?? new Date());
+
+    return quote({
+      basePaise: toPaise(Math.max(0, deltaBasePaise)),
+      surgeMultiplier,
+      commissionWaived: waiver !== null,
+    });
   }
 }

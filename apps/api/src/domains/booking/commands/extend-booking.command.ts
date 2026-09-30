@@ -62,7 +62,8 @@ export class ExtendBookingCommand {
       },
     );
 
-    const delta = this.quotes.forExtension({
+    const delta = await this.quotes.forExtension({
+      ownerId: space.ownerId,
       pricing: space.pricing,
       vehicleType: booking.vehicleType,
       durationType: booking.durationType,

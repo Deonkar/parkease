@@ -22,6 +22,8 @@ export interface RefundableBooking {
   readonly ownerEarningsPaise: number;
   readonly parkeaseFeePaise: number;
   readonly gstPaise: number;
+  /** Commission funded from promo_expense (task 16c); a refund returns it in proportion. */
+  readonly commissionWaiverPaise: number;
   readonly startsAt: Date;
 }
 
