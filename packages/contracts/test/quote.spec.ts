@@ -175,3 +175,46 @@ describe('parkEaseFee', () => {
     expect(fee.parkeaseFeePaise).toBe(2000);
   });
 });
+
+describe('a commission-free owner (task 16c)', () => {
+  const plain = quote({ basePaise: toPaise(6000), surgeMultiplier: toRate(1) });
+  const waived = quote({
+    basePaise: toPaise(6000),
+    surgeMultiplier: toRate(1),
+    commissionWaived: true,
+  });
+
+  it('pays the owner the full base and records the waived commission', () => {
+    expect(waived.ownerEarningsPaise).toBe(6000);
+    expect(waived.commissionWaiverPaise).toBe(900);
+  });
+
+  it('charges the driver exactly what an unwaived booking costs', () => {
+    expect(waived.driverTotalPaise).toBe(plain.driverTotalPaise);
+    expect(waived.gstPaise).toBe(plain.gstPaise);
+    expect(waived.parkeaseFeePaise).toBe(plain.parkeaseFeePaise);
+    expect(waived.commissionPaise).toBe(plain.commissionPaise);
+  });
+
+  it('waives only the commission, never the surge', () => {
+    const surged = quote({
+      basePaise: toPaise(6000),
+      surgeMultiplier: toRate(1.5),
+      commissionWaived: true,
+    });
+    expect(surged.commissionWaiverPaise).toBe(900);
+    expect(surged.ownerEarningsPaise).toBe(6000);
+    expect(surged.driverTotalPaise).toBe(9702);
+  });
+
+  it('balances as owner + fee + gst = driver total + waiver', () => {
+    expect(waived.ownerEarningsPaise + waived.parkeaseFeePaise + waived.gstPaise).toBe(
+      waived.driverTotalPaise + waived.commissionWaiverPaise,
+    );
+  });
+
+  it('leaves an unwaived quote exactly as before, with a zero waiver', () => {
+    expect(plain.commissionWaiverPaise).toBe(0);
+    expect(plain.ownerEarningsPaise).toBe(5100);
+  });
+});
