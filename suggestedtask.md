@@ -2129,3 +2129,74 @@ on screen with no sign it is old.
   change.
 - **Done means:** a `RefreshNotice` above the card when `isError` with data, as the earnings
   screens do.
+
+### S-120 — Commission waivers can only be granted by activation, never by an operator
+
+- **Status:** `open`
+- **Found in:** task 16c design (ADR-032), 2026-10-05
+- **Surface:** api · admin (task 18)
+
+The 50 slots fill automatically at first Route activation. Nobody can grant a slot to an owner who
+was onboarded by hand, revoke one granted in error, or see which slots are taken.
+
+- **Why deferred:** there is no admin panel until task 18; an endpoint with no screen would be
+  reachable only by script.
+- **Done means:** task 18 lists grants (slot, owner, window), and grants or revokes one with an
+  audit row; revoking ends the window at the moment of revocation, never back-dates bookings.
+
+### S-121 — Commission-free applies to parking owners only
+
+- **Status:** `open`
+- **Found in:** task 16c design (ADR-032), 2026-10-05
+- **Surface:** pricing · carwash · valet
+
+Washers and valets have their own commission rates (20%) and are excluded from the launch offer.
+
+- **Why deferred:** prd §15 Risk 1 names owners (supply of spaces); a partner promotion is a
+  separate product decision.
+- **Done means:** a product decision either way; if yes, the carwash and valet fee compositions
+  take the same waiver field and posting.
+
+### S-122 — Owners are not told before their commission-free window ends
+
+- **Status:** `open`
+- **Found in:** task 16c design (ADR-032), 2026-10-05
+- **Surface:** worker · notifications
+
+The dashboard row simply disappears when the window ends, and the next booking pays the normal
+commission without warning.
+
+- **Why deferred:** a scheduled reminder is a worker job and a notification template (task 19's
+  surface); the window is visible on the dashboard meanwhile.
+- **Done means:** a daily job notifies each owner 7 days before `ends_at`, once, idempotently.
+
+### S-123 — One person can hold several commission-free slots through several accounts
+
+- **Status:** `open`
+- **Found in:** task 16c security review, 2026-10-05
+- **Surface:** pricing · `CommissionWaiverService`
+
+The 50-slot cap is per account. Someone who registers several owner accounts and completes Route
+KYC on each takes a slot each, and nothing requires a live space, so a slot can be held for 3
+months while nothing is listed.
+
+- **Why deferred:** either fix changes the eligibility rule approved for 16c (grant at first
+  activation): dedupe on a Razorpay-verified PAN or settlement account needs Razorpay to return
+  one, and requiring an approved space moves the grant to space approval. Exposure is bounded:
+  50 slots, 15% of base, no payout without real bookings.
+- **Done means:** a product decision between the two; then the grant refuses a second slot for the
+  same verified identity, or waits for a first approved space, with a test.
+
+### S-124 — Drivers can tell which owners are commission-free
+
+- **Status:** `open`
+- **Found in:** task 16c security review, 2026-10-05
+- **Surface:** contracts (driver views) · mobile `PriceBreakdown`
+
+"Owner earns" is the full base for a waived owner and 85% of it otherwise, so comparing the two
+reveals the owner's waiver.
+
+- **Why deferred:** low impact (a promotional status, not personal data); fixing it removes a
+  driver-visible line the fee-model explanation relies on, which is a design-gate change.
+- **Done means:** a design decision to keep, reword ("Most of this goes to the owner") or drop the
+  line, and the driver contracts follow it.
