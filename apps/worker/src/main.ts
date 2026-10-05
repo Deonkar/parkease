@@ -5,6 +5,7 @@ import { env } from './config/env.js';
 import { closeRedis, type JobDeps, redisClient } from './deps.js';
 import { registerHandlers } from './handlers.js';
 import { logger } from './logger.js';
+import { ensureQueues } from './queues.js';
 import { registerSchedule } from './schedule.js';
 
 const boss = new PgBoss({
@@ -22,6 +23,9 @@ await boss.start();
 
 const deps: JobDeps = { db, boss, redis: redisClient() };
 
+// Before anything works, schedules or sends: pg-boss 10 rejects a schedule on a missing queue and
+// silently drops a job sent to one (S-104).
+await ensureQueues(boss);
 await registerHandlers(boss, deps);
 await registerSchedule(boss);
 
