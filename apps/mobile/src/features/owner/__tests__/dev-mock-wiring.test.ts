@@ -45,6 +45,7 @@ const networkDashboard = ownerDashboardSchema.parse({
   today: { netPaise: 0, bookings: 0 },
   month: { netPaise: 0, growthBp: null },
   statement: [],
+  commissionWaiver: null,
   spaces: [],
 });
 

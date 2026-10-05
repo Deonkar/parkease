@@ -24,6 +24,8 @@ export const ownerDashboardSchema = z
       growthBp: z.number().int().nullable(),
     }),
     statement: z.array(statementLineSchema).max(3),
+    /** Commission-free until this IST date (task 16c, ADR-032); null outside the window. */
+    commissionWaiver: z.object({ endsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).nullable(),
     spaces: z.array(
       z.object({
         id: spaceIdSchema,

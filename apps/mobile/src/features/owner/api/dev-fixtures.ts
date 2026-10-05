@@ -262,6 +262,8 @@ export function devDashboard(
     today: { netPaise: 48_000, bookings: 3 },
     month: { netPaise: 1_280_000, growthBp: 1_100 },
     statement,
+    // One of the first 50 owners (task 16c), so the preview shows the commission-free row.
+    commissionWaiver: { endsOn: '2027-01-05' },
     // Empty when the owner has no spaces yet, so the "List your first space"
     // empty state is reachable straight from the dev-mock session.
     spaces: spaces.map((space, index) => ({
