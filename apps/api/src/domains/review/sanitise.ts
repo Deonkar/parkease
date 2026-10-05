@@ -1,6 +1,7 @@
 // eslint-disable-next-line no-control-regex -- matching control characters is the point
 const CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
-const ZERO_WIDTH = /[\u200B-\u200D\uFEFF]/g;
+/** Zero-width, soft hyphen, word joiner and bidi overrides: characters that exist to hide or reorder text. */
+const INVISIBLE = /[\u00AD\u180E\u200B-\u200D\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g;
 const EXCESS_WHITESPACE = /\s{3,}/g;
 
 /**
@@ -15,7 +16,7 @@ export function sanitiseComment(raw: string | null): string | null {
   const cleaned = raw
     .normalize('NFC')
     .replace(CONTROL_CHARS, '')
-    .replace(ZERO_WIDTH, '')
+    .replace(INVISIBLE, '')
     .replace(EXCESS_WHITESPACE, '  ')
     .trim();
 

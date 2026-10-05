@@ -87,6 +87,28 @@ describe('review read model', () => {
     ).toBe('23514');
   });
 
+  it('refuses an owner review of anything but a driver, and a response with no timestamp', async () => {
+    const sqlState = async (run: () => Promise<unknown>): Promise<string> =>
+      run().then(
+        () => 'ok',
+        (error: { code?: string }) => error.code ?? 'unknown',
+      );
+    expect(
+      await sqlState(
+        async () =>
+          await h.sql`INSERT INTO reviews (booking_id, reviewer_user_id, reviewer_role, target_type,
+                                           target_id, rating)
+                      VALUES (${bookingId}, ${h.ownerId}, 'owner', 'space', ${spaceId}, 5)`,
+      ),
+    ).toBe('23514');
+    const id = await addSpaceReview(4);
+    expect(
+      await sqlState(
+        async () => await h.sql`UPDATE reviews SET owner_response = 'Thanks' WHERE id = ${id}`,
+      ),
+    ).toBe('23514');
+  });
+
   it('recomputes from visible reviews only, and is idempotent', async () => {
     for (const rating of [5, 5, 5]) await addSpaceReview(rating);
     const oneStar = await addSpaceReview(1);
@@ -147,13 +169,13 @@ describe('review read model', () => {
     expect(result).toEqual({ ratingAvgBp: null, ratingCount: 0 });
   });
 
-  it('finds targets whose review crossed the 30-day window in the last day', async () => {
+  it('finds targets whose review crossed the 30-day window in the last week', async () => {
     const other = await seedSpace(h, { lat: 12.94, lng: 77.62 });
     const third = await seedSpace(h, { lat: 12.95, lng: 77.61 });
-    await addSpaceReview(5, 30.5);
+    await addSpaceReview(5, 36);
     for (const [target, ageDays] of [
       [other, 29],
-      [third, 32],
+      [third, 38],
     ] as const) {
       const reviewer = await seedUser(h, 'driver');
       await h.sql`

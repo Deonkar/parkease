@@ -1,4 +1,4 @@
-import type { ReviewView } from '@parkease/contracts/driver';
+import type { PublicReviewView, ReviewView } from '@parkease/contracts/driver';
 import { bookingIdSchema, reviewIdSchema } from '@parkease/contracts/primitives';
 
 import type { ReviewRow } from './review.service.js';
@@ -33,4 +33,11 @@ export function toReviewView({ review, reviewerName }: ReviewRow): ReviewView {
     ownerRespondedAt: review.ownerRespondedAt?.toISOString() ?? null,
     isReported: review.isReported,
   };
+}
+
+/** The same, minus the report flag, for reviews any driver can read on a space. */
+export function toPublicReviewView(row: ReviewRow): PublicReviewView {
+  const { isReported, ...visible } = toReviewView(row);
+  void isReported; // dropped on purpose; the strict public schema refuses it if it ever leaks
+  return visible;
 }

@@ -112,4 +112,25 @@ describe('review.recompute-aggregates', () => {
 
     expect((await readModel(steady)).updated).toEqual(steadyBefore.updated);
   });
+
+  it('recomputes every other target when one fails, then fails the job', async () => {
+    const ageing = await seedSpace(ownerId, 77.62);
+    const booking = await seedBooking(driverId, ageing);
+    await review(booking, ageing, 5, 29.9);
+    await review(booking, ageing, 1, 100);
+    await pg.sql`UPDATE spaces SET rating_avg_bp = 36667, rating_count = 2 WHERE id = ${ageing}`;
+
+    // A valet review whose read model is missing: recompute refuses it rather than no-op.
+    const reviewer = await seedUser();
+    await pg.sql`
+      INSERT INTO reviews (booking_id, reviewer_user_id, reviewer_role, target_type, target_id,
+                           rating, created_at)
+      VALUES (${booking}, ${reviewer}, 'driver', 'valet', ${await seedUser()}, 4,
+              ${new Date(Date.now() - 29.9 * DAY_MS).toISOString()}::timestamptz)`;
+
+    await expect(
+      recomputeAgeingAggregates(deps, new Date(Date.now() + 0.2 * DAY_MS)),
+    ).rejects.toThrow('1 of 2 failed');
+    expect(await readModel(ageing)).toMatchObject({ avg: 30_000, count: 2 });
+  });
 });

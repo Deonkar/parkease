@@ -39,22 +39,32 @@ CREATE TABLE reviews (
     CHECK (target_type IN ('space', 'driver', 'valet', 'washer')),
   CONSTRAINT reviews_moderation_status_check
     CHECK (moderation_status IN ('visible', 'removed')),
+  -- v1: drivers review spaces and partners, owners review drivers, and nobody else.
+  CONSTRAINT reviews_reviewer_target_check
+    CHECK ((reviewer_role = 'owner') = (target_type = 'driver')),
+  CONSTRAINT reviews_owner_response_pair_check
+    CHECK ((owner_response IS NULL) = (owner_responded_at IS NULL)),
   -- Removed means soft-deleted, and only then: the two cannot disagree.
   CONSTRAINT reviews_removed_consistent_check
     CHECK ((moderation_status = 'removed') = (deleted_at IS NOT NULL))
 );
 
--- target_id in the key is the v1 fix: one opinion per counterparty per booking.
+-- target_id in the key is the v1 fix: one opinion per counterparty per booking. Also the
+-- booking_id FK index: it is the leading column.
 CREATE UNIQUE INDEX reviews_one_per_counterparty_per_booking
   ON reviews (booking_id, reviewer_user_id, target_type, target_id);
-CREATE INDEX reviews_target_idx ON reviews (target_type, target_id, created_at);
-CREATE INDEX reviews_booking_id_idx ON reviews (booking_id);
+-- Lists page newest-first on id (UUIDv7), per target; the recompute reads the same prefix.
+CREATE INDEX reviews_target_idx ON reviews (target_type, target_id, id);
 CREATE INDEX reviews_reviewer_user_id_idx ON reviews (reviewer_user_id);
 CREATE INDEX reviews_removed_by_user_id_idx ON reviews (removed_by_user_id)
   WHERE removed_by_user_id IS NOT NULL;
--- The moderation queue is a partial-index scan, not a GROUP BY over reports.
-CREATE INDEX reviews_moderation_queue_idx ON reviews (created_at)
+-- The moderation queue is a partial-index scan in page order, not a GROUP BY over reports.
+CREATE INDEX reviews_moderation_queue_idx ON reviews (id)
   WHERE is_reported AND deleted_at IS NULL;
+
+-- DROP TABLE took 0011's trigger with it.
+CREATE TRIGGER trg_reviews_updated_at
+  BEFORE UPDATE ON reviews FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 CREATE TABLE review_reports (
   id uuid PRIMARY KEY DEFAULT uuidv7(),
@@ -72,6 +82,8 @@ CREATE TABLE review_reports (
 -- Also the review_id FK index: it is the leading column.
 CREATE UNIQUE INDEX review_reports_one_per_reporter ON review_reports (review_id, reporter_user_id);
 CREATE INDEX review_reports_reporter_user_id_idx ON review_reports (reporter_user_id);
+CREATE TRIGGER trg_review_reports_updated_at
+  BEFORE UPDATE ON review_reports FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- The read-model invariant: NULL average exactly when there are no reviews, so a new space or
 -- partner is "New", never 0 stars. The `IS NOT NULL` is load-bearing: without it

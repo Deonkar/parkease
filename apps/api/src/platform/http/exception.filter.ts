@@ -110,7 +110,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
   private map(exception: unknown): MappedError {
     const sqlState = pgSqlState(exception);
     if (sqlState) {
-      const constraint = pgConstraintName(exception);
+      const constraint = sqlState === '23505' ? pgConstraintName(exception) : undefined;
       const byConstraint = constraint === undefined ? undefined : PG_CONSTRAINT_MAP[constraint];
       if (byConstraint) return byConstraint;
 

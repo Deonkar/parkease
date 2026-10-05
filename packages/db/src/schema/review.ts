@@ -53,14 +53,13 @@ export const reviews = pgTable(
       t.targetType,
       t.targetId,
     ),
-    index('reviews_target_idx').on(t.targetType, t.targetId, t.createdAt),
-    index('reviews_booking_id_idx').on(t.bookingId),
+    index('reviews_target_idx').on(t.targetType, t.targetId, t.id),
     index('reviews_reviewer_user_id_idx').on(t.reviewerUserId),
     index('reviews_removed_by_user_id_idx')
       .on(t.removedByUserId)
       .where(sql`${t.removedByUserId} IS NOT NULL`),
     index('reviews_moderation_queue_idx')
-      .on(t.createdAt)
+      .on(t.id)
       .where(sql`${t.isReported} AND ${t.deletedAt} IS NULL`),
     check('reviews_rating_check', sql`${t.rating} BETWEEN 1 AND 5`),
     check(
@@ -74,6 +73,14 @@ export const reviews = pgTable(
     check('reviews_reviewer_role_check', sql`${t.reviewerRole} IN ('driver','owner')`),
     check('reviews_target_type_check', sql`${t.targetType} IN ('space','driver','valet','washer')`),
     check('reviews_moderation_status_check', sql`${t.moderationStatus} IN ('visible','removed')`),
+    check(
+      'reviews_reviewer_target_check',
+      sql`(${t.reviewerRole} = 'owner') = (${t.targetType} = 'driver')`,
+    ),
+    check(
+      'reviews_owner_response_pair_check',
+      sql`(${t.ownerResponse} IS NULL) = (${t.ownerRespondedAt} IS NULL)`,
+    ),
     check(
       'reviews_removed_consistent_check',
       sql`(${t.moderationStatus} = 'removed') = (${t.deletedAt} IS NOT NULL)`,

@@ -58,6 +58,9 @@ export class CreateReviewCommand {
       now: new Date(),
     });
 
+    // Read before the write: a failure after commit would answer 500 for a review that exists.
+    const reviewerName = await this.reviews.nameOf(input.reviewerUserId);
+
     const review = await withTransaction(this.db, async (tx) => {
       // 23505 on reviews_one_per_counterparty_per_booking → 409 REVIEW_ALREADY_EXISTS.
       const inserted = await this.reviews.insert(tx, {
@@ -79,6 +82,6 @@ export class CreateReviewCommand {
       return inserted;
     });
 
-    return { review, reviewerName: await this.reviews.nameOf(input.reviewerUserId) };
+    return { review, reviewerName };
   }
 }

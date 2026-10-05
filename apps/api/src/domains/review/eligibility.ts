@@ -91,7 +91,9 @@ export function assertReviewable(ctx: ReviewContext): void {
     throw new ReviewWindowClosedError();
   }
 
-  if (ctx.targetId === ctx.reviewerUserId) throw new SelfReviewError();
+  // Yourself, or your own space: an owner who books their own listing is still its owner.
+  const ownSpace = ctx.targetType === 'space' && booking.ownerId === ctx.reviewerUserId;
+  if (ctx.targetId === ctx.reviewerUserId || ownSpace) throw new SelfReviewError();
 
   if (!isTargetOnBooking(ctx)) throw notFound();
 

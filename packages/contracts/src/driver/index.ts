@@ -55,6 +55,8 @@ export {
   type RatingBadge,
   reviewViewSchema,
   type ReviewView,
+  publicReviewViewSchema,
+  type PublicReviewView,
   reviewSummarySchema,
   type ReviewSummary,
   pendingReviewSchema,

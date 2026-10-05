@@ -5,7 +5,7 @@ import type { DurationPricing, SpacePricing, SpaceSchedule } from '@parkease/con
 import { spaceIdSchema } from '@parkease/contracts/primitives';
 
 import { surgeRateOf } from '../../../domains/pricing/surge-rate.js';
-import { toReviewView } from '../../../domains/review/review-view.js';
+import { toPublicReviewView } from '../../../domains/review/review-view.js';
 import type { ReviewRow, Summary } from '../../../domains/review/review.service.js';
 import { RATING_BP_PER_STAR } from '../../../domains/space/search-sql.js';
 
@@ -97,7 +97,7 @@ export function toSpaceDetailView(input: SpaceDetailInput): SpaceDetail {
     reviewCount: space.ratingCount,
     badge: toRatingBadge(space),
     reviewSummary: input.reviewSummary,
-    recentReviews: input.recentReviews.slice(0, 3).map(toReviewView),
+    recentReviews: input.recentReviews.slice(0, 3).map(toPublicReviewView),
     defaultBooking: input.defaultBooking,
     owner: {
       // First name only. The owner's full name is not the driver's business

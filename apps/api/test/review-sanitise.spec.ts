@@ -11,6 +11,11 @@ describe('sanitiseComment', () => {
     expect(sanitiseComment('ok\u0000\u0007 gate\u200B was\uFEFF open')).toBe('ok gate was open');
   });
 
+  it('strips bidi overrides that would reorder text in a moderation screen', () => {
+    expect(sanitiseComment('great ' + '\u202E' + 'tsil wols' + '\u202C')).toBe('great tsil wols');
+    expect(sanitiseComment('soft' + '\u00AD' + 'hyphen' + '\u2066')).toBe('softhyphen');
+  });
+
   it('turns whitespace-only into null, not an empty string', () => {
     expect(sanitiseComment('   \n\t  ')).toBeNull();
     expect(sanitiseComment('\u200B\u200C')).toBeNull();

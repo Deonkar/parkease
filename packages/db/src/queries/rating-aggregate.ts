@@ -31,7 +31,9 @@ export interface RatingAggregate {
  * lost. Shared by the API (inside every review write's transaction) and the worker's nightly
  * recompute, so the two cannot disagree (R-ARCH-07).
  *
- * The read-model row is locked FIRST. Two reviews of one space committing at once each see only
+ * The read-model row is locked FIRST, `FOR NO KEY UPDATE` rather than `FOR UPDATE`: the latter
+ * conflicts with the KEY SHARE lock every FK insert takes, so a review would stall a booking on
+ * the same space. Two reviews of one space committing at once each see only
  * their own insert under READ COMMITTED, so without the lock the later commit overwrites the
  * earlier one's count. With it, the second waits, and its SELECT — a new statement — sees the
  * first's committed row.
@@ -48,7 +50,15 @@ export async function recomputeRatingAggregate(
 
   const { table, key } = READ_MODELS[targetType];
 
-  await tx.select({ id: key }).from(table).where(eq(key, targetId)).for('update');
+  const locked = await tx
+    .select({ id: key })
+    .from(table)
+    .where(eq(key, targetId))
+    .for('no key update');
+  // Every reviewable target has a read-model row: a space exists (soft-deleted or not), and a valet
+  // or washer was dispatched from their profile. Missing means the UPDATE below would match nothing
+  // and the average would silently never move — so fail the write instead.
+  if (locked.length === 0) throw new Error(`no ${targetType} read model for ${targetId}`);
 
   const rows = await tx
     .select({ rating: reviews.rating, createdAt: reviews.createdAt })
@@ -84,20 +94,20 @@ const ageingTargetSchema = z.object({
   target_id: z.string().uuid(),
 });
 
-const DAY_MS = 24 * 60 * 60 * 1000;
+const CATCH_UP_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
- * Targets with a review that crossed the 30-day recency window in the last day. Its weight
- * changed with no write to recompute it, so the nightly job does. One day's ageing reviews, not
- * a full-table rebuild; a missed night is caught by the next only if it runs within a day, which
- * is why the window here is a day wide and the job runs daily.
+ * Targets with a review that crossed the 30-day recency window in the last week. Its weight
+ * changed with no write to recompute it, so the nightly job does. A week, not a day, so up to six
+ * missed nights (worker down, retries exhausted) are caught up by the next run; recomputing a
+ * target that is already right writes the same value, so the overlap costs only the work.
  */
 export async function ageingReviewTargets(
   db: Database,
   now: Date = new Date(),
 ): Promise<{ targetType: Exclude<ReviewTargetType, 'driver'>; targetId: string }[]> {
   const newest = new Date(now.getTime() - RECENCY_WINDOW_MS).toISOString();
-  const oldest = new Date(now.getTime() - RECENCY_WINDOW_MS - DAY_MS).toISOString();
+  const oldest = new Date(now.getTime() - RECENCY_WINDOW_MS - CATCH_UP_MS).toISOString();
 
   const rows = await db.execute(sql`
     SELECT DISTINCT target_type, target_id

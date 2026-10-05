@@ -128,6 +128,13 @@ describe('assertReviewable', () => {
     ).toThrow(SelfReviewError);
   });
 
+  it('refuses an owner reviewing their own space, booked as a driver', () => {
+    const ownBooking = participants({ driverId: OWNER });
+    expect(() =>
+      assertReviewable(ctx({ participants: ownBooking, reviewerUserId: OWNER })),
+    ).toThrow(SelfReviewError);
+  });
+
   it('answers 404 to a target that is not on this booking', () => {
     expect(() => assertReviewable(ctx({ targetType: 'space', targetId: OUTSIDER }))).toThrow(
       NotFoundException,

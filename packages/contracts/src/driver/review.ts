@@ -74,6 +74,14 @@ export const reviewViewSchema = z.object({
 
 export type ReviewView = z.infer<typeof reviewViewSchema>;
 
+/**
+ * A review as any driver reads it on a space. No `isReported`: a report never hides a review, so
+ * showing the flag would let any account brand any review "reported" for everyone.
+ */
+export const publicReviewViewSchema = reviewViewSchema.omit({ isReported: true }).strict();
+
+export type PublicReviewView = z.infer<typeof publicReviewViewSchema>;
+
 const countSchema = z.number().int().nonnegative();
 
 /**

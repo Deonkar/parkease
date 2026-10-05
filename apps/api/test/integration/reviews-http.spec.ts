@@ -321,12 +321,15 @@ describe('reviews HTTP', () => {
       });
       expect(first.status).toBe(201);
 
-      const detail = data<{ recentReviews: { id: string; isReported: boolean }[] }>(
+      const detail = data<{ recentReviews: Record<string, unknown>[] }>(
         await get(`/api/v1/driver/spaces/${spaceId}`),
       );
-      expect(detail.recentReviews).toEqual([
-        expect.objectContaining({ id: reviewId, isReported: true }),
-      ]);
+      // Still public, and the flag is not: any account could otherwise brand any review.
+      expect(detail.recentReviews.map((r) => r['id'])).toEqual([reviewId]);
+      expect(detail.recentReviews[0]).not.toHaveProperty('isReported');
+      const [flag] = await h.sql<{ reported: boolean }[]>`
+        SELECT is_reported AS reported FROM reviews WHERE id = ${reviewId}`;
+      expect(flag?.reported).toBe(true);
 
       const again = await post(`/api/v1/driver/reviews/${reviewId}/report`, { reason: 'other' });
       expect(again.status).toBe(409);
@@ -340,6 +343,18 @@ describe('reviews HTTP', () => {
       as(otherOwnerId, 'owner');
       expect(
         (await post(`/api/v1/owner/reviews/${reviewId}/report`, { reason: 'other' })).status,
+      ).toBe(404);
+    });
+
+    it("answers 404 to a driver reporting a review that is not of a space — it isn't public", async () => {
+      asOwner();
+      const ofDriver = data<{ id: string }>(
+        await post('/api/v1/owner/reviews', { bookingId, rating: 2 }),
+      ).id;
+
+      as(otherDriverId, 'driver');
+      expect(
+        (await post(`/api/v1/driver/reviews/${ofDriver}/report`, { reason: 'other' })).status,
       ).toBe(404);
     });
   });
@@ -376,6 +391,14 @@ describe('reviews HTTP', () => {
       expect(
         (await post(`/api/v1/owner/reviews/${reviewId}/respond`, { response: 'Mine' })).status,
       ).toBe(404);
+    });
+
+    it('refuses a response that is only invisible characters', async () => {
+      const blank = await post(`/api/v1/owner/reviews/${reviewId}/respond`, {
+        response: '​‮',
+      });
+      expect(blank.status).toBe(400);
+      expect(codeOf(blank)).toBe('RESPONSE_EMPTY');
     });
 
     it('reviews the driver once', async () => {

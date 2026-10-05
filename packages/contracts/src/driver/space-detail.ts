@@ -6,7 +6,7 @@ import { spaceScheduleSchema } from '../owner/space-schedule.js';
 import { spaceIdSchema } from '../primitives/ids.js';
 import { paiseSchema } from '../primitives/paise.js';
 
-import { ratingBadgeSchema, reviewSummarySchema, reviewViewSchema } from './review.js';
+import { publicReviewViewSchema, ratingBadgeSchema, reviewSummarySchema } from './review.js';
 
 /**
  * Base rates only, exactly as the owner set them. No fee, no GST, no surge
@@ -95,7 +95,7 @@ export const spaceDetailSchema = z.object({
   badge: ratingBadgeSchema,
   reviewSummary: reviewSummarySchema,
   /** The three most recent visible reviews. */
-  recentReviews: z.array(reviewViewSchema).max(3),
+  recentReviews: z.array(publicReviewViewSchema).max(3),
   defaultBooking: defaultBookingSchema.nullable(),
   owner: z.object({
     name: z.string(),
