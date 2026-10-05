@@ -175,7 +175,6 @@ describe('spaceSearchItemSchema', () => {
     location: { lat: 12.9345, lng: 77.6266 },
     distanceM: 450,
     thumbnail: 'https://cdn.example.com/a.jpg',
-    rating: 4.2,
     reviewCount: 18,
     badge: { kind: 'rated', stars: '4.2', reviewCount: 18 },
     amenities: ['covered', 'cctv'],
@@ -191,14 +190,13 @@ describe('spaceSearchItemSchema', () => {
     expect(spaceSearchItemSchema.parse(item)).toMatchObject({ id: item.id, distanceM: 450 });
   });
 
-  it('accepts a never-reviewed space as rating null, not zero', () => {
+  it('carries a never-reviewed space as the "New" badge, not a zero', () => {
     const parsed = spaceSearchItemSchema.parse({
       ...item,
-      rating: null,
       reviewCount: 0,
       badge: { kind: 'new', label: 'New' },
     });
-    expect(parsed.rating).toBeNull();
+    expect(parsed.badge).toEqual({ kind: 'new', label: 'New' });
   });
 
   it('accepts a null thumbnail', () => {
@@ -240,7 +238,7 @@ describe('spaceSearchItemSchema', () => {
     expect(spaceSearchItemSchema.safeParse(withoutBadge).success).toBe(false);
   });
 
-  it('rejects a rating outside 1..5', () => {
-    expect(spaceSearchItemSchema.safeParse({ ...item, rating: 5.5 }).success).toBe(false);
+  it('sends no float rating: the badge is the only rating on the wire (S-126)', () => {
+    expect(spaceSearchItemSchema.parse({ ...item, rating: 4.2 })).not.toHaveProperty('rating');
   });
 });
