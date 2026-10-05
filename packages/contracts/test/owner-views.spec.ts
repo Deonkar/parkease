@@ -83,6 +83,7 @@ describe('ownerDashboardSchema', () => {
       today: { netPaise: 48000, bookings: 3 },
       month: { netPaise: 1280000, growthBp: null },
       statement: [line],
+      commissionWaiver: null,
       spaces: [
         {
           id: '0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5c',
@@ -103,6 +104,8 @@ describe('ownerDashboardSchema', () => {
       month: { netPaise: 0, growthBp: null },
       activeBookings: 0,
       statement: [],
+      // Present, so the only thing wrong with this dashboard is activeBookings.
+      commissionWaiver: null,
       spaces: [],
     };
     expect(ownerDashboardSchema.safeParse(dashboard).success).toBe(false);

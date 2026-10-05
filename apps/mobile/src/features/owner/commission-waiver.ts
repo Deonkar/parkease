@@ -14,8 +14,14 @@ export const waiverRow = (waiver: Waiver): string | null =>
     ? null
     : `Commission-free until ${until(waiver)} · you keep the full price of every booking.`;
 
-/** The earnings subtitle: while commission-free there is no "ParkEase fee" to be after. */
-export const earningsSubtitle = (waiver: Waiver): string =>
-  waiver === null
-    ? 'Your share, after the ParkEase fee'
-    : `You keep the full price until ${until(waiver)}`;
+/**
+ * The earnings subtitle: while commission-free there is no "ParkEase fee" to be after. While the
+ * dashboard has not answered (`undefined`), it claims neither — stating a fee a commission-free
+ * owner is not paying would be a wrong answer shown as a right one.
+ */
+export const earningsSubtitle = (waiver: Waiver | undefined): string =>
+  waiver === undefined
+    ? 'Your share of every booking'
+    : waiver === null
+      ? 'Your share, after the ParkEase fee'
+      : `You keep the full price until ${until(waiver)}`;

@@ -1,6 +1,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
+import { CommissionWaiverService } from '../../src/domains/pricing/commission-waiver.service.js';
+import { OutboxService } from '../../src/platform/outbox/outbox.service.js';
+
 import { windowFromNow } from './booking-harness.js';
 import { type Harness, seedSpace, startHarness, stopHarness, truncateSpaces } from './harness.js';
 import { actingAs, type HttpApp, startHttpApp, stopHttpApp } from './http-harness.js';
@@ -38,6 +41,11 @@ describe('commission-free owners — pricing and bookings (task 16c)', () => {
   });
 
   const created = z.object({ data: z.object({ id: z.string().uuid() }) });
+  const quoted = z.object({
+    data: z.object({
+      quote: z.object({ basePaise: z.number(), ownerEarningsPaise: z.number() }),
+    }),
+  });
   const key = () => crypto.randomUUID();
   const window = windowFromNow(2, 2);
   const createBody = () => ({
@@ -136,5 +144,30 @@ describe('commission-free owners — pricing and bookings (task 16c)', () => {
     expect((await post(`/api/v1/driver/bookings/${id}/cancel`, {})).status).toBe(201);
 
     expect(await promoNet(id)).toBe(0);
+  });
+
+  it('is waived from exactly starts_at, and not at exactly ends_at', async () => {
+    const startsAt = new Date('2026-11-01T00:00:00Z');
+    const endsAt = new Date('2027-02-01T00:00:00Z');
+    await grant(startsAt, endsAt);
+    const waivers = new CommissionWaiverService(h.db, new OutboxService());
+
+    expect(await waivers.activeFor(h.ownerId, new Date(startsAt.getTime() - 1))).toBeNull();
+    expect(await waivers.activeFor(h.ownerId, startsAt)).toEqual({ endsAt });
+    expect(await waivers.activeFor(h.ownerId, new Date(endsAt.getTime() - 1))).toEqual({ endsAt });
+    expect(await waivers.activeFor(h.ownerId, endsAt)).toBeNull();
+  });
+
+  it('tells the driver the true owner earnings on the quote: the full base', async () => {
+    await inWindow();
+    const body = createBody();
+    const res = await http.request({
+      method: 'GET',
+      url: `/api/v1/driver/quotes?spaceId=${spaceId}&vehicleType=car&durationType=hourly&startsAt=${encodeURIComponent(body.startsAt)}&endsAt=${encodeURIComponent(body.endsAt)}`,
+    });
+
+    expect(res.status).toBe(200);
+    const { quote } = quoted.parse(res.body).data;
+    expect(quote.ownerEarningsPaise).toBe(quote.basePaise);
   });
 });

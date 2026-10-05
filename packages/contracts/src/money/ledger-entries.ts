@@ -359,6 +359,8 @@ export function promoBookingEntries(
       description,
     ),
     ...leg(Account.PROMO_EXPENSE, 'debit', discountPaise, description),
+    // A commission-free owner's waiver is promo money too; without it the posting is short (16c).
+    ...leg(Account.PROMO_EXPENSE, 'debit', totals.commissionWaiverPaise, description),
     ...leg(Account.OWNER_PAYABLE, 'credit', totals.ownerEarningsPaise, description),
     ...leg(Account.PLATFORM_REVENUE, 'credit', totals.parkeaseFeePaise, description),
     ...leg(Account.GST_PAYABLE, 'credit', totals.gstPaise, description),

@@ -18,3 +18,9 @@ describe('commission-free copy (task 16c)', () => {
     expect(earningsSubtitle(null)).toBe('Your share, after the ParkEase fee');
   });
 });
+
+describe('earnings subtitle before the dashboard answers (task 16c review)', () => {
+  it('claims neither a fee nor a waiver while unknown', () => {
+    expect(earningsSubtitle(undefined)).toBe('Your share of every booking');
+  });
+});

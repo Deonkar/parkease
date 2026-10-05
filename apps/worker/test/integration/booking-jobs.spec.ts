@@ -189,6 +189,30 @@ describe('booking worker jobs', () => {
       expect(balanced).toHaveLength(0);
     });
 
+    it('reverses a commission-free booking with its waiver, balanced (task 16c)', async () => {
+      const { bookingId } = await seedBooking({ status: 'pending_payment' });
+      await pg.sql`UPDATE bookings SET owner_earnings_paise = 6000, commission_waiver_paise = 900
+                   WHERE id = ${bookingId}`;
+
+      await expireUnpaid(deps, { bookingId });
+
+      const legs = await pg.sql<
+        { account: string; direction: string; amount: number; txn: string }[]
+      >`
+        SELECT account, direction, amount_paise::int AS amount, txn_id::text AS txn
+        FROM ledger_entries WHERE booking_id = ${bookingId} AND description LIKE 'booking expired%'`;
+      expect(legs.map((l) => `${l.account} ${l.direction} ${String(l.amount)}`).sort()).toEqual(
+        [
+          'driver_receivable credit 6162',
+          'gst_payable debit 162',
+          'owner_payable debit 6000',
+          'platform_revenue debit 900',
+          'promo_expense credit 900',
+        ].sort(),
+      );
+      expect(new Set(legs.map((l) => l.txn)).size).toBe(1);
+    });
+
     it('frees the slot for the same window the instant it commits', async () => {
       const { bookingId, spaceId } = await seedBooking({ status: 'pending_payment' });
       await expireUnpaid(deps, { bookingId });

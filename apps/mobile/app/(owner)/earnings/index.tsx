@@ -63,7 +63,8 @@ export default function OwnerEarningsScreen() {
   const earnings = useOwnerEarnings(period);
   const transactions = useOwnerTransactions(period);
   // The dashboard already carries the window (task 16c); TanStack shares its cache.
-  const waiver = useOwnerDashboard().data?.commissionWaiver ?? null;
+  // undefined until it answers, so a failed or pending read never shows the wrong subtitle.
+  const waiver = useOwnerDashboard().data?.commissionWaiver;
   const [pulling, setPulling] = useState(false);
 
   const onPull = () => {

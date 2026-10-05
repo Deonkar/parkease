@@ -1,5 +1,6 @@
 import { createHmac } from 'node:crypto';
 
+import { istDateOf } from '@parkease/contracts/money';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { RazorpayApiError } from '../../src/domains/payout/razorpay-rest.js';
@@ -230,6 +231,20 @@ describe('/me/route-onboarding over HTTP (task 16b)', () => {
     );
   });
 
+  it('grants the commission waiver when Razorpay activates on the submit itself (task 16c)', async () => {
+    await h.sql`TRUNCATE commission_waivers, outbox_messages`;
+    route.configureSettlement.mockResolvedValueOnce({ status: 'activated', requirements: [] });
+
+    expect((await put()).status).toBe(200);
+
+    expect(
+      await h.sql`SELECT count(*)::int AS n FROM commission_waivers WHERE owner_id = ${ownerId}`,
+    ).toEqual([{ n: 1 }]);
+    const sent = await h.sql<{ template: string }[]>`
+      SELECT payload->>'template' AS template FROM outbox_messages WHERE type = 'notification.dispatch'`;
+    expect(sent.map((m) => m.template)).toContain('promo.commission_waiver_granted');
+  });
+
   it('rejects a malformed PAN with 400 before calling Razorpay', async () => {
     expect((await put({ ...FORM, pan: 'abc' })).status).toBe(400);
     expect(route.upsertAccount).not.toHaveBeenCalled();
@@ -389,6 +404,59 @@ describe('/me/route-onboarding over HTTP (task 16b)', () => {
 
         expect(await waiverOf(ownerId)).toEqual({ slot: 1 });
         expect(await notifications()).toContain('promo.commission_waiver_granted');
+
+        // The window starts when we act (now), not at the event's own (future) time, and the
+        // owner is told the IST date it ends.
+        const [w] = await h.sql<{ early: boolean; ends: string }[]>`
+          SELECT starts_at < to_timestamp(${T}) AS early, ends_at AS ends
+          FROM commission_waivers WHERE owner_id = ${ownerId}`;
+        expect(w?.early).toBe(true);
+        const [msg] = await h.sql<{ endsOn: string }[]>`
+          SELECT payload->'data'->>'endsOn' AS "endsOn" FROM outbox_messages
+          WHERE payload->>'template' = 'promo.commission_waiver_granted'`;
+        // The raw client returns timestamptz as text.
+        expect(msg?.endsOn).toBe(istDateOf(new Date(String(w?.ends))));
+      });
+
+      it('grants an owner who is also a washer', async () => {
+        await h.sql`INSERT INTO user_roles (user_id, role) VALUES (${ownerId}, 'washer')`;
+
+        await deliver(event('product.route.activated', 'activated', [], T + 10), 'evt_w9');
+
+        expect(await waiverOf(ownerId)).toBeDefined();
+      });
+
+      it('does not grant an owner whose role is still pending', async () => {
+        await h.sql`UPDATE user_roles SET status = 'pending' WHERE user_id = ${ownerId} AND role = 'owner'`;
+
+        await deliver(event('product.route.activated', 'activated', [], T + 10), 'evt_w10');
+
+        expect(await waiverOf(ownerId)).toBeUndefined();
+      });
+
+      it('reuses a freed slot instead of asking for slot 51', async () => {
+        await seedGrants(50);
+        await h.sql`DELETE FROM commission_waivers WHERE slot = 17`;
+
+        await deliver(event('product.route.activated', 'activated', [], T + 10), 'evt_w11');
+
+        expect(await waiverOf(ownerId)).toEqual({ slot: 17 });
+      });
+
+      it('keeps the activation when the grant itself fails', async () => {
+        await h.sql`ALTER TABLE commission_waivers ADD CONSTRAINT test_refuse_all CHECK (false) NOT VALID`;
+        try {
+          expect(
+            (await deliver(event('product.route.activated', 'activated', [], T + 10), 'evt_w12'))
+              .status,
+          ).toBe(200);
+        } finally {
+          await h.sql`ALTER TABLE commission_waivers DROP CONSTRAINT test_refuse_all`;
+        }
+
+        expect(await row()).toMatchObject({ kyc_status: 'activated' });
+        expect(await waiverOf(ownerId)).toBeUndefined();
+        expect(await notifications()).toEqual(['payout.route_activated']);
       });
 
       it('never grants twice: a reactivation keeps the original window', async () => {

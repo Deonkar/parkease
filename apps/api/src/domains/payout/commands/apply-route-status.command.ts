@@ -80,7 +80,7 @@ export class ApplyRouteStatusCommand {
       // The first activation is when an owner can first be paid: the commission-free window
       // starts here, if a slot is left (task 16c). A reactivation keeps its original window.
       if (input.status === 'activated' && result.previous !== 'activated') {
-        await this.waivers.grantIfEligible(tx, result.userId, input.at);
+        await this.waivers.grantIfEligible(tx, result.userId);
       }
     });
   }

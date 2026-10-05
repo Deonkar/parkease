@@ -116,7 +116,7 @@ export class SubmitRouteOnboardingCommand {
           settled.status === 'activated' &&
           result.previous !== 'activated'
         ) {
-          await this.waivers.grantIfEligible(tx, userId, sentAt);
+          await this.waivers.grantIfEligible(tx, userId);
         }
       });
       return (await this.payouts.linkedFor(userId)) ?? saved;
