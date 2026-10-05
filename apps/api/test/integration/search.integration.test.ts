@@ -724,7 +724,7 @@ describe('the response item', () => {
     const view = toSpaceResultView((await search()).items[0]!);
 
     expect(view.title).toBe('Basement Parking');
-    expect(view.rating).toBe(4.2);
+    expect(view.badge).toEqual({ kind: 'rated', stars: '4.2', reviewCount: 18 });
     expect(view.reviewCount).toBe(18);
     expect(view.amenities).toEqual(['covered', 'cctv']);
     expect(view.thumbnail).toContain('cloudinary');
@@ -732,11 +732,11 @@ describe('the response item', () => {
     expect(view.isOpenNow).toBe(true);
   });
 
-  it('reports an unreviewed space as rating null, never zero', async () => {
+  it('reports an unreviewed space as "New", never zero', async () => {
     await space({ ratingAvgBp: null, ratingCount: 0 });
 
     const view = toSpaceResultView((await search()).items[0]!);
-    expect(view.rating).toBeNull();
+    expect(view.badge).toEqual({ kind: 'new', label: 'New' });
   });
 
   it('shows a closed space rather than hiding it', async () => {

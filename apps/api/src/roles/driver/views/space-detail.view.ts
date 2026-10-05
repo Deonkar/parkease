@@ -7,7 +7,6 @@ import { spaceIdSchema } from '@parkease/contracts/primitives';
 import { surgeRateOf } from '../../../domains/pricing/surge-rate.js';
 import { toPublicReviewView } from '../../../domains/review/review-view.js';
 import type { ReviewRow, Summary } from '../../../domains/review/review.service.js';
-import { RATING_BP_PER_STAR } from '../../../domains/space/search-sql.js';
 
 import { toRatingBadge } from './rating-badge.view.js';
 
@@ -92,8 +91,6 @@ export function toSpaceDetailView(input: SpaceDetailInput): SpaceDetail {
     // server actually measured instead of inferring one from the multiplier.
     surgeMultiplier: surgeRateOf(input.surge.multiplierBp),
     surgeBadge: input.surge.badge,
-    // null means never reviewed. The client renders "New", never a zero score.
-    rating: space.ratingAvgBp === null ? null : space.ratingAvgBp / RATING_BP_PER_STAR,
     reviewCount: space.ratingCount,
     badge: toRatingBadge(space),
     reviewSummary: input.reviewSummary,
