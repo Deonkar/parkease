@@ -10,7 +10,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { JobDeps } from '../../src/deps.js';
 import { registerHandlers } from '../../src/handlers.js';
-import { relayOutbox } from '../../src/jobs/outbox/relay.job.js';
+import { MAX_ATTEMPTS, relayOutbox } from '../../src/jobs/outbox/relay.job.js';
 import { ensureQueues, QUEUES } from '../../src/queues.js';
 import { registerSchedule } from '../../src/schedule.js';
 
@@ -109,17 +109,54 @@ describe('pg-boss queues (S-104)', () => {
     ).toEqual([{ n: 0 }]);
   });
 
-  it('never marks an unknown message type dispatched: it fails, loudly', async () => {
-    const [message] = await pg.sql<{ id: string }[]>`
-      INSERT INTO outbox_messages (type, payload)
-      VALUES ('no.such.queue', '{}'::jsonb)
-      RETURNING id`;
+  const outboxRow = async (id: string) =>
+    (
+      await pg.sql<{ status: string; attempts: number; last_error: string | null }[]>`
+        SELECT status, attempts, last_error FROM outbox_messages WHERE id = ${id}`
+    )[0];
+  const enqueue = async (type: string, attempts = 0) =>
+    (
+      await pg.sql<{ id: string }[]>`
+        INSERT INTO outbox_messages (type, payload, attempts)
+        VALUES (${type}, '{}'::jsonb, ${attempts}) RETURNING id`
+    )[0]?.id ?? '';
+
+  it('never marks an unknown type dispatched: it retries, then fails loudly at the limit', async () => {
+    const fresh = await enqueue('no.such.queue');
+    const lastTry = await enqueue('no.such.queue.either', MAX_ATTEMPTS - 1);
 
     await relayOutbox(deps);
 
-    const [row] = await pg.sql<{ status: string; last_error: string | null }[]>`
-      SELECT status, last_error FROM outbox_messages WHERE id = ${message?.id ?? ''}`;
-    expect(row?.status).toBe('failed');
-    expect(row?.last_error).toMatch(/no.such.queue/);
+    expect(await outboxRow(fresh)).toMatchObject({ status: 'pending', attempts: 1 });
+    expect((await outboxRow(fresh))?.last_error).toMatch(/no queue for message type no.such.queue/);
+    expect(await outboxRow(lastTry)).toMatchObject({ status: 'failed', attempts: MAX_ATTEMPTS });
+  });
+
+  it('never marks a job dispatched when pg-boss created none (its queue is gone)', async () => {
+    await ensureQueues(boss);
+    // An earlier test left a job in it; a queue that still holds jobs cannot be deleted.
+    await boss.purgeQueue('booking.remind');
+    await boss.deleteQueue('booking.remind');
+    try {
+      const id = await enqueue('booking.remind');
+
+      await relayOutbox(deps);
+
+      expect(await outboxRow(id)).toMatchObject({ status: 'pending', attempts: 1 });
+      expect((await outboxRow(id))?.last_error).toMatch(/created no job for booking.remind/);
+    } finally {
+      await ensureQueues(boss);
+    }
+  });
+
+  it('treats a duplicate send of a job that already landed as dispatched', async () => {
+    await ensureQueues(boss);
+    const id = await enqueue('booking.complete');
+    // The job landed on an earlier relay whose transaction then rolled back.
+    await boss.send('booking.complete', {}, { singletonKey: id });
+
+    await relayOutbox(deps);
+
+    expect(await outboxRow(id)).toMatchObject({ status: 'dispatched' });
   });
 });

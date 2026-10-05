@@ -6,7 +6,7 @@ import { logger } from '../../logger.js';
 import { outboxRoute } from '../../queues.js';
 
 const BATCH_SIZE = 100;
-const MAX_ATTEMPTS = 10;
+export const MAX_ATTEMPTS = 10;
 
 function backoffSeconds(attempts: number): Date {
   const seconds = Math.min(2 ** attempts * 10, 3600);
@@ -40,30 +40,30 @@ export async function relayOutbox(deps: JobDeps): Promise<void> {
           .where(eq(outboxMessages.id, message.id));
         continue;
       }
-      // pg-boss 10 answers null, without throwing, for a job whose queue does not exist; sent on,
-      // this message would be marked dispatched and never run. Refuse it loudly instead (S-104).
-      if (route === 'unknown') {
-        logger.error(
-          { messageId: message.id, type: message.type },
-          'outbox message has no queue; marked failed',
-        );
-        await tx
-          .update(outboxMessages)
-          .set({
-            status: 'failed',
-            lastError: `no queue for message type ${message.type}`,
-            updatedAt: new Date(),
-          })
-          .where(eq(outboxMessages.id, message.id));
-        continue;
-      }
-
       try {
-        await deps.boss.send(message.type, message.payload, {
+        // A type nobody registered: pg-boss would answer null and the message would vanish
+        // (S-104). It takes the retry path, so a worker deployed after the API can still catch up,
+        // and fails for good — loudly — only at MAX_ATTEMPTS.
+        if (route === 'unknown') {
+          throw new Error(`no queue for message type ${message.type}`);
+        }
+        const jobId = await deps.boss.send(message.type, message.payload, {
           singletonKey: message.id,
           retryLimit: 5,
           retryBackoff: true,
         });
+        // null is either the singletonKey duplicate of a send that already landed (fine), or a job
+        // pg-boss silently did not create because its queue is gone (not fine). Only the job table
+        // tells them apart.
+        if (jobId === null) {
+          const [existing] = await tx.execute<{ id: string }>(sql`
+            SELECT id FROM pgboss.job
+            WHERE name = ${message.type} AND singleton_key = ${message.id}
+            LIMIT 1`);
+          if (existing === undefined) {
+            throw new Error(`pg-boss created no job for ${message.type}; is its queue missing?`);
+          }
+        }
         await tx
           .update(outboxMessages)
           .set({
@@ -74,17 +74,22 @@ export async function relayOutbox(deps: JobDeps): Promise<void> {
           .where(eq(outboxMessages.id, message.id));
       } catch (error) {
         const newAttempts = message.attempts + 1;
-        logger.warn(
-          { err: error, messageId: message.id, attempts: newAttempts },
-          'outbox relay failed',
-        );
+        const giveUp = newAttempts >= MAX_ATTEMPTS;
+        const context = {
+          err: error,
+          messageId: message.id,
+          type: message.type,
+          attempts: newAttempts,
+        };
+        if (giveUp) logger.error(context, 'outbox relay gave up; message failed');
+        else logger.warn(context, 'outbox relay failed; will retry');
         await tx
           .update(outboxMessages)
           .set({
             attempts: newAttempts,
             lastError: String(error),
             availableAt: backoffSeconds(newAttempts),
-            status: newAttempts >= MAX_ATTEMPTS ? 'failed' : 'pending',
+            status: giveUp ? 'failed' : 'pending',
             updatedAt: new Date(),
           })
           .where(eq(outboxMessages.id, message.id));

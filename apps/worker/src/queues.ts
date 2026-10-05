@@ -55,6 +55,9 @@ export const UNSUBSCRIBED_EVENTS = [
   'booking.cancelled',
   'booking.expired',
   'payment.failed',
+  'space.submitted',
+  'space.activated',
+  'space.deactivated',
   'space.updated',
   'space.photos_updated',
   'space.deleted',
@@ -83,6 +86,11 @@ export function outboxRoute(type: string): 'job' | 'event' | 'unknown' {
  */
 export async function ensureQueues(boss: PgBoss): Promise<void> {
   for (const name of QUEUES) {
-    await boss.createQueue(name);
+    try {
+      await boss.createQueue(name);
+    } catch (error) {
+      // Boot fails either way; the message says which queue, so it is fixable from the log.
+      throw new Error(`could not create pg-boss queue ${name}`, { cause: error });
+    }
   }
 }
