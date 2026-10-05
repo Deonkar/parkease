@@ -2216,7 +2216,7 @@ already has two `no-unused-vars` errors.
 
 ### S-126 — Search and space detail still send the rating as a float
 
-- **Status:** `open`
+- **Status:** `fixed on feature/task-17b-reviews-mobile` — close when it merges
 - **Found in:** task 17a, 2026-10-05
 - **Surface:** contracts (`spaceSearchItemSchema`, `spaceDetailSchema`) · mobile
 
@@ -2228,7 +2228,7 @@ Task 17 says no float in a contract; the field stayed because mobile reads it un
 
 ### S-127 — Drivers cannot page past the three newest reviews of a space
 
-- **Status:** `open`
+- **Status:** `fixed on feature/task-17b-reviews-mobile` (`GET /driver/spaces/:id/reviews` + list screen) — close when it merges
 - **Found in:** task 17a, 2026-10-05
 - **Surface:** api (driver) · mobile
 
@@ -2291,3 +2291,42 @@ driver rating, so a read model would be maintained for no reader.
 - **Why deferred:** YAGNI until something gates on it (an owner auto-decline, a driver trust badge).
 - **Done means:** that consumer exists; `users` gains the rating pair with the same CHECK as
   `spaces_rating_read_model_check`, and the recompute writes it.
+
+### S-132 — "Enable in Settings" crashes the driver home on web
+
+- **Status:** `open`
+- **Found in:** task 17b visual check, 2026-10-05
+- **Surface:** mobile (web build) · `app/(driver)/index.tsx` location-denied state
+
+`Linking.openSettings` does not exist in react-native-web, so the button throws "Linking.default.openSettings
+is not a function" and red-screens the dev build.
+
+- **Why deferred:** web is not the shipping platform (ADR-023) and the crash predates 17b.
+- **Done means:** on web the button is hidden or opens the browser's site-settings help, with a test.
+
+### S-133 — Picking a place suggestion does nothing on web (driver home, denied-location state)
+
+- **Status:** `open`
+- **Found in:** task 17b visual check, 2026-10-05
+- **Surface:** mobile (web build) · `features/driver/components/PlaceSearchBar.tsx`
+
+The input's `onBlur` sets `focused=false` on mousedown, which unmounts the dropdown before the suggestion's
+press lands, so `onSelect` never fires and the screen stays on "Enable Location". A synthetic `click()` works.
+
+- **Why deferred:** predates 17b; needs a check that Android touch does not have the same race.
+- **Done means:** a suggestion tap selects on web and Android (keep the dropdown mounted until the press
+  settles, or select on press-in), with a test.
+
+### S-134 — The owner reviews section was not opened in a running app
+
+- **Status:** `open`
+- **Found in:** task 17b visual check, 2026-10-05
+- **Surface:** mobile · `app/(owner)/listings/[id].tsx`, `features/owner/components/OwnerReviewsSection.tsx`
+
+In a dev-mock session the owner listing detail only opens listings created in that session, and creating
+one is blocked on web by the blank map (S-107, fixed on fix/web-map). The section is covered by a render
+test (ordering, chips, respond) but was not looked at on a screen.
+
+- **Why deferred:** blocked by S-107 on this branch.
+- **Done means:** after fix/web-map merges, create a listing in the web preview, open its Reviews section at
+  375 and 1280 wide, and check respond / report / show more.
