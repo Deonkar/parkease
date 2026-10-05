@@ -18,10 +18,15 @@ import { FlashList } from '@shopify/flash-list';
 import { useMemo, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { earningsSubtitle } from '@/features/owner/commission-waiver';
 import { EarningsBars } from '@/features/owner/components/EarningsBars';
 import { KpiCard } from '@/features/owner/components/KpiCard';
 import { StatementLine } from '@/features/owner/components/StatementLine';
-import { useOwnerEarnings, useOwnerTransactions } from '@/features/owner/hooks/useOwnerQueries';
+import {
+  useOwnerDashboard,
+  useOwnerEarnings,
+  useOwnerTransactions,
+} from '@/features/owner/hooks/useOwnerQueries';
 import { PeriodTabs } from '@/features/shared/components/PeriodTabs';
 import { ReadableColumn } from '@/features/shared/components/ReadableColumn';
 import { RefreshNotice } from '@/features/shared/components/RefreshNotice';
@@ -57,6 +62,8 @@ export default function OwnerEarningsScreen() {
   const [period, setPeriod] = useState<OwnerEarningsPeriod>('month');
   const earnings = useOwnerEarnings(period);
   const transactions = useOwnerTransactions(period);
+  // The dashboard already carries the window (task 16c); TanStack shares its cache.
+  const waiver = useOwnerDashboard().data?.commissionWaiver ?? null;
   const [pulling, setPulling] = useState(false);
 
   const onPull = () => {
@@ -212,7 +219,7 @@ export default function OwnerEarningsScreen() {
           <Text style={styles.title} accessibilityRole="header">
             Earnings
           </Text>
-          <Text style={styles.subtitle}>Your share, after the ParkEase fee</Text>
+          <Text style={styles.subtitle}>{earningsSubtitle(waiver)}</Text>
         </ReadableColumn>
       </View>
       {/* The strip stays full width (it carries the border); only the tabs
