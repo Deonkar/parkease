@@ -9,7 +9,7 @@ import { trace } from '@opentelemetry/api';
 import type { FastifyReply } from 'fastify';
 import { ZodError } from 'zod';
 
-import { pgSqlState } from '../db/errors.js';
+import { pgConstraintName, pgSqlState } from '../db/errors.js';
 import { logger } from '../observability/logger.js';
 
 interface MappedError {
@@ -38,6 +38,23 @@ const PG_ERROR_MAP: Readonly<Record<string, MappedError>> = {
     status: HttpStatus.CONFLICT,
     code: 'CONFLICT_RETRY',
     message: 'Something changed while we were saving. Please try again.',
+  },
+};
+
+/**
+ * A unique violation whose constraint has a domain meaning the generic `ALREADY_EXISTS` loses.
+ * The constraint name selects the answer; it never reaches the body (R-GEN-06).
+ */
+const PG_CONSTRAINT_MAP: Readonly<Record<string, MappedError>> = {
+  reviews_one_per_counterparty_per_booking: {
+    status: HttpStatus.CONFLICT,
+    code: 'REVIEW_ALREADY_EXISTS',
+    message: "You've already reviewed this.",
+  },
+  review_reports_one_per_reporter: {
+    status: HttpStatus.CONFLICT,
+    code: 'REVIEW_ALREADY_REPORTED',
+    message: "You've already reported this review.",
   },
 };
 
@@ -93,6 +110,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
   private map(exception: unknown): MappedError {
     const sqlState = pgSqlState(exception);
     if (sqlState) {
+      const constraint = pgConstraintName(exception);
+      const byConstraint = constraint === undefined ? undefined : PG_CONSTRAINT_MAP[constraint];
+      if (byConstraint) return byConstraint;
+
       const pgMapped = PG_ERROR_MAP[sqlState];
       if (pgMapped) return pgMapped;
     }

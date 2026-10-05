@@ -50,6 +50,18 @@ describe('AllExceptionsFilter', () => {
     expect(call[0].error.code).toBe('ALREADY_EXISTS');
   });
 
+  it.each([
+    ['reviews_one_per_counterparty_per_booking', 'REVIEW_ALREADY_EXISTS'],
+    ['review_reports_one_per_reporter', 'REVIEW_ALREADY_REPORTED'],
+  ])('maps 23505 on %s to 409 %s, through the Drizzle cause chain', (constraint, code) => {
+    const pg = Object.assign(new Error(), { code: '23505', constraint_name: constraint });
+    filter.catch(Object.assign(new Error('Failed query'), { cause: pg }), mockHost(sendFn));
+
+    const call = sendFn.mock.calls[0] as [{ error: { code: string } }];
+    expect(call[0].error.code).toBe(code);
+    expect(JSON.stringify(call)).not.toContain(constraint);
+  });
+
   it('maps PG 23503 to 400 REFERENCE_MISSING', () => {
     const err = Object.assign(new Error(), { code: '23503' });
     filter.catch(err, mockHost(sendFn));
