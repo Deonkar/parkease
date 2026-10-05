@@ -1,5 +1,12 @@
-import { spaceSearchItemSchema, type SpaceSearchItem } from '@parkease/contracts/driver';
+import {
+  type SpaceDetail,
+  spaceDetailSchema,
+  spaceSearchItemSchema,
+  type SpaceSearchItem,
+} from '@parkease/contracts/driver';
 import type { Amenity, SurgeBadge } from '@parkease/contracts/enums';
+
+import { devReviews } from '../../shared/reviews/dev-fixtures';
 
 import type { SearchQueryParams, SpaceSearchPage } from './spaces';
 
@@ -114,12 +121,14 @@ function buildFixture(index: number, originLat: number, originLng: number): Spac
     distanceM,
     thumbnail: null,
     reviewCount,
-    // The server derives this (task 17); the fixture only mirrors its shape. Ratings here never
-    // fall below 3.0, so no fixture is "Mixed reviews".
+    // The server derives this (task 17); the fixture only mirrors its shape. One fixture in nine
+    // is below 3.0 with enough reviews, so "Mixed reviews" is walkable in a dev session.
     badge:
       rating === null
         ? { kind: 'new', label: 'New' }
-        : { kind: 'rated', stars: rating.toFixed(1), reviewCount },
+        : index % 9 === 4 && reviewCount >= 3
+          ? { kind: 'low_rated', label: 'Mixed reviews', stars: '2.7', reviewCount }
+          : { kind: 'rated', stars: rating.toFixed(1), reviewCount },
     amenities: AMENITY_SETS[index % AMENITY_SETS.length] ?? [],
     // A space with nothing free is still listed; the row shows "0 free".
     availableSlots: { car, twoWheeler },
@@ -204,4 +213,51 @@ export function devSearchSpaces(params: SearchQueryParams): SpaceSearchPage {
     data: page,
     meta: hasMore ? { limit, hasMore, nextCursor: String(nextOffset) } : { limit, hasMore },
   };
+}
+
+/**
+ * A space's detail in a dev-mock session, built from the same fixture as its search card so the
+ * two agree, with the shared review fixtures for its reviews section (task 17b).
+ */
+export function devSpaceDetail(spaceId: string): SpaceDetail {
+  const index = Number.parseInt(spaceId.slice(-12), 10);
+  const item = buildFixture(Number.isFinite(index) ? index : 0, 12.9345, 77.6266);
+  const reviews = devReviews.spaceDetailReviews();
+  const rated = item.badge.kind !== 'new';
+  const card = (hourly: number) => ({
+    hourlyPaise: hourly,
+    dailyPaise: hourly * 8,
+    weeklyPaise: null,
+    monthlyPaise: null,
+  });
+  return spaceDetailSchema.parse({
+    id: item.id,
+    title: item.title,
+    description: 'Covered basement bay. Take the ramp on the left after the security cabin.',
+    addressLine: item.addressLine,
+    landmark: 'Opposite the bakery',
+    city: 'Bengaluru',
+    latitude: item.location.lat,
+    longitude: item.location.lng,
+    photos: [],
+    amenities: item.amenities,
+    schedule: { is24x7: true },
+    isOpenNow: item.isOpenNow,
+    pricing: { car: card(item.basePricePaise), twoWheeler: null },
+    availableNow: item.availableSlots,
+    totalSlots: {
+      car: Math.max(item.availableSlots.car, 2),
+      twoWheeler: item.availableSlots.twoWheeler,
+    },
+    surgeMultiplier: item.surgeMultiplier,
+    surgeBadge: item.surgeBadge,
+    reviewCount: rated ? reviews.reviewSummary.ratingCount : 0,
+    badge: rated ? { ...item.badge, reviewCount: reviews.reviewSummary.ratingCount } : item.badge,
+    reviewSummary: rated
+      ? reviews.reviewSummary
+      : { ratingAvgBp: null, ratingCount: 0, distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } },
+    recentReviews: rated ? reviews.recentReviews : [],
+    defaultBooking: null,
+    owner: { name: 'Priya', memberSince: '2025-01-01T00:00:00.000Z' },
+  });
 }

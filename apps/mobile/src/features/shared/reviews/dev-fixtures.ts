@@ -12,6 +12,8 @@ import {
   ownerSpaceReviewSummarySchema,
 } from '@parkease/contracts/owner';
 
+import { listDevMockSpaces } from '@/lib/dev-mock-store';
+
 /**
  * What the review screens show in a dev-mock session (web preview, no API). Parsed through the
  * real contracts, so a fixture that drifts from them fails loudly instead of rendering a shape the
@@ -122,17 +124,22 @@ export const devReviews = {
     return pageAt(allReviews(), cursor, (r) => r.id);
   },
 
+  /** One summary per listing in this dev session, so whichever listing the owner opens has one. */
   ownerSummary(): OwnerSpaceReviewSummary[] {
-    return [
+    const listings = [
+      { id: SPACE, title: 'Basement Parking, 5th Cross' },
+      ...listDevMockSpaces().map((space) => ({ id: space.id, title: space.title })),
+    ];
+    return listings.map((listing) =>
       ownerSpaceReviewSummarySchema.parse({
-        spaceId: SPACE,
-        spaceTitle: 'Basement Parking, 5th Cross',
+        spaceId: listing.id,
+        spaceTitle: listing.title,
         ratingAvgBp: 42_000,
         ratingCount: SAMPLES.length,
         distribution: { 1: 0, 2: 1, 3: 1, 4: 2, 5: 4 },
         reportedCount: 1,
       }),
-    ];
+    );
   },
 
   respond(reviewId: string, response: string): ReviewView {
