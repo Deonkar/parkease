@@ -1,14 +1,6 @@
 import { colors, duration, easing, radius, spacing } from '@parkease/tokens';
 import type { ReactNode } from 'react';
-import {
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { Easing, FadeIn, FadeInDown, useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -24,7 +16,8 @@ interface BottomSheetProps {
  * The sheet shell the review flows share (rating, report): scrim, grabber, safe area, keyboard.
  * Motion is `PaymentFailedSheet`'s — `duration.base` for the scrim, `duration.slow` for the travel —
  * and none at all under reduced motion. Content scrolls, so a tall sheet with the keyboard up
- * still reaches its Submit.
+ * still reaches its Submit. No KeyboardAvoidingView: Android (the only platform, ADR-023) resizes
+ * the window for the keyboard itself, and on web the wrapper left a 64px gap under the sheet.
  */
 export function BottomSheet({ visible, onDismiss, dismissLabel, children }: BottomSheetProps) {
   const insets = useSafeAreaInsets();
@@ -46,27 +39,25 @@ export function BottomSheet({ visible, onDismiss, dismissLabel, children }: Bott
           accessibilityRole="button"
           accessibilityLabel={dismissLabel}
         />
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <Animated.View
-            entering={
-              reduceMotion
-                ? undefined
-                : FadeInDown.duration(duration.slow).easing(Easing.bezier(...easing.decelerate))
-            }
-            style={styles.sheet}
+        <Animated.View
+          entering={
+            reduceMotion
+              ? undefined
+              : FadeInDown.duration(duration.slow).easing(Easing.bezier(...easing.decelerate))
+          }
+          style={styles.sheet}
+        >
+          <View style={styles.grabber} />
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={[
+              styles.content,
+              { paddingBottom: insets.bottom + spacing.base },
+            ]}
           >
-            <View style={styles.grabber} />
-            <ScrollView
-              keyboardShouldPersistTaps="handled"
-              contentContainerStyle={[
-                styles.content,
-                { paddingBottom: insets.bottom + spacing.base },
-              ]}
-            >
-              {children}
-            </ScrollView>
-          </Animated.View>
-        </KeyboardAvoidingView>
+            {children}
+          </ScrollView>
+        </Animated.View>
       </Animated.View>
     </Modal>
   );

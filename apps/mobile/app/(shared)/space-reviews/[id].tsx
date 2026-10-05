@@ -7,6 +7,7 @@ import { useCallback, useState } from 'react';
 import { RefreshControl, StyleSheet, View } from 'react-native';
 
 import { useSpaceDetail } from '../../../src/features/driver/hooks/useBookings';
+import { ReadableColumn } from '../../../src/features/shared/components/ReadableColumn';
 import { ReportSheet } from '../../../src/features/shared/components/ReportSheet';
 import { ReviewItem } from '../../../src/features/shared/components/ReviewItem';
 import { ReviewsSummary } from '../../../src/features/shared/components/ReviewsSummary';
@@ -55,50 +56,53 @@ export default function SpaceReviewsScreen() {
       />
 
       <View style={styles.screen}>
-        {reviews.isPending ? (
-          <View style={styles.pad}>
-            <ListSkeleton count={5} itemHeight={96} />
-          </View>
-        ) : reviews.isError ? (
-          <ErrorState
-            title="We couldn't load the reviews"
-            body="Check your connection and try again."
-            actionLabel="Try again"
-            onAction={() => void reviews.refetch()}
-          />
-        ) : items.length === 0 ? (
-          <EmptyState
-            title="No reviews yet"
-            body="Drivers can rate this space after a booking here."
-          />
-        ) : (
-          // FlashList, never FlatList (R-FE-07).
-          <FlashList
-            data={items}
-            renderItem={renderItem}
-            keyExtractor={(item) => item.id}
-            ListHeaderComponent={header}
-            ItemSeparatorComponent={Separator}
-            contentContainerStyle={styles.listContent}
-            onEndReachedThreshold={0.5}
-            onEndReached={() => {
-              if (reviews.hasNextPage && !reviews.isFetchingNextPage) void reviews.fetchNextPage();
-            }}
-            ListFooterComponent={
-              reviews.isFetchingNextPage ? (
-                // Skeletons, never spinners (mobile.md): the next page's shape, not a wheel.
-                <Skeleton width="100%" height={88} style={styles.more} />
-              ) : null
-            }
-            refreshControl={
-              <RefreshControl
-                refreshing={reviews.isRefetching}
-                onRefresh={() => void reviews.refetch()}
-                tintColor={colors.primary}
-              />
-            }
-          />
-        )}
+        <ReadableColumn>
+          {reviews.isPending ? (
+            <View style={styles.pad}>
+              <ListSkeleton count={5} itemHeight={96} />
+            </View>
+          ) : reviews.isError ? (
+            <ErrorState
+              title="We couldn't load the reviews"
+              body="Check your connection and try again."
+              actionLabel="Try again"
+              onAction={() => void reviews.refetch()}
+            />
+          ) : items.length === 0 ? (
+            <EmptyState
+              title="No reviews yet"
+              body="Drivers can rate this space after a booking here."
+            />
+          ) : (
+            // FlashList, never FlatList (R-FE-07).
+            <FlashList
+              data={items}
+              renderItem={renderItem}
+              keyExtractor={(item) => item.id}
+              ListHeaderComponent={header}
+              ItemSeparatorComponent={Separator}
+              contentContainerStyle={styles.listContent}
+              onEndReachedThreshold={0.5}
+              onEndReached={() => {
+                if (reviews.hasNextPage && !reviews.isFetchingNextPage)
+                  void reviews.fetchNextPage();
+              }}
+              ListFooterComponent={
+                reviews.isFetchingNextPage ? (
+                  // Skeletons, never spinners (mobile.md): the next page's shape, not a wheel.
+                  <Skeleton width="100%" height={88} style={styles.more} />
+                ) : null
+              }
+              refreshControl={
+                <RefreshControl
+                  refreshing={reviews.isRefetching}
+                  onRefresh={() => void reviews.refetch()}
+                  tintColor={colors.primary}
+                />
+              }
+            />
+          )}
+        </ReadableColumn>
       </View>
 
       <ReportSheet

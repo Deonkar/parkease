@@ -21,11 +21,25 @@ interface ReviewItemProps {
 export function ReviewItem({ review, onReport, children }: ReviewItemProps) {
   return (
     <View style={styles.item}>
+      {/* Report shares the star row, so its 48dp target costs no row of its own. */}
       <View style={styles.head}>
         <StarRating stars={review.rating} />
-        <Text style={styles.meta}>{reviewedAgo(review.createdAt)}</Text>
+        {onReport === undefined ? null : (
+          <Pressable
+            onPress={onReport}
+            accessibilityRole="button"
+            accessibilityLabel={`Report ${review.reviewerName}'s review`}
+            style={styles.report}
+          >
+            <MaterialCommunityIcons name="flag-outline" size={14} color={colors.textTertiary} />
+            <Text style={styles.reportText}>Report</Text>
+          </Pressable>
+        )}
       </View>
-      <Text style={styles.name}>{review.reviewerName}</Text>
+      <Text style={styles.name}>
+        {review.reviewerName}
+        <Text style={styles.meta}>{` · ${reviewedAgo(review.createdAt)}`}</Text>
+      </Text>
       {review.comment === null ? null : <Text style={styles.comment}>{review.comment}</Text>}
       {review.ownerResponse === null ? null : (
         <View style={styles.reply}>
@@ -34,26 +48,19 @@ export function ReviewItem({ review, onReport, children }: ReviewItemProps) {
         </View>
       )}
       {children}
-      {onReport === undefined ? null : (
-        <Pressable
-          onPress={onReport}
-          accessibilityRole="button"
-          accessibilityLabel={`Report ${review.reviewerName}'s review`}
-          style={styles.report}
-          hitSlop={8}
-        >
-          <MaterialCommunityIcons name="flag-outline" size={14} color={colors.textTertiary} />
-          <Text style={styles.reportText}>Report</Text>
-        </Pressable>
-      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   item: { gap: spacing.xs, paddingVertical: spacing.md },
-  head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  meta: { fontSize: fontSize.xs, color: colors.textTertiary },
+  head: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 24,
+  },
+  meta: { fontSize: fontSize.xs, fontWeight: fontWeight.regular, color: colors.textTertiary },
   name: { fontSize: fontSize.sm, fontWeight: fontWeight.semibold, color: colors.text },
   comment: {
     fontSize: fontSize.sm,
@@ -78,7 +85,7 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   report: {
-    alignSelf: 'flex-end',
+    marginVertical: -spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
