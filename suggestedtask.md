@@ -2183,3 +2183,15 @@ reveals the owner's waiver.
   driver-visible line the fee-model explanation relies on, which is a design-gate change.
 - **Done means:** a design decision to keep, reword ("Most of this goes to the owner") or drop the
   line, and the driver contracts follow it.
+
+### S-125 — The worker's tests are never linted, and one already fails
+
+- **Status:** `open`
+- **Found in:** S-104 fix, 2026-10-05
+- **Surface:** worker · tooling
+
+`apps/worker`'s lint script is `eslint src/`, so `test/` is never linted: `test/surge-recalculate.spec.ts:212-213`
+already has two `no-unused-vars` errors.
+
+- **Why deferred:** pre-existing and unrelated to queues; widening the lint scope may surface more.
+- **Done means:** the worker lints `src/` and `test/`, and passes.
