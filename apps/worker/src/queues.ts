@@ -10,6 +10,7 @@ import {
   PAYOUT_RUN_WEEKLY_JOB,
   PAYOUT_SEND_JOB,
 } from './jobs/payout/payload.js';
+import { REVIEW_RECOMPUTE_AGGREGATES_JOB } from './jobs/review/recompute-aggregates.job.js';
 import { SURGE_RECALCULATE } from './jobs/surge/recalculate.job.js';
 
 /**
@@ -39,6 +40,7 @@ export const QUEUES = [
   PAYOUT_RUN_WEEKLY_JOB,
   PAYOUT_RECONCILE_JOB,
   PAYOUT_SEND_JOB,
+  REVIEW_RECOMPUTE_AGGREGATES_JOB,
 ] as const;
 
 /**
@@ -64,6 +66,9 @@ export const UNSUBSCRIBED_EVENTS = [
   'identity.session-created',
   'valet.offer-withdrawn',
   'carwash.offer-withdrawn',
+  // Task 17a: review notifications are task 19's.
+  'review.created',
+  'review.reported',
 ] as const;
 
 const JOBS: ReadonlySet<string> = new Set(QUEUES);
