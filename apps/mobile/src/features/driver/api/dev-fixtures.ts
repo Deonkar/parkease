@@ -115,6 +115,12 @@ function buildFixture(index: number, originLat: number, originLng: number): Spac
     thumbnail: null,
     rating,
     reviewCount,
+    // The server derives this (task 17); the fixture only mirrors its shape. Ratings here never
+    // fall below 3.0, so no fixture is "Mixed reviews".
+    badge:
+      rating === null
+        ? { kind: 'new', label: 'New' }
+        : { kind: 'rated', stars: rating.toFixed(1), reviewCount },
     amenities: AMENITY_SETS[index % AMENITY_SETS.length] ?? [],
     // A space with nothing free is still listed; the row shows "0 free".
     availableSlots: { car, twoWheeler },
