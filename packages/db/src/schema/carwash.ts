@@ -85,7 +85,7 @@ export const washerProfiles = pgTable(
     check(
       'washer_profiles_rating_check',
       sql`(${t.ratingCount} = 0 AND ${t.ratingAvgBp} IS NULL)
-          OR (${t.ratingCount} > 0 AND ${t.ratingAvgBp} BETWEEN 10000 AND 50000)`,
+          OR (${t.ratingCount} > 0 AND ${t.ratingAvgBp} IS NOT NULL AND ${t.ratingAvgBp} BETWEEN 10000 AND 50000)`,
     ),
     check('washer_profiles_rating_count_check', sql`${t.ratingCount} >= 0`),
   ],

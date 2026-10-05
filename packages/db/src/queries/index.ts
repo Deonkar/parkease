@@ -14,3 +14,9 @@ export {
 } from './wash-candidates.js';
 
 export { PAYABLE_BALANCE, partnerPayable } from './partner-payable.js';
+
+export {
+  recomputeRatingAggregate,
+  ageingReviewTargets,
+  type RatingAggregate,
+} from './rating-aggregate.js';

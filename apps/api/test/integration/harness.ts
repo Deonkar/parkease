@@ -219,6 +219,7 @@ export interface SeedSpaceOptions {
   readonly pricing?: TestPricing;
   readonly amenities?: readonly Amenity[];
   readonly ratingAvgBp?: number | null;
+  /** Defaults to 5 when a rating is given: `spaces_rating_read_model_check` refuses (0, rated). */
   readonly ratingCount?: number;
   readonly schedule?: SpaceSchedule;
   readonly carSlots?: number;
@@ -251,7 +252,7 @@ export async function seedSpace(h: Harness, opts: SeedSpaceOptions): Promise<str
       ${JSON.stringify([...(opts.amenities ?? [])])}::jsonb,
       ${opts.approvalStatus ?? 'active'},
       ${opts.ratingAvgBp ?? null},
-      ${opts.ratingCount ?? 0},
+      ${opts.ratingCount ?? (opts.ratingAvgBp == null ? 0 : 5)},
       ${opts.deleted === true ? new Date().toISOString() : null}::timestamptz
     )
     RETURNING id

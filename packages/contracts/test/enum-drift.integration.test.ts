@@ -27,6 +27,9 @@ import {
   REFUND_STATUS_VALUES,
   LEDGER_DIRECTION_VALUES,
   OUTBOX_STATUS_VALUES,
+  REVIEW_TARGET_TYPE_VALUES,
+  REVIEW_REPORT_REASON_VALUES,
+  REVIEW_MODERATION_STATUS_VALUES,
   ROUTE_STATUS_VALUES,
 } from '../src/enums/index.js';
 
@@ -204,6 +207,24 @@ const enumMapping: Array<{
     tableName: 'outbox_messages',
     constraintLike: '%status_check%',
     values: OUTBOX_STATUS_VALUES,
+  },
+  {
+    name: 'review_target_type',
+    tableName: 'reviews',
+    constraintLike: '%target_type_check%',
+    values: REVIEW_TARGET_TYPE_VALUES,
+  },
+  {
+    name: 'review_moderation_status',
+    tableName: 'reviews',
+    constraintLike: '%moderation_status_check%',
+    values: REVIEW_MODERATION_STATUS_VALUES,
+  },
+  {
+    name: 'review_report_reason',
+    tableName: 'review_reports',
+    constraintLike: '%reason_check%',
+    values: REVIEW_REPORT_REASON_VALUES,
   },
 ];
 
