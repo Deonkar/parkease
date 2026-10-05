@@ -4,6 +4,7 @@ import { useRef } from 'react';
 
 import { newIntent, type Intent } from '@/lib/api';
 
+import { SPACE_DETAIL_KEY } from '../../shared/reviews/hooks';
 import {
   cancelBooking,
   createBooking,
@@ -20,7 +21,8 @@ import {
 } from '../api/bookings';
 
 export const BOOKINGS_KEY = ['driver', 'bookings'] as const;
-export const SPACE_DETAIL_KEY = ['driver', 'space'] as const;
+// One root, shared with the review hooks: a review changes what space detail shows.
+export { SPACE_DETAIL_KEY };
 
 export function useSpaceDetail(spaceId: string | undefined) {
   return useQuery({
