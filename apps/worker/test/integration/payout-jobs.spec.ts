@@ -16,7 +16,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 
 import type { JobDeps } from '../../src/deps.js';
 import { postLedger } from '../../src/jobs/booking/ledger.js';
-import type { TransferGateway } from '../../src/jobs/payment/razorpay.js';
+import type { SourcedTransfer, TransferGateway } from '../../src/jobs/payment/razorpay.js';
 import { failPayout } from '../../src/jobs/payout/fail.js';
 import { type PayoutGateway, RazorpayXError } from '../../src/jobs/payout/razorpayx.js';
 import { reconcilePayouts } from '../../src/jobs/payout/reconcile.job.js';
@@ -168,6 +168,21 @@ describe('payout.run-weekly', () => {
     expect(await payoutsOf(washer)).toHaveLength(0);
     expect(await payoutsOf(valet)).toHaveLength(1);
   });
+
+  it.each(['pending', 'under_review', 'needs_clarification', 'rejected', 'suspended'])(
+    'still pays a partner whose Linked Account is %s — only activated moves them to Route',
+    async (kycStatus) => {
+      const washer = await seedUser('washer');
+      await withBank(washer);
+      await pg.sql`INSERT INTO linked_accounts (user_id, razorpay_account_id, kyc_status)
+                   VALUES (${washer}, ${`acc_${kycStatus}`}, ${kycStatus})`;
+      await earn(washer);
+
+      await runWeeklyPayouts(deps, ON);
+
+      expect(await payoutsOf(washer)).toHaveLength(1);
+    },
+  );
 
   it('never treats the driver stamped on an owner-side row as a payee', async () => {
     const driver = await seedUser('driver');
@@ -458,7 +473,11 @@ describe('payout.reconcile', () => {
         entries: routeDischargeEntries(transferPaise, driver),
       });
     });
-    return { paymentId: payment?.id ?? '' };
+    return {
+      paymentId: payment?.id ?? '',
+      orderId: `order_${suffix}`,
+      razorpayPaymentId: `pay_${suffix}`,
+    };
   }
 
   const clearingFor = async (column: 'payment_id' | 'payout_id', id: string) => {
@@ -476,7 +495,20 @@ describe('payout.reconcile', () => {
 
   const transfers = (
     items: { id: string; amountPaise: number; status: string }[],
-  ): TransferGateway => ({ forPayment: vi.fn().mockResolvedValue(items) });
+    made: SourcedTransfer[] = [],
+  ): TransferGateway => ({
+    forPayment: vi.fn().mockResolvedValue(items),
+    since: vi.fn().mockResolvedValue(made),
+  });
+
+  /** A transfer as Razorpay lists it: what moved, from which source, to whom. */
+  const made = (id: string, source: string, amountPaise = 5100): SourcedTransfer => ({
+    id,
+    source,
+    recipient: 'acc_QK7l1nOwner',
+    amountPaise,
+    status: 'processed',
+  });
 
   const run = (t: TransferGateway, p: PayoutGateway = gateway()) =>
     reconcilePayouts(deps, { transfers: t, payouts: p, now: MONDAY });
@@ -590,6 +622,7 @@ describe('payout.reconcile', () => {
         .fn()
         .mockRejectedValueOnce(new Error('razorpay down'))
         .mockResolvedValue([{ id: 'trf_QK7l1n', amountPaise: 5100, status: 'processed' }]),
+      since: vi.fn().mockResolvedValue([]),
     };
 
     await expect(run(t)).rejects.toThrow(/1 lookup/);
@@ -609,6 +642,82 @@ describe('payout.reconcile', () => {
     expect(await mismatches()).toEqual([
       { kind: 'missing_transfer', reference: paymentId, expected: '5100', actual: '0' },
     ]);
+  });
+
+  describe('a transfer the ledger never recorded (§16.7 missing_ledger_entry)', () => {
+    const missing = async () =>
+      (await mismatches()).filter((m) => m.kind === 'missing_ledger_entry');
+
+    it('flags a transfer whose source is no payment of ours, once', async () => {
+      const t = transfers([], [made('trf_Stray1', 'pay_NotOurs1', 7300)]);
+
+      await run(t);
+      await run(t);
+
+      expect(await missing()).toEqual([
+        { kind: 'missing_ledger_entry', reference: 'trf_Stray1', expected: null, actual: '7300' },
+      ]);
+    });
+
+    it('matches a transfer to its payment by payment id or by order id', async () => {
+      const byPayment = await capturedWithTransfer();
+      const byOrder = await capturedWithTransfer();
+
+      await run(
+        transfers(
+          [{ id: 'trf_QK7l1n', amountPaise: 5100, status: 'processed' }],
+          [made('trf_A', byPayment.razorpayPaymentId), made('trf_B', byOrder.orderId)],
+        ),
+      );
+
+      expect(await missing()).toEqual([]);
+    });
+
+    it('flags a transfer from a payment that recorded no Route transfer', async () => {
+      const { razorpayPaymentId, paymentId } = await capturedWithTransfer();
+      await pg.sql`UPDATE payments SET route_transfer_paise = NULL WHERE id = ${paymentId}`;
+
+      await run(transfers([], [made('trf_Unrecorded', razorpayPaymentId)]));
+
+      expect((await missing()).map((m) => m.reference)).toEqual(['trf_Unrecorded']);
+    });
+
+    it('ignores a failed transfer: nothing moved', async () => {
+      await run(transfers([], [{ ...made('trf_Failed', 'pay_NotOurs3'), status: 'failed' }]));
+
+      expect(await missing()).toEqual([]);
+    });
+
+    it('does not flag a transfer again once an operator resolved it', async () => {
+      const t = transfers([], [made('trf_Stray2', 'pay_NotOurs2')]);
+      await run(t);
+      await pg.sql`UPDATE reconciliation_mismatches SET resolved_at = now()`;
+
+      await run(t);
+
+      expect(await missing()).toHaveLength(1);
+    });
+
+    it('asks for the three IST days before today, so one missed run loses nothing', async () => {
+      const t = transfers([]);
+
+      await run(t);
+
+      // Today (Mon 28 Sep, IST) starts 2026-09-27T18:30Z; three days earlier is 24T18:30Z.
+      expect(t.since).toHaveBeenCalledWith(
+        Date.parse('2026-09-24T18:30:00Z') / 1000,
+        Date.parse('2026-09-27T18:30:00Z') / 1000,
+      );
+    });
+
+    it('fails the run so it is retried when Razorpay cannot list transfers', async () => {
+      const t: TransferGateway = {
+        forPayment: vi.fn().mockResolvedValue([]),
+        since: vi.fn().mockRejectedValue(new Error('razorpay down')),
+      };
+
+      await expect(run(t)).rejects.toThrow(/1 lookup/);
+    });
   });
 
   it('waits on a transfer Razorpay has not processed yet', async () => {

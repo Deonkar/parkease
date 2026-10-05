@@ -96,7 +96,7 @@ async function seedWasher(opts: SeedWasherOptions = {}): Promise<string> {
   if (opts.onboarded !== false) {
     await h.sql`
       INSERT INTO linked_accounts (user_id, razorpay_account_id, kyc_status)
-      VALUES (${userId}, ${`acc_${userId.slice(0, 12)}`}, 'activated')
+      VALUES (${userId}, ${`acc_${userId.slice(-12)}`}, 'activated')
     `;
   }
 
@@ -363,9 +363,18 @@ describe('POST /washer/jobs/:id/accept — first accept wins', () => {
    * ADR-013. A partner we cannot route money to must not take the job at all —
    * the alternative is a driver with somebody on the way and no way to pay them.
    */
-  it('refuses a partner with no activated linked account', async () => {
+  it('is never offered a job without an activated linked account (task 16b)', async () => {
     const washerId = await seedWasher({ onboarded: false });
     const jobId = await openJob();
+
+    // Dispatch skips them entirely, so the job is not theirs to accept.
+    expect((await accept(jobId, washerId)).status).toBe(404);
+  });
+
+  it('refuses a partner whose linked account lapsed between offer and accept', async () => {
+    const washerId = await seedWasher();
+    const jobId = await openJob();
+    await h.sql`UPDATE linked_accounts SET kyc_status = 'suspended' WHERE user_id = ${washerId}`;
 
     const res = await accept(jobId, washerId);
 
@@ -1349,7 +1358,7 @@ describe('the washer card, for a partner registered through the app', () => {
     `;
     await h.sql`
       INSERT INTO linked_accounts (user_id, razorpay_account_id, kyc_status)
-      VALUES (${washerId}, ${`acc_${washerId.slice(0, 12)}`}, 'activated')
+      VALUES (${washerId}, ${`acc_${washerId.slice(-12)}`}, 'activated')
     `;
 
     const jobId = await openJob();

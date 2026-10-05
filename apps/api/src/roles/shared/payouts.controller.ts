@@ -1,10 +1,13 @@
 import { Body, Controller, Get, Param, Put, Query } from '@nestjs/common';
 import { Role } from '@parkease/contracts/enums';
+import { MINIMUM_PAYOUT_PAISE, nextPayoutOn } from '@parkease/contracts/money';
 import { payoutIdSchema } from '@parkease/contracts/primitives';
 import {
   type BankDetailsView,
   payoutListQuerySchema,
   payoutPageSchema,
+  type PayoutSummaryView,
+  payoutSummaryViewSchema,
   type PayoutView,
   updateBankDetailsSchema,
 } from '@parkease/contracts/shared';
@@ -49,6 +52,21 @@ export class MePayoutsController {
     const row = await this.payouts.bankFor(user.id);
     if (row === undefined) throw new BankDetailsNotFoundError();
     return toBankDetailsView(row);
+  }
+
+  /** Valets only: RazorpayX pays them weekly; Route pays owners and washers per booking. */
+  @Get('payouts/summary')
+  @Roles(Role.VALET)
+  async summary(@CurrentUser() user: AuthUser): Promise<PayoutSummaryView> {
+    return parseOutgoing(
+      payoutSummaryViewSchema,
+      {
+        balancePaise: await this.payouts.payableBalance(user.id),
+        nextPayoutOn: nextPayoutOn(new Date()),
+        minimumPaise: MINIMUM_PAYOUT_PAISE,
+      },
+      'payout summary',
+    );
   }
 
   @Get('payouts')

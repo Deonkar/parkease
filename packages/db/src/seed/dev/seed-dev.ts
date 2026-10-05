@@ -8,6 +8,7 @@ import { uuidv7 } from '../../id.js';
 import { bookings } from '../../schema/booking.js';
 import { users, userRoles } from '../../schema/identity.js';
 import { ledgerEntries } from '../../schema/ledger.js';
+import { linkedAccounts } from '../../schema/payout.js';
 import { spaces, spaceSlots } from '../../schema/space.js';
 
 import { BANGALORE_FIXTURES, SEED_USERS } from './fixtures.js';
@@ -72,6 +73,16 @@ async function seedDev(): Promise<void> {
           })
           .onConflictDoNothing({ target: [userRoles.userId, userRoles.role] });
       }
+
+      // Route-activated, so the fixture spaces appear in search and the fixture washer gets
+      // offers (task 16b gates both on a Linked Account Razorpay can pay).
+      await tx
+        .insert(linkedAccounts)
+        .values([
+          { userId: ownerDriverId, razorpayAccountId: 'acc_devOwner0001', kycStatus: 'activated' },
+          { userId: washerId, razorpayAccountId: 'acc_devWasher001', kycStatus: 'activated' },
+        ])
+        .onConflictDoNothing({ target: linkedAccounts.userId });
 
       const spaceIds: string[] = [];
       for (const fixture of BANGALORE_FIXTURES) {

@@ -1,9 +1,11 @@
 import { LedgerAccount } from '@parkease/contracts/enums';
-import { bookings, ledgerEntries } from '@parkease/db/schema';
 import { and, eq, isNotNull, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
 
+import { bookings, ledgerEntries } from '../schema/index.js';
+
 /**
- * The rows RazorpayX may pay out: a partner's side of `owner_payable`.
+ * The rows RazorpayX may pay out: a partner's side of `owner_payable`. Shared by the worker's
+ * weekly run and the API's payout summary (R-ARCH-07: both must answer the same balance).
  *
  * - **Not owner-side.** Booking postings stamp the booking's DRIVER on the
  *   owner's credit (learnings), so a row whose counterparty is its booking's

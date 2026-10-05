@@ -155,6 +155,9 @@ export async function startHarness(): Promise<Harness> {
   };
 
   harness.ownerId = await seedUser(harness, 'owner');
+  // Search shows only spaces whose owner Route can pay (task 16b); the fixture owner can.
+  await harness.sql`INSERT INTO linked_accounts (user_id, razorpay_account_id, kyc_status)
+                    VALUES (${harness.ownerId}, 'acc_fixtureOwner00', 'activated')`;
   harness.driverId = await seedUser(harness, 'driver');
 
   return harness;

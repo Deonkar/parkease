@@ -72,7 +72,7 @@ async function seedWasher(): Promise<string> {
 
   await h.sql`
     INSERT INTO linked_accounts (user_id, razorpay_account_id, kyc_status)
-    VALUES (${userId}, ${`acc_${userId.slice(0, 12)}`}, 'activated')
+    VALUES (${userId}, ${`acc_${userId.slice(-12)}`}, 'activated')
   `;
 
   return userId;

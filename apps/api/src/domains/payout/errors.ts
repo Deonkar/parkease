@@ -38,3 +38,29 @@ export class PayoutNotFoundError extends PayoutDomainError {
     super('PAYOUT_NOT_FOUND', 'That payout does not exist.', HttpStatus.NOT_FOUND);
   }
 }
+
+export class RouteOnboardingLockedError extends PayoutDomainError {
+  constructor() {
+    super(
+      'ROUTE_ONBOARDING_LOCKED',
+      'Your details are with Razorpay already. To change them, contact support.',
+      HttpStatus.CONFLICT,
+    );
+  }
+}
+
+export class RouteDetailsRejectedError extends PayoutDomainError {
+  constructor() {
+    super(
+      'ROUTE_DETAILS_REJECTED',
+      "Razorpay couldn't accept these details. Check your PAN and bank account, then try again.",
+      HttpStatus.UNPROCESSABLE_ENTITY,
+    );
+  }
+}
+
+export class RouteOnboardingNotFoundError extends PayoutDomainError {
+  constructor() {
+    super('ROUTE_ONBOARDING_NOT_FOUND', "You haven't set up payouts yet.", HttpStatus.NOT_FOUND);
+  }
+}

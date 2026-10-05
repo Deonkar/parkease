@@ -1,5 +1,14 @@
 import { sql } from 'drizzle-orm';
-import { check, index, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import {
+  check,
+  index,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
 
 import { paise, primaryId, timestamps } from '../columns/common.js';
 
@@ -86,13 +95,25 @@ export const linkedAccounts = pgTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     razorpayAccountId: text('razorpay_account_id').notNull(),
     kycStatus: text('kyc_status').notNull().default('pending'),
+    /** Saved before the next Razorpay call, so a failed onboarding resumes (task 16b). */
+    razorpayStakeholderId: text('razorpay_stakeholder_id'),
+    razorpayProductId: text('razorpay_product_id'),
+    /** Razorpay's needs_clarification list: `{ field, reason }`, parsed on read. */
+    requirements: jsonb('requirements').notNull().default([]),
+    /** Display only: the PAN and the full account number are never stored. */
+    legalName: text('legal_name'),
+    settlementLast4: text('settlement_last4'),
+    settlementIfscPrefix: text('settlement_ifsc_prefix'),
+    /** When Razorpay said the current status; an older write never overwrites a newer one. */
+    routeStatusAt: timestamp('route_status_at', { withTimezone: true }),
     ...timestamps,
   },
   (t) => [
-    index('linked_accounts_user_id_idx').on(t.userId),
+    uniqueIndex('linked_accounts_user_id_key').on(t.userId),
+    uniqueIndex('linked_accounts_razorpay_account_id_key').on(t.razorpayAccountId),
     check(
       'linked_accounts_kyc_status_check',
-      sql`${t.kycStatus} IN ('pending','activated','needs_clarification','suspended')`,
+      sql`${t.kycStatus} IN ('pending','under_review','needs_clarification','activated','rejected','suspended')`,
     ),
   ],
 );
@@ -122,7 +143,7 @@ export const reconciliationMismatches = pgTable(
       .where(sql`${t.resolvedAt} IS NULL`),
     check(
       'reconciliation_mismatches_kind_check',
-      sql`${t.kind} IN ('amount_mismatch','missing_transfer','payout_failed')`,
+      sql`${t.kind} IN ('amount_mismatch','missing_transfer','payout_failed','missing_ledger_entry')`,
     ),
   ],
 );

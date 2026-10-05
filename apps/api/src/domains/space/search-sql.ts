@@ -67,6 +67,12 @@ export function buildConditions(q: SearchSpacesQuery, origin: SQL, basePrice: SQ
     // soft-deleted spaces all fall out here.
     sql`s.approval_status = ${ApprovalStatus.ACTIVE}`,
     sql`s.deleted_at IS NULL`,
+    // Only owners Route can pay (task 16b): otherwise checkout ends in OWNER_NOT_ONBOARDED.
+    // `linked_accounts_user_id_key` makes this one index probe per candidate.
+    sql`EXISTS (
+      SELECT 1 FROM linked_accounts la
+      WHERE la.user_id = s.owner_id AND la.kyc_status = 'activated'
+    )`,
     // Index-backed: spaces_location_gix / spaces_active_location_gix.
     sql`ST_DWithin(s.location, ${origin}, ${q.radiusM})`,
     // A space with no price for the requested duration cannot be booked for it.

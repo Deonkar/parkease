@@ -1,12 +1,16 @@
 import { LedgerAccount } from '@parkease/contracts/enums';
 import { settlementClearedEntries } from '@parkease/contracts/money';
 import { ledgerEntries, payments, payouts, reconciliationMismatches } from '@parkease/db/schema';
-import { and, asc, eq, isNotNull, isNull, lt, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
 
 import type { JobDeps } from '../../deps.js';
 import { logger } from '../../logger.js';
 import { postLedger } from '../booking/ledger.js';
-import { razorpayTransfers, type TransferGateway } from '../payment/razorpay.js';
+import {
+  razorpayTransfers,
+  type SourcedTransfer,
+  type TransferGateway,
+} from '../payment/razorpay.js';
 
 import { failPayout } from './fail.js';
 import { PAYOUT_RECONCILE_JOB } from './payload.js';
@@ -21,6 +25,9 @@ import { type PayoutGateway, razorpayxPayouts } from './razorpayx.js';
  *   Razorpay's processed transfers must sum to exactly `route_transfer_paise`.
  *   A match clears `settlement_clearing`; a difference or no transfer at all is
  *   a mismatch row; a transfer still `created`/`pending` waits for tomorrow.
+ *   The other way round too: every transfer Razorpay made in the last three
+ *   days whose source no payment of ours recorded is `missing_ledger_entry` —
+ *   money that left without the ledger knowing.
  * - **RazorpayX.** Every payout in flight: `processed` → paid and cleared;
  *   `reversed`/`failed`/`rejected`/`cancelled` → failed, owed again. A claim
  *   that never reached RazorpayX in a day is a mismatch.
@@ -38,6 +45,8 @@ const STUCK_AFTER_MS = DAY_MS;
 /** A Route transfer still unprocessed this long after capture is a mismatch, not a wait. */
 const TRANSFER_OVERDUE_MS = 3 * DAY_MS;
 const PAYOUT_FAILED_STATUSES = new Set(['reversed', 'failed', 'rejected', 'cancelled']);
+/** How far back the unrecorded-transfer check looks, so a missed run or two loses nothing. */
+const UNRECORDED_LOOKBACK_MS = 3 * DAY_MS;
 
 export async function reconcilePayouts(
   deps: JobDeps,
@@ -62,6 +71,10 @@ export async function reconcilePayouts(
       reconcileTransfer(deps, opts.transfers, payment, opts.now),
     );
   }
+
+  await attempt({ check: 'unrecorded transfers' }, () =>
+    flagUnrecordedTransfers(deps, opts.transfers, istStartOfDay(opts.now)),
+  );
 
   const inFlight = await deps.db
     .select({ id: payouts.id, razorpayPayoutId: payouts.razorpayPayoutId })
@@ -224,6 +237,67 @@ async function reconcileTransfer(
   });
 }
 
+/**
+ * Money Route moved that no payment of ours recorded: a transfer whose source is
+ * neither a payment nor an order we hold with a Route transfer on it. A `failed`
+ * transfer moved nothing and is skipped. A transfer is a fixed fact, so once
+ * flagged — resolved or not — it is never flagged again (R-ASYNC-03).
+ */
+async function flagUnrecordedTransfers(
+  deps: JobDeps,
+  gateway: TransferGateway,
+  today: Date,
+): Promise<void> {
+  const made = (
+    await gateway.since(
+      Math.floor((today.getTime() - UNRECORDED_LOOKBACK_MS) / 1000),
+      Math.floor(today.getTime() / 1000),
+    )
+  ).filter((t) => t.status !== 'failed');
+  if (made.length === 0) return;
+
+  const sources = [...new Set(made.map((t) => t.source))];
+  const ours = await deps.db
+    .select({ paymentId: payments.razorpayPaymentId, orderId: payments.razorpayOrderId })
+    .from(payments)
+    .where(
+      and(
+        isNotNull(payments.routeTransferPaise),
+        or(
+          inArray(payments.razorpayPaymentId, sources),
+          inArray(payments.razorpayOrderId, sources),
+        ),
+      ),
+    );
+  const recorded = new Set(ours.flatMap((p) => [p.paymentId, p.orderId]));
+  const unrecorded: SourcedTransfer[] = made.filter((t) => !recorded.has(t.source));
+  if (unrecorded.length === 0) return;
+
+  const flagged = await deps.db
+    .select({ reference: reconciliationMismatches.reference })
+    .from(reconciliationMismatches)
+    .where(
+      and(
+        eq(reconciliationMismatches.kind, 'missing_ledger_entry'),
+        inArray(
+          reconciliationMismatches.reference,
+          unrecorded.map((t) => t.id),
+        ),
+      ),
+    );
+  const seen = new Set(flagged.map((m) => m.reference));
+  for (const transfer of unrecorded) {
+    if (seen.has(transfer.id)) continue;
+    await flag(deps, {
+      kind: 'missing_ledger_entry',
+      reference: transfer.id,
+      expectedPaise: null,
+      actualPaise: transfer.amountPaise,
+      detail: `Route moved it to ${transfer.recipient} from ${transfer.source}, which no payment of ours recorded`,
+    });
+  }
+}
+
 async function reconcilePayout(
   deps: JobDeps,
   gateway: PayoutGateway,
@@ -252,7 +326,7 @@ async function reconcilePayout(
 async function flag(
   deps: JobDeps,
   mismatch: {
-    kind: 'amount_mismatch' | 'missing_transfer' | 'payout_failed';
+    kind: 'amount_mismatch' | 'missing_transfer' | 'payout_failed' | 'missing_ledger_entry';
     reference: string;
     expectedPaise: number | null;
     actualPaise: number | null;

@@ -1,9 +1,14 @@
-import { payoutEntries } from '@parkease/contracts/money';
-import { toPaise } from '@parkease/contracts/primitives';
+import {
+  computeValetLegFee,
+  nextPayoutOn,
+  payoutEntries,
+  valetLegEntries,
+} from '@parkease/contracts/money';
+import { toPaise, toRate } from '@parkease/contracts/primitives';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { LedgerService } from '../../src/domains/ledger/ledger.service.js';
-import { RazorpayXError } from '../../src/domains/payout/razorpayx.client.js';
+import { RazorpayApiError } from '../../src/domains/payout/razorpay-rest.js';
 import { decryptField } from '../../src/platform/crypto/aes-gcm.js';
 import { withTransaction } from '../../src/platform/db/transaction.js';
 
@@ -111,6 +116,13 @@ describe('/me bank details and payouts over HTTP (task 16a)', () => {
     it('answers a replay from the stored response without calling RazorpayX again', async () => {
       const key = crypto.randomUUID();
       const first = await put(BODY, key);
+      // The interceptor stores the response detached from it, by design, so a replay in the
+      // same millisecond can still see the key in flight. A real retry comes after a timeout.
+      await vi.waitFor(async () => {
+        const [row] = await h.sql<{ status: number | null }[]>`
+          SELECT response_status AS status FROM idempotency_keys WHERE key = ${key}`;
+        expect(row?.status).toBe(200);
+      });
       const second = await put(BODY, key);
 
       expect(second).toEqual(first);
@@ -202,7 +214,7 @@ describe('/me bank details and payouts over HTTP (task 16a)', () => {
     });
 
     it('writes nothing and answers 503 when RazorpayX is unreachable', async () => {
-      razorpayx.createFundAccount.mockRejectedValue(new RazorpayXError(null, 'network down'));
+      razorpayx.createFundAccount.mockRejectedValue(new RazorpayApiError(null, 'network down'));
 
       const response = await put();
 
@@ -213,7 +225,7 @@ describe('/me bank details and payouts over HTTP (task 16a)', () => {
     });
 
     it('answers 422 when RazorpayX rejects the account', async () => {
-      razorpayx.createFundAccount.mockRejectedValue(new RazorpayXError(400, 'invalid ifsc'));
+      razorpayx.createFundAccount.mockRejectedValue(new RazorpayApiError(400, 'invalid ifsc'));
 
       const response = await put();
 
@@ -248,6 +260,40 @@ describe('/me bank details and payouts over HTTP (task 16a)', () => {
       });
       expect(JSON.stringify(response.body)).not.toContain(ACCOUNT);
     });
+  });
+
+  describe('GET /me/payouts/summary (task 16b)', () => {
+    it('answers the valet balance the Monday run would pay, and when', async () => {
+      const fee = computeValetLegFee(10_000, toRate(0.2));
+      await withTransaction(h.db, async (tx) => {
+        await new LedgerService().post(tx, { entries: valetLegEntries(fee, valetId, 'valet leg') });
+      });
+
+      const response = await get('/api/v1/me/payouts/summary');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        data: {
+          balancePaise: fee.valetEarningsPaise,
+          nextPayoutOn: nextPayoutOn(new Date()),
+          minimumPaise: 10_000,
+        },
+      });
+    });
+
+    it('is zero for a valet with nothing owed', async () => {
+      expect((await get('/api/v1/me/payouts/summary')).body).toMatchObject({
+        data: { balancePaise: 0 },
+      });
+    });
+
+    it.each(['owner', 'washer'])(
+      'is refused to a %s — Route pays them per booking',
+      async (role) => {
+        as(await seedUser(h, role), role);
+        expect((await get('/api/v1/me/payouts/summary')).status).toBe(403);
+      },
+    );
   });
 
   describe('GET /me/payouts', () => {

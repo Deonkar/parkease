@@ -15,7 +15,6 @@ import {
 } from '@parkease/tokens';
 import { ErrorState, Skeleton } from '@parkease/ui-native';
 import { FlashList } from '@shopify/flash-list';
-import { router } from 'expo-router';
 import { useMemo, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -26,6 +25,7 @@ import { useOwnerEarnings, useOwnerTransactions } from '@/features/owner/hooks/u
 import { PeriodTabs } from '@/features/shared/components/PeriodTabs';
 import { ReadableColumn } from '@/features/shared/components/ReadableColumn';
 import { RefreshNotice } from '@/features/shared/components/RefreshNotice';
+import { GetPaidRow } from '@/features/shared/get-paid/entry';
 import { resolveScreenState } from '@/features/shared/screen-state';
 import { formatPaise } from '@/lib/money';
 
@@ -134,16 +134,9 @@ export default function OwnerEarningsScreen() {
           <Text style={styles.loadMoreRetryText}>Couldn&apos;t load more. Tap to retry.</Text>
         </Pressable>
       ) : null}
-      <Pressable
-        accessibilityRole="button"
-        onPress={() => {
-          router.push('/(owner)/earnings/payouts');
-        }}
-        style={styles.payouts}
-      >
-        <Text style={styles.payoutsText}>Payouts</Text>
-        <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textSecondary} />
-      </Pressable>
+      <View style={styles.payouts}>
+        <GetPaidRow href="/(owner)/earnings/payouts" caption="Paid as each booking is paid" />
+      </View>
     </View>
   );
 
@@ -292,17 +285,5 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.semibold,
     color: colors.warning,
   },
-  payouts: {
-    marginTop: spacing.lg,
-    minHeight: touchTarget,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: spacing.base,
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
-  payoutsText: { fontSize: fontSize.base, fontWeight: fontWeight.semibold, color: colors.text },
+  payouts: { marginTop: spacing.lg },
 });

@@ -83,7 +83,7 @@ describe('owner screens', () => {
     expect(earnings).toContain('isFetchNextPageError');
     expect(earnings).toMatch(/isFetchNextPageError[\s\S]{0,300}fetchNextPage\(\)/);
     // The Payouts row stays in the footer alongside the new retry state.
-    expect(earnings).toContain("router.push('/(owner)/earnings/payouts')");
+    expect(earnings).toContain('href="/(owner)/earnings/payouts"');
   });
 
   it('listing detail shows active and upcoming bookings', () => {

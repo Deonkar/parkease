@@ -19,8 +19,10 @@ import { SpaceRow } from '@/features/owner/components/SpaceRow';
 import { StatementLine } from '@/features/owner/components/StatementLine';
 import { greeting, growthCaption } from '@/features/owner/greeting';
 import { useOwnerDashboard } from '@/features/owner/hooks/useOwnerQueries';
+import { owedCaption } from '@/features/owner/owed-caption';
 import { ReadableColumn } from '@/features/shared/components/ReadableColumn';
 import { RefreshNotice } from '@/features/shared/components/RefreshNotice';
+import { PayoutSetupBanner } from '@/features/shared/get-paid/entry';
 import { resolveScreenState } from '@/features/shared/screen-state';
 import { assertNever } from '@/lib/assert-never';
 import { formatDayMonthIST } from '@/lib/format';
@@ -91,11 +93,13 @@ export default function OwnerDashboardScreen() {
 
       {refreshNotice}
 
+      <PayoutSetupBanner payee="owner" href="/(owner)/earnings/payouts" />
+
       <KpiCard
         hero
         label="Owed to you"
         value={money(data.owedPaise)}
-        caption="Held by ParkEase until your next payout."
+        caption={owedCaption(data.owedPaise)}
         testID="kpi-owed"
       />
       <View style={styles.kpiRow}>
