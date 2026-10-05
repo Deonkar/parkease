@@ -13,7 +13,7 @@ import { ReviewService } from '../review.service.js';
 /** The admin, carried from the request: the audit row is written three layers down (R-SEC-10). */
 export interface ModerationActor {
   readonly userId: string;
-  readonly role: string;
+  readonly role: string | null;
   readonly ipAddress: string | null;
 }
 

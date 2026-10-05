@@ -42,6 +42,12 @@ function input(overrides: Partial<SpaceDetailInput> = {}): SpaceDetailInput {
     surge: NO_SURGE_SNAPSHOT,
     photos: [{ url: 'https://res.cloudinary.com/parkease/image/upload/v1/a.jpg', isPrimary: true }],
     defaultBooking: null,
+    reviewSummary: {
+      ratingAvgBp: 42_000,
+      ratingCount: 18,
+      distribution: { 1: 0, 2: 1, 3: 2, 4: 4, 5: 11 },
+    },
+    recentReviews: [],
     ...overrides,
   };
 }
@@ -89,5 +95,45 @@ describe('toSpaceDetailView', () => {
 
   it('shows the owner by first name only', () => {
     expect(toSpaceDetailView(input()).owner.name).toBe('Ramesh');
+  });
+
+  it('carries the badge, the summary and at most three recent reviews', () => {
+    const review = (n: number) => ({
+      review: {
+        id: `0192f1c0-0000-7000-8000-00000000000${String(n)}`,
+        bookingId: '0192f1c0-0000-7000-8000-0000000000b0',
+        reviewerUserId: '0192f1c0-0000-7000-8000-0000000000d0',
+        reviewerRole: 'driver',
+        targetType: 'space',
+        targetId: '0192f1b3-0000-7000-8000-000000000001',
+        rating: 5,
+        comment: 'Easy to find.',
+        ownerResponse: null,
+        ownerRespondedAt: null,
+        isReported: false,
+        moderationStatus: 'visible',
+        removedByUserId: null,
+        removedReason: null,
+        deletedAt: null,
+        createdAt: new Date('2026-10-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-10-01T00:00:00.000Z'),
+      },
+      reviewerName: 'Ravi Kumar',
+    });
+
+    const detail = toSpaceDetailView(input({ recentReviews: [1, 2, 3, 4].map(review) }));
+
+    expect(detail.badge).toEqual({ kind: 'rated', stars: '4.2', reviewCount: 18 });
+    expect(detail.reviewSummary.distribution[5]).toBe(11);
+    expect(detail.recentReviews).toHaveLength(3);
+    expect(detail.recentReviews[0]?.reviewerName).toBe('Ravi K.');
+    expect(() => spaceDetailSchema.parse(detail)).not.toThrow();
+  });
+
+  it('shows "New" for an unreviewed space', () => {
+    const detail = toSpaceDetailView(
+      input({ space: { ...input().space, ratingAvgBp: null, ratingCount: 0 } }),
+    );
+    expect(detail.badge).toEqual({ kind: 'new', label: 'New' });
   });
 });

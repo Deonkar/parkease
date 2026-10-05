@@ -11,6 +11,7 @@ import type { SpacePricing, SpaceSchedule } from '@parkease/contracts/owner';
 
 import { defaultWindowFor } from '../../domains/booking/defaults.js';
 import { PricingQuoteService } from '../../domains/pricing/quote.service.js';
+import { ReviewService } from '../../domains/review/review.service.js';
 import { isOpenAt } from '../../domains/space/schedule.js';
 import { SearchService } from '../../domains/space/search.service.js';
 import { countSlots } from '../../domains/space/slots.js';
@@ -42,6 +43,7 @@ export class DriverSearchController {
     private readonly spaces: SpaceService,
     private readonly surge: SurgeService,
     private readonly quotes: PricingQuoteService,
+    private readonly reviews: ReviewService,
   ) {}
 
   /**
@@ -73,10 +75,12 @@ export class DriverSearchController {
     if (row === undefined) throw new NotFoundException('That space is no longer listed.');
 
     const now = new Date();
-    const [related, availableNow, snapshots] = await Promise.all([
+    const [related, availableNow, snapshots, reviewSummary, recent] = await Promise.all([
       this.spaces.loadRelated(id),
       this.spaces.availabilityAt(id, now),
       this.surge.multipliersFor([row.space.zoneId]),
+      this.reviews.summaryForSpace(id),
+      this.reviews.listForTarget('space', id, { limit: 3 }),
     ]);
 
     return toSpaceDetailView({
@@ -88,6 +92,8 @@ export class DriverSearchController {
       totalSlots: countSlots(related.slots),
       surge: snapshots.get(row.space.zoneId) ?? NO_SURGE_SNAPSHOT,
       photos: related.photos,
+      reviewSummary,
+      recentReviews: recent.items,
       defaultBooking:
         row.space.approvalStatus === 'active'
           ? await this.priceDefault(row.space, availableNow, now)

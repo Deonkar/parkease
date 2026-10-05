@@ -4,6 +4,7 @@ import { BookingModule } from '../../domains/booking/booking.module.js';
 import { CarwashModule } from '../../domains/carwash/carwash.module.js';
 import { PaymentModule } from '../../domains/payment/payment.module.js';
 import { PricingModule } from '../../domains/pricing/pricing.module.js';
+import { ReviewModule } from '../../domains/review/review.module.js';
 import { SpaceModule } from '../../domains/space/space.module.js';
 import { SurgeModule } from '../../domains/surge/surge.module.js';
 import { ValetModule } from '../../domains/valet/valet.module.js';
@@ -12,6 +13,7 @@ import { DriverBookingsController } from './bookings.controller.js';
 import { DriverCarwashController } from './carwash.controller.js';
 import { DriverPaymentsController } from './payments.controller.js';
 import { DriverQuotesController } from './quotes.controller.js';
+import { DriverReviewsController } from './reviews.controller.js';
 import { DriverSearchController } from './search.controller.js';
 import { DriverValetController } from './valet.controller.js';
 
@@ -26,6 +28,7 @@ import { DriverValetController } from './valet.controller.js';
     // socket room without this folder importing roles/valet (ADR-016).
     ValetModule,
     CarwashModule,
+    ReviewModule,
   ],
   controllers: [
     DriverSearchController,
@@ -34,6 +37,7 @@ import { DriverValetController } from './valet.controller.js';
     DriverPaymentsController,
     DriverValetController,
     DriverCarwashController,
+    DriverReviewsController,
   ],
 })
 // eslint-disable-next-line @typescript-eslint/no-extraneous-class

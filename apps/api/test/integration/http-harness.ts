@@ -22,6 +22,7 @@ import { PayoutModule } from '../../src/domains/payout/payout.module.js';
 import { RAZORPAYX } from '../../src/domains/payout/razorpayx.client.js';
 import { ROUTE } from '../../src/domains/payout/route.client.js';
 import { PricingModule } from '../../src/domains/pricing/pricing.module.js';
+import { ReviewModule } from '../../src/domains/review/review.module.js';
 import { SpaceModule } from '../../src/domains/space/space.module.js';
 import { SurgeModule } from '../../src/domains/surge/surge.module.js';
 import { ValetModule } from '../../src/domains/valet/valet.module.js';
@@ -40,16 +41,19 @@ import { RolesGuard } from '../../src/platform/rbac/roles.guard.js';
 import { REDIS, RedisModule } from '../../src/platform/redis/redis.module.js';
 import { StorageModule } from '../../src/platform/storage/storage.module.js';
 import { TelephonyModule } from '../../src/platform/telephony/telephony.module.js';
+import { AdminModerationController } from '../../src/roles/admin/moderation.controller.js';
 import { AdminSurgeController } from '../../src/roles/admin/surge.controller.js';
 import { DriverBookingsController } from '../../src/roles/driver/bookings.controller.js';
 import { DriverCarwashController } from '../../src/roles/driver/carwash.controller.js';
 import { DriverPaymentsController } from '../../src/roles/driver/payments.controller.js';
 import { DriverQuotesController } from '../../src/roles/driver/quotes.controller.js';
+import { DriverReviewsController } from '../../src/roles/driver/reviews.controller.js';
 import { DriverSearchController } from '../../src/roles/driver/search.controller.js';
 import { DriverValetController } from '../../src/roles/driver/valet.controller.js';
 import { OwnerBookingsController } from '../../src/roles/owner/bookings.controller.js';
 import { OwnerDashboardController } from '../../src/roles/owner/dashboard.controller.js';
 import { OwnerEarningsController } from '../../src/roles/owner/earnings.controller.js';
+import { OwnerReviewsController } from '../../src/roles/owner/reviews.controller.js';
 import { RazorpayWebhookController } from '../../src/roles/public/webhooks/razorpay.controller.js';
 import { MeController } from '../../src/roles/shared/me.controller.js';
 import { MePayoutsController } from '../../src/roles/shared/payouts.controller.js';
@@ -141,9 +145,13 @@ class StubAuthGuard implements CanActivate {
     StorageModule,
     // `/me/bank-details` and `/me/payouts`. Its RazorpayX client is overridden below.
     PayoutModule,
+    ReviewModule,
   ],
   controllers: [
     AdminSurgeController,
+    AdminModerationController,
+    DriverReviewsController,
+    OwnerReviewsController,
     DriverBookingsController,
     DriverQuotesController,
     DriverSearchController,

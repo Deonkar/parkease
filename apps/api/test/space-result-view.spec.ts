@@ -78,6 +78,7 @@ describe('toSpaceResultView', () => {
 
     expect(item.rating).toBeNull();
     expect(item.reviewCount).toBe(0);
+    expect(item.badge).toEqual({ kind: 'new', label: 'New' });
   });
 
   it('reports a missing thumbnail as null', () => {
@@ -108,9 +109,9 @@ describe('toSpaceResultView', () => {
   });
 
   it('carries the tier the server named rather than deriving one', () => {
-    expect(toSpaceResultView(result({ surge: surging(12_500, 'moderate_demand') })).surgeBadge).toBe(
-      'moderate_demand',
-    );
+    expect(
+      toSpaceResultView(result({ surge: surging(12_500, 'moderate_demand') })).surgeBadge,
+    ).toBe('moderate_demand');
     expect(toSpaceResultView(result({ surge: surging(15_000, 'high_demand') })).surgeBadge).toBe(
       'high_demand',
     );
