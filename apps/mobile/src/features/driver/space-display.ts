@@ -1,4 +1,4 @@
-import type { SpaceSearchItem } from '@parkease/contracts/driver';
+import type { RatingBadge, SpaceSearchItem } from '@parkease/contracts/driver';
 import type { Amenity, DurationType } from '@parkease/contracts/enums';
 
 // From the copy module, not the component: this file is deliberately free of
@@ -43,10 +43,13 @@ function spokenDistance(distanceM: number): string {
   return `${(distanceM / 1000).toFixed(1)} kilometres`;
 }
 
-/** A never-reviewed space reads "New" — never a zero score (prd.md §6.3). */
-export function formatRatingLabel(rating: number | null, reviewCount: number): string {
-  if (rating === null) return 'New';
-  return `${rating.toFixed(1)} (${String(reviewCount)})`;
+/**
+ * A never-reviewed space reads "New" — never a zero score (prd.md §6.3). The stars are the
+ * server's display string: the client derives no rating (task 17).
+ */
+export function formatRatingLabel(badge: RatingBadge): string {
+  if (badge.kind === 'new') return 'New';
+  return `${badge.stars} (${String(badge.reviewCount)})`;
 }
 
 /** Wording from the filter sheet in the task wireframe. */

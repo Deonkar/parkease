@@ -16,13 +16,9 @@ import { scheduleOnRN } from 'react-native-worklets';
 import { formatPaise } from '@/lib/money';
 
 import { SurgeBadge } from '../../shared/components/SurgeBadge';
-import {
-  durationSuffix,
-  formatDistance,
-  formatRatingLabel,
-  spaceAccessibilityLabel,
-} from '../space-display';
+import { durationSuffix, formatDistance, spaceAccessibilityLabel } from '../space-display';
 
+import { RatingMeta } from './RatingMeta';
 import { SlotPill } from './SlotPill';
 
 const OFFSCREEN = 320;
@@ -118,16 +114,7 @@ export function SpacePreviewCard({ item, duration, onBook, onDismiss }: SpacePre
       </View>
 
       <View style={styles.metaRow}>
-        {item.rating === null ? (
-          <View style={styles.newBadge}>
-            <Text style={styles.newBadgeText}>New</Text>
-          </View>
-        ) : (
-          <View style={styles.inlineMeta}>
-            <MaterialCommunityIcons name="star" size={14} color={colors.warning} />
-            <Text style={styles.metaText}>{formatRatingLabel(item.rating, item.reviewCount)}</Text>
-          </View>
-        )}
+        <RatingMeta badge={item.badge} />
 
         <SurgeBadge badge={item.surgeBadge} multiplier={item.surgeMultiplier} />
 

@@ -113,7 +113,6 @@ function buildFixture(index: number, originLat: number, originLng: number): Spac
     location: { lat, lng },
     distanceM,
     thumbnail: null,
-    rating,
     reviewCount,
     // The server derives this (task 17); the fixture only mirrors its shape. Ratings here never
     // fall below 3.0, so no fixture is "Mixed reviews".
@@ -156,7 +155,8 @@ function matchesFilters(item: SpaceSearchItem, params: SearchQueryParams): boole
   if (maxPrice !== undefined && item.basePricePaise > maxPrice) return false;
 
   const minRating = readNumber(params, 'minRating');
-  if (minRating !== undefined && (item.rating === null || item.rating < minRating)) return false;
+  const stars = starsOf(item);
+  if (minRating !== undefined && (stars === null || stars < minRating)) return false;
 
   const amenities = readString(params, 'amenities');
   if (amenities !== undefined && amenities.length > 0) {
@@ -171,9 +171,13 @@ function matchesFilters(item: SpaceSearchItem, params: SearchQueryParams): boole
   return true;
 }
 
+/** The fixture server filters on the stars it sent, as the real one filters on the stored average. */
+const starsOf = (item: SpaceSearchItem): number | null =>
+  item.badge.kind === 'new' ? null : Number(item.badge.stars);
+
 function compare(sortBy: string | undefined, a: SpaceSearchItem, b: SpaceSearchItem): number {
   if (sortBy === 'price') return a.effectivePricePaise - b.effectivePricePaise;
-  if (sortBy === 'rating') return (b.rating ?? 0) - (a.rating ?? 0);
+  if (sortBy === 'rating') return (starsOf(b) ?? 0) - (starsOf(a) ?? 0);
   return a.distanceM - b.distanceM;
 }
 

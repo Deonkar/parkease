@@ -1,5 +1,5 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import type { SpaceSearchItem } from '@parkease/contracts/driver';
+import type { PendingReview, SpaceSearchItem } from '@parkease/contracts/driver';
 import {
   colors,
   duration as motionDuration,
@@ -33,6 +33,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CLUSTER_MAX_ZOOM, clusterSpaces, type MapViewport } from '@/features/driver/clustering';
 import { FilterSheet } from '@/features/driver/components/FilterSheet';
 import { PlaceSearchBar } from '@/features/driver/components/PlaceSearchBar';
+import { RatingSheet } from '@/features/driver/components/RatingSheet';
+import { ReviewPromptBanner } from '@/features/driver/components/ReviewPromptBanner';
 import { SpaceListItem } from '@/features/driver/components/SpaceListItem';
 import { toMarkerModels } from '@/features/driver/components/SpaceMarker';
 import { SpacePreviewCard } from '@/features/driver/components/SpacePreviewCard';
@@ -94,6 +96,7 @@ export default function DriverDiscoveryScreen() {
   const [view, setView] = useState<ViewMode>('map');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [rating, setRating] = useState<PendingReview | null>(null);
   const [viewport, setViewport] = useState<MapViewportState | null>(null);
   const [camera, setCamera] = useState<{ center: SearchOrigin; zoom: number } | null>(null);
   // Ticks on every camera command, so "go here again" survives an unchanged target.
@@ -469,6 +472,8 @@ export default function DriverDiscoveryScreen() {
           />
         </View>
 
+        <ReviewPromptBanner onOpen={setRating} />
+
         {view === 'list' ? (
           <Text style={styles.resultSummary}>
             {`${String(items.length)} space${items.length === 1 ? '' : 's'} · sorted by ${filters.sortBy}`}
@@ -513,6 +518,16 @@ export default function DriverDiscoveryScreen() {
           setFiltersOpen(false);
         }}
       />
+
+      {rating === null ? null : (
+        <RatingSheet
+          key={rating.bookingId}
+          pending={rating}
+          onDone={() => {
+            setRating(null);
+          }}
+        />
+      )}
     </View>
   );
 }
