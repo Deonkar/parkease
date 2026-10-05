@@ -18,7 +18,7 @@ describe('sanitiseComment', () => {
 
   it('turns whitespace-only into null, not an empty string', () => {
     expect(sanitiseComment('   \n\t  ')).toBeNull();
-    expect(sanitiseComment('\u200B\u200C')).toBeNull();
+    expect(sanitiseComment('\u200B\uFEFF')).toBeNull();
   });
 
   it('collapses runs of whitespace', () => {
@@ -26,7 +26,7 @@ describe('sanitiseComment', () => {
   });
 
   it('does not count zero-width padding toward the length', () => {
-    const padded = `${'a'.repeat(500)}${'\u200D'.repeat(400)}`;
+    const padded = `${'a'.repeat(500)}${'\u200B'.repeat(400)}`;
     expect([...(sanitiseComment(padded) ?? '')].length).toBe(500);
   });
 
@@ -41,4 +41,12 @@ describe('sanitiseComment', () => {
       expect(sanitiseComment(raw)).toBe(raw);
     },
   );
+
+  it('keeps the joiners Devanagari and emoji need', () => {
+    const kssa = 'क्\u200Dष';
+    const family = '👨\u200D👩\u200D👧';
+    expect(sanitiseComment(kssa)).toBe(kssa);
+    expect(sanitiseComment(family)).toBe(family);
+    expect(sanitiseComment('a\u200Cb')).toBe('a\u200Cb');
+  });
 });

@@ -4,7 +4,7 @@ import { and, eq, inArray, isNull } from 'drizzle-orm';
 
 import { DB, type Database } from '../../../platform/db/db.module.js';
 import { ResponseAlreadyExistsError, ReviewNotFoundError } from '../errors.js';
-import { ReviewService, type ReviewRecord } from '../review.service.js';
+import { ReviewService, type ReviewRow } from '../review.service.js';
 import { sanitiseComment } from '../sanitise.js';
 
 export interface RespondToReviewInput {
@@ -24,7 +24,7 @@ export class RespondToReviewCommand {
     private readonly reviews: ReviewService,
   ) {}
 
-  async execute(input: RespondToReviewInput): Promise<ReviewRecord> {
+  async execute(input: RespondToReviewInput): Promise<ReviewRow> {
     // Public text, so the same normalisation as a review comment.
     const response = sanitiseComment(input.response);
     if (response === null) {
@@ -53,11 +53,15 @@ export class RespondToReviewCommand {
         ),
       )
       .returning();
-    if (updated !== undefined) return updated;
+    if (updated === undefined) {
+      // No row: either not theirs (404, never confirm it exists) or already answered (409).
+      const existing = await this.reviews.findOnOwnersSpace(input.reviewId, input.ownerId);
+      if (existing === undefined) throw new ReviewNotFoundError();
+      throw new ResponseAlreadyExistsError();
+    }
 
-    // No row: either not theirs (404, never confirm it exists) or already answered (409).
-    const existing = await this.reviews.findOnOwnersSpace(input.reviewId, input.ownerId);
-    if (existing === undefined) throw new ReviewNotFoundError();
-    throw new ResponseAlreadyExistsError();
+    // The update is a single statement and has committed; a failed name read is not worth
+    // answering 500 for a response that exists, and the name is display-only.
+    return { review: updated, reviewerName: await this.reviews.nameOf(updated.reviewerUserId) };
   }
 }

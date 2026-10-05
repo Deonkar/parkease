@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { recomputeRatingAggregate } from '@parkease/db/queries';
-import { reviews } from '@parkease/db/schema';
-import { eq } from 'drizzle-orm';
+import { reviewReports, reviews } from '@parkease/db/schema';
+import { and, eq, isNull } from 'drizzle-orm';
 
 import { DB, type Database } from '../../../platform/db/db.module.js';
 import { withTransaction } from '../../../platform/db/transaction.js';
@@ -87,12 +87,19 @@ export class ModerateReviewCommand {
       if (before === undefined) throw new ReviewNotFoundError();
       if (before.deletedAt !== null) throw new ReviewAlreadyRemovedError();
 
+      const now = new Date();
       const [dismissed] = await tx
         .update(reviews)
-        .set({ isReported: false, updatedAt: new Date() })
+        .set({ isReported: false, updatedAt: now })
         .where(eq(reviews.id, reviewId))
         .returning();
       if (dismissed === undefined) throw new ReviewNotFoundError();
+
+      // Judged: these reasons leave the queue, so a later report is read on its own.
+      await tx
+        .update(reviewReports)
+        .set({ dismissedAt: now, updatedAt: now })
+        .where(and(eq(reviewReports.reviewId, reviewId), isNull(reviewReports.dismissedAt)));
 
       await this.audit.record(tx, {
         actorUserId: actor.userId,

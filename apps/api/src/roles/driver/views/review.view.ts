@@ -25,12 +25,17 @@ export function toPendingReviewView({ participants, reviewed }: PendingBooking):
     completedAt: completedAt.toISOString(),
     reviewableUntil: new Date(completedAt.getTime() + REVIEW_WINDOW_MS).toISOString(),
     targets: [
-      {
-        targetType: 'space',
-        targetId: booking.spaceId,
-        name: booking.spaceTitle,
-        reviewed: reviewed.has(booking.spaceId),
-      },
+      // An owner who booked their own listing cannot review it (SELF_REVIEW), so it is not offered.
+      ...(booking.ownerId === booking.driverId
+        ? []
+        : [
+            {
+              targetType: 'space' as const,
+              targetId: booking.spaceId,
+              name: booking.spaceTitle,
+              reviewed: reviewed.has(booking.spaceId),
+            },
+          ]),
       ...valets.map(counterparty('valet')),
       ...washers.map(counterparty('washer')),
     ],

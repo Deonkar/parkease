@@ -311,9 +311,12 @@ export class ReviewService {
             .select()
             .from(reviewReports)
             .where(
-              inArray(
-                reviewReports.reviewId,
-                items.map((r) => r.id),
+              and(
+                inArray(
+                  reviewReports.reviewId,
+                  items.map((r) => r.id),
+                ),
+                isNull(reviewReports.dismissedAt),
               ),
             )
             .orderBy(reviewReports.createdAt);

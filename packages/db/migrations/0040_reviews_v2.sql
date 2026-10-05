@@ -72,6 +72,9 @@ CREATE TABLE review_reports (
   reporter_user_id uuid NOT NULL REFERENCES users (id),
   reason text NOT NULL,
   detail text,
+  -- Set when an admin dismisses the review: the report was judged, and leaves the queue. A later
+  -- report from someone else re-queues the review with only its own reason.
+  dismissed_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT review_reports_reason_check

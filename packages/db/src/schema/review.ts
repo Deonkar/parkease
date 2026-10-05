@@ -100,6 +100,8 @@ export const reviewReports = pgTable(
       .references(() => users.id),
     reason: text('reason').notNull(),
     detail: text('detail'),
+    /** Judged and dismissed: no longer shown in the queue. */
+    dismissedAt: timestamp('dismissed_at', { withTimezone: true }),
     ...timestamps,
   },
   (t) => [

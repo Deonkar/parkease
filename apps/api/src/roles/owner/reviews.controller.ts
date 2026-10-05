@@ -95,13 +95,8 @@ export class OwnerReviewsController {
     @Body() body: unknown,
   ): Promise<ReviewView> {
     const { response } = respondToReviewSchema.parse(body);
-    const review = await this.respond.execute({ reviewId: id, ownerId: user.id, response });
-    const reviewerName = await this.reviews.nameOf(review.reviewerUserId);
-    return parseOutgoing(
-      reviewViewSchema,
-      toReviewView({ review, reviewerName }),
-      'owner review response',
-    );
+    const row = await this.respond.execute({ reviewId: id, ownerId: user.id, response });
+    return parseOutgoing(reviewViewSchema, toReviewView(row), 'owner review response');
   }
 
   @Post(':id/report')

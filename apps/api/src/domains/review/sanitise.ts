@@ -1,7 +1,11 @@
 // eslint-disable-next-line no-control-regex -- matching control characters is the point
 const CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
-/** Zero-width, soft hyphen, word joiner and bidi overrides: characters that exist to hide or reorder text. */
-const INVISIBLE = /[\u00AD\u180E\u200B-\u200D\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g;
+/**
+ * Characters that exist to hide or reorder text: zero-width space, soft hyphen, word joiner, BOM
+ * and the bidi overrides. NOT the zero-width joiner and non-joiner (U+200C/D): Devanagari and
+ * other Indic scripts need them to form conjuncts, and emoji sequences need the joiner.
+ */
+const INVISIBLE = /[\u00AD\u180E\u200B\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g;
 const EXCESS_WHITESPACE = /\s{3,}/g;
 
 /**

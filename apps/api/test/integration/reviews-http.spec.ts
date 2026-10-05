@@ -169,6 +169,45 @@ describe('reviews HTTP', () => {
       expect(detail.badge).toEqual({ kind: 'rated', stars: '4.0', reviewCount: 1 });
       expect(detail.reviewSummary.distribution['4']).toBe(1);
       expect(detail.recentReviews).toHaveLength(1);
+
+      // Rule 3: the event commits with the row.
+      const outbox = await h.sql<{ type: string; payload: Record<string, unknown> }[]>`
+        SELECT type, payload FROM outbox_messages WHERE type LIKE 'review.%'`;
+      expect(outbox).toEqual([
+        {
+          type: 'review.created',
+          payload: expect.objectContaining({ targetType: 'space', targetId: spaceId, rating: 4 }),
+        },
+      ]);
+    });
+
+    it('answers 404 for a valet or washer whose job on this booking was cancelled', async () => {
+      const cancelledValet = await seedUser(h, 'valet');
+      const cancelledWasher = await seedUser(h, 'washer');
+      await h.sql`
+        INSERT INTO valet_jobs (booking_id, driver_user_id, assigned_user_id, status,
+                                pickup_location, pickup_address, commission_rate)
+        VALUES (${bookingId}, ${h.driverId}, ${cancelledValet}, 'cancelled',
+                ST_SetSRID(ST_MakePoint(${ORIGIN.lng}, ${ORIGIN.lat}), 4326)::geography,
+                'Forum Mall', 0.200)`;
+      await h.sql`
+        INSERT INTO wash_jobs (booking_id, driver_user_id, washer_user_id, status, service_name,
+                               vehicle_type, commission_rate, space_location)
+        VALUES (${bookingId}, ${h.driverId}, ${cancelledWasher}, 'cancelled', 'basic_exterior',
+                'car', 0.150, ST_SetSRID(ST_MakePoint(${ORIGIN.lng}, ${ORIGIN.lat}), 4326)::geography)`;
+
+      for (const [targetType, targetId] of [
+        ['valet', cancelledValet],
+        ['washer', cancelledWasher],
+      ] as const) {
+        const response = await post('/api/v1/driver/reviews', {
+          bookingId,
+          targetType,
+          targetId,
+          rating: 1,
+        });
+        expect(response.status).toBe(404);
+      }
     });
 
     it('allows a second wash review on the same booking', async () => {
@@ -283,6 +322,14 @@ describe('reviews HTTP', () => {
       expect(pending[0]?.targets.filter((t) => t.targetType === 'washer')).toHaveLength(2);
     });
 
+    it('does not offer an owner their own space to review', async () => {
+      await h.sql`UPDATE spaces SET owner_id = ${h.driverId} WHERE id = ${spaceId}`;
+      const pending = data<{ targets: { targetType: string }[] }[]>(
+        await get('/api/v1/driver/reviews/pending'),
+      );
+      expect(pending[0]?.targets.map((t) => t.targetType)).not.toContain('space');
+    });
+
     it('pages its own reviews to the end through nextCursor', async () => {
       await reviewSpace(5);
       for (const targetId of [washerA, washerB]) {
@@ -330,6 +377,10 @@ describe('reviews HTTP', () => {
       const [flag] = await h.sql<{ reported: boolean }[]>`
         SELECT is_reported AS reported FROM reviews WHERE id = ${reviewId}`;
       expect(flag?.reported).toBe(true);
+
+      const [event] = await h.sql<{ payload: Record<string, unknown> }[]>`
+        SELECT payload FROM outbox_messages WHERE type = 'review.reported'`;
+      expect(event?.payload).toEqual({ reviewId, reason: 'spam_or_fake' });
 
       const again = await post(`/api/v1/driver/reviews/${reviewId}/report`, { reason: 'other' });
       expect(again.status).toBe(409);
@@ -412,6 +463,42 @@ describe('reviews HTTP', () => {
       expect((await post('/api/v1/owner/reviews', { bookingId, rating: 1 })).status).toBe(404);
     });
 
+    it("summarises every live space it owns, empty ones too, and nobody else's", async () => {
+      const empty = await seedSpace(h, { lat: 12.94, lng: 77.62, title: 'Empty lot' });
+      await seedSpace(h, { lat: 12.95, lng: 77.61, title: 'Gone', deleted: true });
+      const theirs = await seedSpace(h, { lat: 12.96, lng: 77.6 });
+      await h.sql`UPDATE spaces SET owner_id = ${otherOwnerId} WHERE id = ${theirs}`;
+      for (const rating of [5, 5, 2]) {
+        const reviewer = await seedUser(h, 'driver');
+        await h.sql`
+          INSERT INTO reviews (booking_id, reviewer_user_id, reviewer_role, target_type, target_id,
+                               rating, is_reported)
+          VALUES (${bookingId}, ${reviewer}, 'driver', 'space', ${spaceId}, ${rating},
+                  ${rating === 2})`;
+      }
+
+      const summary = data<
+        {
+          spaceId: string;
+          ratingCount: number;
+          reportedCount: number;
+          distribution: Record<string, number>;
+        }[]
+      >(await get('/api/v1/owner/reviews/summary'));
+
+      expect(summary.map((s) => s.spaceId).sort()).toEqual([spaceId, empty].sort());
+      expect(summary.find((s) => s.spaceId === spaceId)).toMatchObject({
+        ratingCount: 4,
+        reportedCount: 1,
+        distribution: { 1: 0, 2: 1, 3: 0, 4: 1, 5: 2 },
+      });
+      expect(summary.find((s) => s.spaceId === empty)).toMatchObject({
+        ratingCount: 0,
+        reportedCount: 0,
+        distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
+      });
+    });
+
     it('summarises each space, with bars that sum to the count', async () => {
       const summary = data<
         { spaceId: string; ratingCount: number; distribution: Record<string, number> }[]
@@ -473,11 +560,32 @@ describe('reviews HTTP', () => {
       expect(
         (await post(`/api/v1/admin/moderation/reviews/${oneStar}/remove`, { reason: 'x' })).status,
       ).toBe(409);
+      expect((await post(`/api/v1/admin/moderation/reviews/${oneStar}/dismiss`, {})).status).toBe(
+        409,
+      );
+      const unknown = `/api/v1/admin/moderation/reviews/${crypto.randomUUID()}/remove`;
+      expect((await post(unknown, { reason: 'x' })).status).toBe(404);
+      const [row] = await h.sql<{ reason: string; by: string }[]>`
+        SELECT removed_reason AS reason, removed_by_user_id AS by FROM reviews WHERE id = ${oneStar}`;
+      expect(row).toEqual({ reason: 'spam_or_fake', by: adminId });
+
+      // A removed review can be neither reported nor answered.
+      as(otherDriverId, 'driver');
+      expect(
+        (await post(`/api/v1/driver/reviews/${oneStar}/report`, { reason: 'other' })).status,
+      ).toBe(404);
+      asOwner();
+      expect(
+        (await post(`/api/v1/owner/reviews/${oneStar}/respond`, { response: 'Hello' })).status,
+      ).toBe(404);
+      asAdmin();
 
       // Dismiss: a reported 5★ stays, the flag clears, the average does not move.
       const [kept] = await h.sql<{ id: string }[]>`
         UPDATE reviews SET is_reported = true
         WHERE id = (SELECT id FROM reviews WHERE deleted_at IS NULL LIMIT 1) RETURNING id`;
+      await h.sql`INSERT INTO review_reports (review_id, reporter_user_id, reason)
+                  VALUES (${kept!.id}, ${otherDriverId}, 'spam_or_fake')`;
       const dismissed = await post(`/api/v1/admin/moderation/reviews/${kept!.id}/dismiss`, {});
       expect(dismissed.status).toBe(200);
       expect(data(dismissed)).toMatchObject({ isReported: false, moderationStatus: 'visible' });
@@ -485,6 +593,44 @@ describe('reviews HTTP', () => {
       const [dismissAudit] = await h.sql<{ n: number }[]>`
         SELECT count(*)::int AS n FROM audit_log WHERE target_id = ${kept!.id} AND action = 'review.dismiss'`;
       expect(dismissAudit?.n).toBe(1);
+
+      // A new report after a dismissal re-queues the review with the new reason only.
+      const reporter = await seedUser(h, 'driver');
+      await h.sql`INSERT INTO review_reports (review_id, reporter_user_id, reason)
+                  VALUES (${kept!.id}, ${reporter}, 'inappropriate')`;
+      await h.sql`UPDATE reviews SET is_reported = true WHERE id = ${kept!.id}`;
+      const requeued = data<{ id: string; reports: { reason: string }[] }[]>(
+        await get('/api/v1/admin/moderation/reviews'),
+      ).find((item) => item.id === kept!.id);
+      expect(requeued?.reports.map((r) => r.reason)).toEqual(['inappropriate']);
+    });
+
+    it('pages the queue in order without repeats, and refuses a forged cursor', async () => {
+      const ids: string[] = [];
+      for (let i = 0; i < 3; i++) {
+        const reviewer = await seedUser(h, 'driver');
+        const [row] = await h.sql<{ id: string }[]>`
+          INSERT INTO reviews (booking_id, reviewer_user_id, reviewer_role, target_type, target_id,
+                               rating, is_reported)
+          VALUES (${bookingId}, ${reviewer}, 'driver', 'space', ${spaceId}, 3, true) RETURNING id`;
+        ids.push(row!.id);
+      }
+      asAdmin();
+
+      const seen: string[] = [];
+      let url = '/api/v1/admin/moderation/reviews?limit=1';
+      for (let page = 0; page < 10; page++) {
+        const response = await get(url);
+        seen.push(...data<{ id: string }[]>(response).map((r) => r.id));
+        const next = env(response).meta?.nextCursor;
+        if (next == null) break;
+        url = `/api/v1/admin/moderation/reviews?limit=1&cursor=${next}`;
+      }
+      expect(seen).toEqual([...ids].sort());
+
+      const forged = await get('/api/v1/admin/moderation/reviews?cursor=not-a-uuid');
+      expect(forged.status).toBe(400);
+      expect(codeOf(forged)).toBe('INVALID_CURSOR');
     });
 
     it('serves the queue from the partial index', async () => {

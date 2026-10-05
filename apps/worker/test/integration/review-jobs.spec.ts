@@ -102,6 +102,14 @@ describe('review.recompute-aggregates', () => {
     await pg.sql`UPDATE spaces SET rating_avg_bp = 40000, rating_count = 1 WHERE id = ${steady}`;
     const steadyBefore = await readModel(steady);
 
+    // An owner's review of the driver, ageing in the same window: it has no read model, and it
+    // must not break the run for everyone else.
+    await pg.sql`
+      INSERT INTO reviews (booking_id, reviewer_user_id, reviewer_role, target_type, target_id,
+                           rating, created_at)
+      VALUES (${booking}, ${ownerId}, 'owner', 'driver', ${driverId}, 2,
+              ${new Date(Date.now() - 29.9 * DAY_MS).toISOString()}::timestamptz)`;
+
     // A fifth of a day later the 5★ is 30.1 days old: one weight each, (5 + 1) / 2.
     const later = new Date(Date.now() + 0.2 * DAY_MS);
     await recomputeAgeingAggregates(deps, later);

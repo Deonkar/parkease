@@ -2213,3 +2213,81 @@ already has two `no-unused-vars` errors.
 
 - **Why deferred:** pre-existing and unrelated to queues; widening the lint scope may surface more.
 - **Done means:** the worker lints `src/` and `test/`, and passes.
+
+### S-126 — Search and space detail still send the rating as a float
+
+- **Status:** `open`
+- **Found in:** task 17a, 2026-10-05
+- **Surface:** contracts (`spaceSearchItemSchema`, `spaceDetailSchema`) · mobile
+
+Both responses carry `rating: number` (bp / 10000, e.g. 4.2) next to the new integer-backed `badge`.
+Task 17 says no float in a contract; the field stayed because mobile reads it until 17b.
+
+- **Why deferred:** removing it breaks the shipped mobile client; 17b moves the UI to `badge`.
+- **Done means:** mobile reads `badge` only, and `rating` is removed from both contracts.
+
+### S-127 — Drivers cannot page past the three newest reviews of a space
+
+- **Status:** `open`
+- **Found in:** task 17a, 2026-10-05
+- **Surface:** api (driver) · mobile
+
+Space detail returns `reviewSummary` + the 3 most recent reviews. The spec's "See all 18 reviews →"
+needs a list endpoint the §17.9 table does not define.
+
+- **Why deferred:** the screen that needs it is 17b's, and its design decides the shape.
+- **Done means:** 17b's design either drops "see all" or adds `GET /driver/spaces/:id/reviews`
+  (cursor-paged, public view) with an HTTP test that pages to the end.
+
+### S-128 — The nightly review recompute scans `reviews` by `created_at` with no index
+
+- **Status:** `open`
+- **Found in:** task 17a database review, 2026-10-05
+- **Surface:** db · worker
+
+`ageingReviewTargets` filters a week of `created_at`; no index leads with it, so it is a sequential scan.
+Fine at launch volume, linear in total reviews.
+
+- **Why deferred:** no volume yet; an index is a write cost on every review.
+- **Done means:** an EXPLAIN on a seeded volume shows the scan matters, then
+  `CREATE INDEX CONCURRENTLY … (created_at) WHERE deleted_at IS NULL` in its own migration.
+
+### S-129 — A fleet of new accounts can flood the moderation queue
+
+- **Status:** `open`
+- **Found in:** task 17a security review, 2026-10-05
+- **Surface:** api (reports)
+
+Reports are rate-limited per user (10/min) and need no relationship to the space. Each account costs
+a phone OTP, which bounds it, but nothing caps reports per review or requires a booking at the space.
+
+- **Why deferred:** reporting never hides a review, so a flood costs admin time, not content; the
+  right cap needs real report data.
+- **Done means:** a per-review cap on distinct reporters or a booking-at-this-space requirement for
+  drivers, chosen from task 18's moderation data, with an HTTP test.
+
+### S-130 — No push asks a driver to review; drivers rate nothing they are not reminded of
+
+- **Status:** `open`
+- **Found in:** task 17a scoping (user-approved cut), 2026-10-05
+- **Surface:** worker · notifications
+
+`booking.completed` has no subscriber, so the spec's `review.prompt` job was not built. The in-app
+prompt reads `GET /driver/reviews/pending`.
+
+- **Why deferred:** push delivery is task 19.
+- **Done means:** task 19 subscribes to `booking.completed` and sends a `review_request` notification
+  once per booking, idempotently.
+
+### S-131 — Owners' reviews of drivers are stored but never aggregated
+
+- **Status:** `open`
+- **Found in:** task 17a scoping (user-approved cut), 2026-10-05
+- **Surface:** db · api
+
+`recomputeRatingAggregate` is a no-op for `driver`: `users` has no rating columns and nothing reads a
+driver rating, so a read model would be maintained for no reader.
+
+- **Why deferred:** YAGNI until something gates on it (an owner auto-decline, a driver trust badge).
+- **Done means:** that consumer exists; `users` gains the rating pair with the same CHECK as
+  `spaces_rating_read_model_check`, and the recompute writes it.
