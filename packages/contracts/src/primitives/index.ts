@@ -48,6 +48,24 @@ export {
 } from './indian.js';
 
 export {
+  type RatingBp,
+  BP_PER_STAR,
+  MIN_RATING_BP,
+  MAX_RATING_BP,
+  DISPLAY_STEP_BP,
+  RECENCY_WINDOW_MS,
+  RECENT_WEIGHT,
+  OLDER_WEIGHT,
+  SPACE_WARNING_BELOW_BP,
+  SPACE_WARNING_MIN_REVIEWS,
+  divRoundHalfUp,
+  type WeightedInput,
+  weightedAverageBp,
+  toDisplayBp,
+  formatStars,
+} from './rating.js';
+
+export {
   paginationQuerySchema,
   type PaginationQuery,
   pageMetaSchema,

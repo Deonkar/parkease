@@ -46,7 +46,20 @@ export {
 } from './list-bookings.js';
 export { createValetRequestSchema, type CreateValetRequest } from './create-valet-request.js';
 export { createWashRequestSchema, type CreateWashRequest } from './create-wash-request.js';
-export { createReviewSchema, type CreateReview } from './create-review.js';
+export {
+  createReviewSchema,
+  type CreateReview,
+  reportReviewSchema,
+  type ReportReview,
+  ratingBadgeSchema,
+  type RatingBadge,
+  reviewViewSchema,
+  type ReviewView,
+  reviewSummarySchema,
+  type ReviewSummary,
+  pendingReviewSchema,
+  type PendingReview,
+} from './review.js';
 export { addVehicleSchema, type AddVehicle, vehicleSchema, type Vehicle } from './vehicles.js';
 export {
   driverRateCardSchema,

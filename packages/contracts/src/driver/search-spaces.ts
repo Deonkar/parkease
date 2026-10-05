@@ -9,6 +9,8 @@ import { spaceIdSchema } from '../primitives/ids.js';
 import { geoPointSchema } from '../primitives/indian.js';
 import { paiseSchema } from '../primitives/paise.js';
 
+import { ratingBadgeSchema } from './review.js';
+
 export const DEFAULT_SEARCH_RADIUS_M = 5_000;
 export const MAX_SEARCH_RADIUS_M = 25_000;
 export const DEFAULT_SEARCH_LIMIT = 20;
@@ -75,6 +77,7 @@ export const spaceSearchItemSchema = z.object({
   /** null means never reviewed — the client renders "New", never a zero score. */
   rating: z.number().min(1).max(5).nullable(),
   reviewCount: z.number().int().nonnegative(),
+  badge: ratingBadgeSchema,
   amenities: z.array(amenitySchema),
   availableSlots: z.object({
     car: z.number().int().nonnegative(),

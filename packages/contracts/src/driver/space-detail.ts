@@ -6,6 +6,8 @@ import { spaceScheduleSchema } from '../owner/space-schedule.js';
 import { spaceIdSchema } from '../primitives/ids.js';
 import { paiseSchema } from '../primitives/paise.js';
 
+import { ratingBadgeSchema, reviewSummarySchema, reviewViewSchema } from './review.js';
+
 /**
  * Base rates only, exactly as the owner set them. No fee, no GST, no surge
  * arithmetic: the driver-facing pricing table on space detail shows what an hour
@@ -90,6 +92,10 @@ export const spaceDetailSchema = z.object({
   /** null means never reviewed — the client renders "New", never a zero score. */
   rating: z.number().nullable(),
   reviewCount: z.number().int().nonnegative(),
+  badge: ratingBadgeSchema,
+  reviewSummary: reviewSummarySchema,
+  /** The three most recent visible reviews. */
+  recentReviews: z.array(reviewViewSchema).max(3),
   defaultBooking: defaultBookingSchema.nullable(),
   owner: z.object({
     name: z.string(),

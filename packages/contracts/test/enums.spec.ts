@@ -55,6 +55,15 @@ import {
   OUTBOX_STATUS_VALUES,
   OutboxStatus,
   outboxStatusSchema,
+  REVIEW_TARGET_TYPE_VALUES,
+  ReviewTargetType,
+  reviewTargetTypeSchema,
+  REVIEW_REPORT_REASON_VALUES,
+  ReviewReportReason,
+  reviewReportReasonSchema,
+  REVIEW_MODERATION_STATUS_VALUES,
+  ReviewModerationStatus,
+  reviewModerationStatusSchema,
 } from '../src/enums/index.js';
 
 const allEnums = [
@@ -141,6 +150,24 @@ const allEnums = [
     obj: OutboxStatus,
     schema: outboxStatusSchema,
   },
+  {
+    name: 'ReviewTargetType',
+    values: REVIEW_TARGET_TYPE_VALUES,
+    obj: ReviewTargetType,
+    schema: reviewTargetTypeSchema,
+  },
+  {
+    name: 'ReviewReportReason',
+    values: REVIEW_REPORT_REASON_VALUES,
+    obj: ReviewReportReason,
+    schema: reviewReportReasonSchema,
+  },
+  {
+    name: 'ReviewModerationStatus',
+    values: REVIEW_MODERATION_STATUS_VALUES,
+    obj: ReviewModerationStatus,
+    schema: reviewModerationStatusSchema,
+  },
 ] as const;
 
 describe('enums', () => {
@@ -158,8 +185,8 @@ describe('enums', () => {
     expect(result.success).toBe(false);
   });
 
-  it('all 18 enum types are tested', () => {
-    expect(allEnums).toHaveLength(18);
+  it('all 21 enum types are tested', () => {
+    expect(allEnums).toHaveLength(21);
   });
 });
 

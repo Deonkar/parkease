@@ -177,6 +177,7 @@ describe('spaceSearchItemSchema', () => {
     thumbnail: 'https://cdn.example.com/a.jpg',
     rating: 4.2,
     reviewCount: 18,
+    badge: { kind: 'rated', stars: '4.2', reviewCount: 18 },
     amenities: ['covered', 'cctv'],
     availableSlots: { car: 1, twoWheeler: 3 },
     basePricePaise: 3000,
@@ -191,7 +192,12 @@ describe('spaceSearchItemSchema', () => {
   });
 
   it('accepts a never-reviewed space as rating null, not zero', () => {
-    const parsed = spaceSearchItemSchema.parse({ ...item, rating: null, reviewCount: 0 });
+    const parsed = spaceSearchItemSchema.parse({
+      ...item,
+      rating: null,
+      reviewCount: 0,
+      badge: { kind: 'new', label: 'New' },
+    });
     expect(parsed.rating).toBeNull();
   });
 
