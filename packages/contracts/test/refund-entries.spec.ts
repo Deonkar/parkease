@@ -350,3 +350,135 @@ describe('promoBookingEntries — a discount never reaches the owner', () => {
     );
   });
 });
+
+describe('refunds of a commission-free booking (task 16c)', () => {
+  const WAIVED = quote({
+    basePaise: toPaise(6000),
+    surgeMultiplier: toRate(1),
+    commissionWaived: true,
+  });
+  const booking = { totalPaise: WAIVED.driverTotalPaise, startsAt: STARTS_AT };
+
+  it('before start: returns the whole waiver to promo_expense, balanced', () => {
+    const outcome = resolveRefund({
+      booking,
+      at: new Date(STARTS_AT.getTime() - 1_000),
+      cancelledBy: 'driver',
+    });
+    const entries = refundEntries(WAIVED, outcome, 'refund');
+    expect(rowsOf(entries)).toContain('promo_expense credit 900');
+    expect(rowsOf(entries)).toContain('owner_payable debit 6000');
+    expect(() => {
+      assertEntriesBalance(entries);
+    }).not.toThrow();
+  });
+
+  it('owner cancelled: returns the whole waiver, and the goodwill stays its own expense', () => {
+    const outcome = resolveRefund({ booking, at: STARTS_AT, cancelledBy: 'owner' });
+    const entries = refundEntries(WAIVED, outcome, 'refund');
+    expect(rowsOf(entries)).toContain('promo_expense credit 900');
+    expect(rowsOf(entries)).toContain('promo_expense debit 5000');
+    expect(() => {
+      assertEntriesBalance(entries);
+    }).not.toThrow();
+  });
+
+  it('active grace (50%): reverses the waiver in the same proportion', () => {
+    const outcome = resolveRefund({
+      booking,
+      at: new Date(STARTS_AT.getTime() + 60_000),
+      cancelledBy: 'driver',
+    });
+    const entries = refundEntries(WAIVED, outcome, 'refund');
+    expect(rowsOf(entries)).toEqual(
+      [
+        'gst_payable debit 81',
+        'owner_payable debit 3000', // 2550 of the driver's money + 450 of the waiver
+        'platform_revenue debit 450',
+        'promo_expense credit 450',
+        'refunds_payable credit 3081',
+      ].sort(),
+    );
+    expect(() => {
+      assertEntriesBalance(entries);
+    }).not.toThrow();
+  });
+
+  it('active grace on an odd total loses no paisa', () => {
+    const odd = quote({
+      basePaise: toPaise(6001),
+      surgeMultiplier: toRate(1),
+      commissionWaived: true,
+    });
+    const outcome = resolveRefund({
+      booking: { totalPaise: odd.driverTotalPaise, startsAt: STARTS_AT },
+      at: new Date(STARTS_AT.getTime() + 60_000),
+      cancelledBy: 'driver',
+    });
+    expect(() => {
+      assertEntriesBalance(refundEntries(odd, outcome, 'refund'));
+    }).not.toThrow();
+  });
+});
+
+describe('grace refunds of surged and partly waived bookings, to the paisa (task 16c review)', () => {
+  const graceOf = (totalPaise: number) =>
+    resolveRefund({
+      booking: { totalPaise, startsAt: STARTS_AT },
+      at: new Date(STARTS_AT.getTime() + 60_000),
+      cancelledBy: 'driver',
+    });
+
+  it('surge at 1.5x: allocates the driver-paid split, and returns half the waiver', () => {
+    // base 6000, surge 3000, fee 3900, gst 702, total 9702, owner 6000, waiver 900; refund 4851.
+    const surged = quote({
+      basePaise: toPaise(6000),
+      surgeMultiplier: toRate(1.5),
+      commissionWaived: true,
+    });
+    expect(rowsOf(refundEntries(surged, graceOf(surged.driverTotalPaise), 'refund'))).toEqual(
+      [
+        'gst_payable debit 351',
+        'owner_payable debit 3000',
+        'platform_revenue debit 1950',
+        'promo_expense credit 450',
+        'refunds_payable credit 4851',
+      ].sort(),
+    );
+  });
+
+  it('a partial waiver (an extension quoted after the window) returns only its share', () => {
+    // 900 commission, 450 of it waived: owner 5550, total 6162, refund 3081.
+    const partial = {
+      driverTotalPaise: 6162,
+      ownerEarningsPaise: 5550,
+      parkeaseFeePaise: 900,
+      gstPaise: 162,
+      commissionWaiverPaise: 450,
+    };
+    const entries = refundEntries(partial, graceOf(6162), 'refund');
+    expect(rowsOf(entries)).toEqual(
+      [
+        'gst_payable debit 81',
+        'owner_payable debit 2775',
+        'platform_revenue debit 450',
+        'promo_expense credit 225',
+        'refunds_payable credit 3081',
+      ].sort(),
+    );
+    expect(() => {
+      assertEntriesBalance(entries);
+    }).not.toThrow();
+  });
+
+  it('promoBookingEntries funds a commission-free owner too, and stays balanced', () => {
+    const waived = quote({
+      basePaise: toPaise(6000),
+      surgeMultiplier: toRate(1),
+      commissionWaived: true,
+    });
+    expect(() => {
+      assertEntriesBalance(promoBookingEntries(waived, 1000));
+    }).not.toThrow();
+  });
+});

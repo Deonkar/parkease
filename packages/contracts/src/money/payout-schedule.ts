@@ -18,3 +18,8 @@ export function nextPayoutOn(now: Date): string {
   const run = new Date(ist.getTime() + (ranToday ? 7 : daysToMonday) * DAY_MS);
   return run.toISOString().slice(0, 10);
 }
+
+/** The IST calendar date (`YYYY-MM-DD`) of an instant — the host's timezone never moves it. */
+export function istDateOf(instant: Date): string {
+  return new Date(instant.getTime() + IST_OFFSET_MS).toISOString().slice(0, 10);
+}

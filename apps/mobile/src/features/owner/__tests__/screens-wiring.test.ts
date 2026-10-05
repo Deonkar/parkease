@@ -52,7 +52,8 @@ describe('owner screens', () => {
 
   it('earnings: has an unconditional page title above the tabs (M2)', () => {
     expect(earnings).toMatch(/accessibilityRole="header"[\s\S]{0,50}Earnings/);
-    expect(earnings).toContain('Your share, after the ParkEase fee');
+    // The subtitle's copy (fee or commission-free, task 16c) is unit-tested in commission-waiver.test.ts.
+    expect(earnings).toContain('{earningsSubtitle(waiver)}');
   });
 
   it('earnings: period tabs drive both queries; transactions in a FlashList with paging', () => {

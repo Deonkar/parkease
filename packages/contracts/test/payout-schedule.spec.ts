@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { MINIMUM_PAYOUT_PAISE, nextPayoutOn } from '../src/money/index.js';
+import { istDateOf, MINIMUM_PAYOUT_PAISE, nextPayoutOn } from '../src/money/index.js';
 
 describe('nextPayoutOn — the Monday 06:00 IST run', () => {
   it('is the coming Monday from midweek', () => {
@@ -18,5 +18,12 @@ describe('nextPayoutOn — the Monday 06:00 IST run', () => {
 
   it('pays at ₹100 and above', () => {
     expect(MINIMUM_PAYOUT_PAISE).toBe(10_000);
+  });
+});
+
+describe('istDateOf (task 16c)', () => {
+  it('names the IST calendar day, which starts at 18:30 UTC the evening before', () => {
+    expect(istDateOf(new Date('2027-01-04T18:29:59Z'))).toBe('2027-01-04');
+    expect(istDateOf(new Date('2027-01-04T18:30:00Z'))).toBe('2027-01-05');
   });
 });

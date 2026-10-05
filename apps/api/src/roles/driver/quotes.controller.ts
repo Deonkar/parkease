@@ -40,6 +40,7 @@ export class DriverQuotesController {
     assertWindowIsBookable(space.schedule, input.durationType, startsAt, endsAt);
 
     const quote = await this.quotes.forBooking({
+      ownerId: space.ownerId,
       pricing: space.pricing,
       zoneId: space.zoneId,
       vehicleType: input.vehicleType,

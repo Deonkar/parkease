@@ -4,6 +4,7 @@ export * from './space.js';
 export * from './booking.js';
 export * from './payment.js';
 export * from './payout.js';
+export * from './pricing.js';
 export * from './ledger.js';
 export * from './valet.js';
 export * from './carwash.js';

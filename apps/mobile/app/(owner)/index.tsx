@@ -5,6 +5,7 @@ import {
   fontSize,
   fontWeight,
   layout,
+  lineHeight,
   radius,
   spacing,
   touchTarget,
@@ -14,6 +15,7 @@ import { router } from 'expo-router';
 import { useState, type ReactNode } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { waiverRow } from '@/features/owner/commission-waiver';
 import { KpiCard } from '@/features/owner/components/KpiCard';
 import { SpaceRow } from '@/features/owner/components/SpaceRow';
 import { StatementLine } from '@/features/owner/components/StatementLine';
@@ -77,6 +79,24 @@ export default function OwnerDashboardScreen() {
     </View>
   );
 
+  // One of the first 50 owners (task 16c). Cobalt-soft, not warning amber (it is good news) and
+  // not availability green (reserved by the Wayfinder direction); 6.59:1, pinned in contrast.spec.
+  const waiver = (data: OwnerDashboard): ReactNode => {
+    const copy = waiverRow(data.commissionWaiver);
+    return copy === null ? null : (
+      <View style={styles.waiver} testID="commission-waiver-row">
+        <MaterialCommunityIcons
+          accessibilityElementsHidden
+          importantForAccessibility="no"
+          name="tag-heart-outline"
+          size={20}
+          color={colors.primaryDark}
+        />
+        <Text style={styles.waiverText}>{copy}</Text>
+      </View>
+    );
+  };
+
   // A failed refetch over cached data says so in both ready branches — the
   // no-spaces one included — or the owner reads stale figures as current (R-FAIL-01).
   const refreshNotice: ReactNode = dashboard.isError ? (
@@ -90,6 +110,8 @@ export default function OwnerDashboardScreen() {
   const body = (data: OwnerDashboard): ReactNode => (
     <>
       {header(data.greetingName)}
+
+      {waiver(data)}
 
       {refreshNotice}
 
@@ -177,6 +199,7 @@ export default function OwnerDashboardScreen() {
           return (
             <>
               {header(data.greetingName)}
+              {waiver(data)}
               {refreshNotice}
               <ScanButton />
               <EmptyState
@@ -232,4 +255,18 @@ const styles = StyleSheet.create({
   cardHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   link: { minHeight: touchTarget, justifyContent: 'center', paddingHorizontal: spacing.sm },
   linkText: { fontSize: fontSize.sm, fontWeight: fontWeight.semibold, color: colors.primary },
+  waiver: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.primarySoft,
+  },
+  waiverText: {
+    flex: 1,
+    fontSize: fontSize.sm,
+    lineHeight: fontSize.sm * lineHeight.normal,
+    color: colors.primaryDark,
+  },
 });

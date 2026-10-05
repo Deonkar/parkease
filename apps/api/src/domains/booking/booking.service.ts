@@ -102,6 +102,7 @@ export class BookingService {
         gstPaise: input.quote.gstPaise,
         totalPaise: input.quote.driverTotalPaise,
         ownerEarningsPaise: input.quote.ownerEarningsPaise,
+        commissionWaiverPaise: input.quote.commissionWaiverPaise,
       })
       .returning();
 
@@ -307,6 +308,7 @@ export class BookingService {
         gstPaise: sql`${bookings.gstPaise} + ${delta.gstPaise}`,
         totalPaise: sql`${bookings.totalPaise} + ${delta.driverTotalPaise}`,
         ownerEarningsPaise: sql`${bookings.ownerEarningsPaise} + ${delta.ownerEarningsPaise}`,
+        commissionWaiverPaise: sql`${bookings.commissionWaiverPaise} + ${delta.commissionWaiverPaise}`,
         updatedAt: new Date(),
       })
       .where(eq(bookings.id, bookingId))

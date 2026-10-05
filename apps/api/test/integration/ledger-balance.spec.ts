@@ -52,6 +52,8 @@ describe('ledger balance', () => {
   beforeEach(async () => {
     await truncateSpaces(h);
     await h.sql`DELETE FROM payments`;
+    // A waiver left behind would add a promo_expense leg to every later booking (task 16c).
+    await h.sql`TRUNCATE commission_waivers`;
   });
 
   const unbalancedTxns = async () =>
@@ -125,6 +127,47 @@ describe('ledger balance', () => {
 
     expect(await unbalancedTxns()).toEqual([]);
     expect(surged.booking.surgePremiumPaise).toBeGreaterThan(0);
+  });
+
+  it('balances a commission-free owner: booking, extension and both cancellations (task 16c)', async () => {
+    const spaceId = await seedSpace(h, { lat: 12.9345, lng: 77.6266, carSlots: 4 });
+    await h.sql`INSERT INTO commission_waivers (owner_id, slot, starts_at, ends_at)
+                VALUES (${h.ownerId}, 1, now() - interval '1 day', now() + interval '30 days')`;
+    const promoNet = async (bookingId: string) => {
+      const [row] = await h.sql<{ net: string }[]>`
+        SELECT coalesce(sum(CASE direction WHEN 'debit' THEN amount_paise ELSE -amount_paise END), 0)::text AS net
+        FROM ledger_entries WHERE booking_id = ${bookingId} AND account = 'promo_expense'`;
+      return Number(row?.net);
+    };
+
+    // Kept, then extended: promo_expense carries both waivers.
+    const kept = await book(spaceId, h.driverId, 2, 2);
+    await h.sql`UPDATE bookings SET status = 'confirmed' WHERE id = ${kept.booking.id}`;
+    await stack.extend.execute({
+      bookingId: kept.booking.id,
+      driverId: h.driverId,
+      newEndsAt: new Date(windowFromNow(2, 2).endsAt.getTime() + 3_600_000),
+    });
+    const [keptRow] = await h.sql<{ waiver: number }[]>`
+      SELECT commission_waiver_paise::int AS waiver FROM bookings WHERE id = ${kept.booking.id}`;
+    expect(keptRow?.waiver).toBeGreaterThan(kept.booking.commissionWaiverPaise);
+
+    // Captured, then cancelled before the start: the waiver goes back in full.
+    const driverB = await seedUser(h, 'driver');
+    const paid = await book(spaceId, driverB, 40, 2);
+    await capture(paid.booking.id, driverB, paid.booking.totalPaise);
+    await stack.cancel.execute({ bookingId: paid.booking.id, driverId: driverB, reason: null });
+
+    // Never paid, cancelled: the receivable reversed, the waiver with it.
+    const driverC = await seedUser(h, 'driver');
+    const unpaid = await book(spaceId, driverC, 50, 2);
+    await h.sql`UPDATE bookings SET status = 'confirmed' WHERE id = ${unpaid.booking.id}`;
+    await stack.cancel.execute({ bookingId: unpaid.booking.id, driverId: driverC, reason: null });
+
+    expect(await unbalancedTxns()).toEqual([]);
+    expect(await promoNet(kept.booking.id)).toBe(keptRow?.waiver);
+    expect(await promoNet(paid.booking.id)).toBe(0);
+    expect(await promoNet(unpaid.booking.id)).toBe(0);
   });
 
   it('carries the sign in the direction, never in the amount', async () => {

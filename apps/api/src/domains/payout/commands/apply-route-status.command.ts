@@ -6,6 +6,7 @@ import { DB, type Database } from '../../../platform/db/db.module.js';
 import { withTransaction } from '../../../platform/db/transaction.js';
 import { logger } from '../../../platform/observability/logger.js';
 import { OutboxService } from '../../../platform/outbox/outbox.service.js';
+import { CommissionWaiverService } from '../../pricing/commission-waiver.service.js';
 import { PayoutService } from '../payout.service.js';
 
 /** The statuses worth telling the payee about; `under_review` is what they already see. */
@@ -31,6 +32,7 @@ export class ApplyRouteStatusCommand {
     @Inject(DB) private readonly db: Database,
     private readonly payouts: PayoutService,
     private readonly outbox: OutboxService,
+    private readonly waivers: CommissionWaiverService,
   ) {}
 
   async execute(input: {
@@ -73,6 +75,12 @@ export class ApplyRouteStatusCommand {
           type: 'notification.dispatch',
           payload: { userId: result.userId, template, data: { status: input.status } },
         });
+      }
+
+      // The first activation is when an owner can first be paid: the commission-free window
+      // starts here, if a slot is left (task 16c). A reactivation keeps its original window.
+      if (input.status === 'activated' && result.previous !== 'activated') {
+        await this.waivers.grantIfEligible(tx, result.userId);
       }
     });
   }

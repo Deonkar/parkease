@@ -39,6 +39,25 @@ describe('owner dashboard HTTP', () => {
 
   const get = (url: string) => http.request({ method: 'GET', url: `/api/v1${url}` });
 
+  describe('commission-free owners (task 16c)', () => {
+    const waiver = async () => {
+      const res = await get('/owner/dashboard');
+      expect(res.status).toBe(200);
+      return (res.body as { data: { commissionWaiver: unknown } }).data.commissionWaiver;
+    };
+
+    it('says when the owner is commission-free, and stops once the window ends', async () => {
+      await h.sql`TRUNCATE commission_waivers`;
+      await h.sql`INSERT INTO commission_waivers (owner_id, slot, starts_at, ends_at)
+                  VALUES (${h.ownerId}, 1, now() - interval '1 day', '2099-01-05T08:30:00Z')`;
+      expect(await waiver()).toEqual({ endsOn: '2099-01-05' });
+
+      await h.sql`UPDATE commission_waivers
+                  SET starts_at = now() - interval '2 days', ends_at = now() - interval '1 minute'`;
+      expect(await waiver()).toBeNull();
+    });
+  });
+
   const bookConfirmed = async (spaceId: string, hoursAhead: number, surge?: number) => {
     if (surge !== undefined) {
       await h.redis.set(`surge:${await zoneOf(h, spaceId)}`, surgePayload(surge));
