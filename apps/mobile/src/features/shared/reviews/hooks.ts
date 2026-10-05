@@ -72,7 +72,8 @@ export interface SubmitResult {
  * Saves each rated row on its own. One failing does not roll back the others (§17.11): the sheet
  * reopens with only what did not save. Rows the driver left unrated are not sent.
  */
-export function useSubmitReviews(bookingId: BookingId, spaceId: string) {
+/** `spaceId` is undefined when the space was already reviewed: nothing on it to refresh. */
+export function useSubmitReviews(bookingId: BookingId, spaceId: string | undefined) {
   const client = useQueryClient();
   const intentFor = useRowIntents();
   return useMutation({
@@ -101,6 +102,7 @@ export function useSubmitReviews(bookingId: BookingId, spaceId: string) {
     },
     onSettled: () => {
       void client.invalidateQueries({ queryKey: PENDING_KEY });
+      if (spaceId === undefined) return;
       void client.invalidateQueries({ queryKey: [...SPACE_DETAIL_KEY, spaceId] });
       void client.invalidateQueries({ queryKey: [...REVIEWS_KEY, 'space', spaceId] });
     },
