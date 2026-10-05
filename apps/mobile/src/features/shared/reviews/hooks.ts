@@ -4,6 +4,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import { useRef } from 'react';
 
 import { newIntent, type Intent } from '@/lib/api';
+import { warn } from '@/lib/log';
 
 import {
   createReview,
@@ -14,7 +15,7 @@ import {
   reportReview,
   respondToReview,
 } from './api';
-import type { SheetRow } from './sheet-state';
+import { settleSubmissions, type SheetRow, type SubmitResult } from './sheet-state';
 
 /**
  * Space detail's query root. Defined here, and imported by the driver's booking hooks, because a
@@ -47,26 +48,25 @@ export function useSpaceReviews(spaceId: string | undefined) {
 }
 
 /**
- * One intent per counterparty, kept for the sheet's life (R-FE-05). A row that failed and is
- * submitted again is the same review, so it reuses its key: if the first attempt did land, the
- * server replays it instead of answering "already reviewed".
+ * One intent per (target, body), kept for the component's life (R-FE-05). Retrying the same
+ * review reuses its key, so if the first attempt landed the server replays it. Changing the stars
+ * or the words is a new intent: the server refuses a reused key with a different body (422), so
+ * reusing it there would turn an edit into a permanent failure.
  */
 function useRowIntents() {
   const intents = useRef(new Map<string, Intent>());
-  return (targetId: string): Intent => {
-    let intent = intents.current.get(targetId);
+  return (targetId: string, body: unknown): Intent => {
+    const key = `${targetId}:${JSON.stringify(body)}`;
+    let intent = intents.current.get(key);
     if (intent === undefined) {
       intent = newIntent();
-      intents.current.set(targetId, intent);
+      intents.current.set(key, intent);
     }
     return intent;
   };
 }
 
-export interface SubmitResult {
-  readonly saved: ReadonlySet<string>;
-  readonly failed: number;
-}
+export type { SubmitResult } from './sheet-state';
 
 /**
  * Saves each rated row on its own. One failing does not roll back the others (§17.11): the sheet
@@ -82,23 +82,22 @@ export function useSubmitReviews(bookingId: BookingId, spaceId: string | undefin
         row.rating === null ? [] : [{ ...row, rating: row.rating }],
       );
       const results = await Promise.allSettled(
-        rated.map((row) =>
-          createReview(
-            {
-              bookingId,
-              targetType: row.targetType,
-              targetId: row.targetId,
-              rating: row.rating,
-              ...(row.comment.trim() === '' ? {} : { comment: row.comment }),
-            },
-            intentFor(row.targetId),
-          ),
-        ),
+        rated.map((row) => {
+          const body = {
+            bookingId,
+            targetType: row.targetType,
+            targetId: row.targetId,
+            rating: row.rating,
+            ...(row.comment.trim() === '' ? {} : { comment: row.comment }),
+          };
+          return createReview(body, intentFor(row.targetId, body));
+        }),
       );
-      const saved = new Set(
-        rated.filter((_, i) => results[i]?.status === 'fulfilled').map((row) => row.targetId),
-      );
-      return { saved, failed: rated.length - saved.size };
+      const settled = settleSubmissions(rated, results);
+      for (const failure of settled.failures) {
+        warn('reviews.submit: a rating did not save', failure);
+      }
+      return settled;
     },
     onSettled: () => {
       void client.invalidateQueries({ queryKey: PENDING_KEY });
@@ -114,7 +113,7 @@ export function useReportReview(as: 'driver' | 'owner') {
   const intentFor = useRowIntents();
   return useMutation({
     mutationFn: ({ reviewId, body }: { reviewId: string; body: ReportReview }) =>
-      reportReview(as, reviewId, body, intentFor(reviewId)),
+      reportReview(as, reviewId, body, intentFor(reviewId, body)),
     onSuccess: () => {
       if (as === 'owner') void client.invalidateQueries({ queryKey: OWNER_KEY });
     },
@@ -146,7 +145,7 @@ export function useRespondToReview() {
   const intentFor = useRowIntents();
   return useMutation({
     mutationFn: ({ reviewId, response }: { reviewId: string; response: string }) =>
-      respondToReview(reviewId, response, intentFor(reviewId)),
+      respondToReview(reviewId, response, intentFor(reviewId, response)),
     onSuccess: () => void client.invalidateQueries({ queryKey: OWNER_KEY }),
   });
 }

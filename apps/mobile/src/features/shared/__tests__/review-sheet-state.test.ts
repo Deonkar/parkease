@@ -7,6 +7,7 @@ import {
   LOW_RATING_REASONS,
   outstandingRows,
   rowsFromPending,
+  settleSubmissions,
   type SheetRow,
 } from '../reviews/sheet-state';
 
@@ -79,5 +80,48 @@ describe('low ratings', () => {
   it('never pushes the comment past 500 characters', () => {
     const long = 'a'.repeat(495);
     expect(appendReason(long, LOW_RATING_REASONS[0])).toBe(long);
+  });
+});
+
+describe('settleSubmissions', () => {
+  const rows = [
+    { targetId: 's1', targetType: 'space' as const },
+    { targetId: 'v1', targetType: 'valet' as const },
+    { targetId: 'w1', targetType: 'washer' as const },
+  ];
+  const apiError = (status: number, code: string, message: string) => ({
+    request: {},
+    response: { status, data: { error: { code, message, traceId: 't-1' } } },
+  });
+
+  it('counts "already reviewed" as saved, and keeps the server words for a real failure', () => {
+    const result = settleSubmissions(rows, [
+      { status: 'fulfilled', value: {} },
+      {
+        status: 'rejected',
+        reason: apiError(409, 'REVIEW_ALREADY_EXISTS', "You've already reviewed this."),
+      },
+      {
+        status: 'rejected',
+        reason: apiError(
+          409,
+          'REVIEW_WINDOW_CLOSED',
+          'Reviews close seven days after a booking ends.',
+        ),
+      },
+    ]);
+    expect([...result.saved]).toEqual(['s1', 'v1']);
+    expect(result.failed).toBe(1);
+    expect(result.message).toBe('Reviews close seven days after a booking ends.');
+    expect(result.failures).toEqual([
+      { targetType: 'washer', code: 'REVIEW_WINDOW_CLOSED', status: 409, traceId: 't-1' },
+    ]);
+  });
+
+  it('says it was the network when there was no response', () => {
+    const result = settleSubmissions(rows.slice(0, 1), [
+      { status: 'rejected', reason: { request: {} } },
+    ]);
+    expect(result.failures[0]?.code).toBe('NETWORK');
   });
 });

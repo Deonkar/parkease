@@ -3,9 +3,12 @@ import type { ReviewView } from '@parkease/contracts/driver';
 import { formatStars, type RatingBp } from '@parkease/contracts/primitives';
 import { colors, fontSize, fontWeight, radius, spacing, touchTarget } from '@parkease/tokens';
 import { Button, ListSkeleton } from '@parkease/ui-native';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { warn } from '@/lib/log';
+
+import { toApiFailure } from '../../shared/api/errors';
 import { ReportSheet } from '../../shared/components/ReportSheet';
 import { ReviewItem } from '../../shared/components/ReviewItem';
 import { StarRating } from '../../shared/components/StarRating';
@@ -26,6 +29,14 @@ export function OwnerReviewsSection({ spaceId }: { readonly spaceId: string }) {
   const reviews = useOwnerReviews(spaceId);
   const [reporting, setReporting] = useState<string | null>(null);
   const summary = summaries.data?.find((s) => s.spaceId === spaceId);
+
+  useEffect(() => {
+    if (summaries.isError) {
+      warn('reviews.ownerSummary: could not load; showing reviews without the average', {
+        error: summaries.error,
+      });
+    }
+  }, [summaries.isError, summaries.error]);
 
   if (reviews.isPending) return <ListSkeleton count={2} itemHeight={88} />;
 
@@ -83,6 +94,17 @@ export function OwnerReviewsSection({ spaceId }: { readonly spaceId: string }) {
           }}
         />
       ))}
+
+      {reviews.isError ? (
+        // A failed "Show more" or refresh keeps what is on screen and says so (BookingGroup's rule).
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => void reviews.refetch()}
+          style={styles.retry}
+        >
+          <Text style={styles.muted}>{"Couldn't load more reviews. Tap to retry."}</Text>
+        </Pressable>
+      ) : null}
 
       {reviews.hasNextPage ? (
         <Button
@@ -153,11 +175,9 @@ function OwnerReview({
               style={styles.input}
               accessibilityLabel={`Your reply to ${review.reviewerName}`}
             />
-            {respond.isError ? (
-              <Text style={styles.error} accessibilityLiveRegion="polite">
-                {"That didn't post. Check your connection and try again."}
-              </Text>
-            ) : null}
+            <Text style={styles.error} accessibilityLiveRegion="polite">
+              {respond.isError ? toApiFailure(respond.error).message : ''}
+            </Text>
             <View style={styles.formActions}>
               <Button
                 label="Cancel"
@@ -176,6 +196,13 @@ function OwnerReview({
                     {
                       onSuccess: () => {
                         setOpen(false);
+                      },
+                      onError: (error) => {
+                        const failure = toApiFailure(error);
+                        warn('reviews.respond: did not post', {
+                          code: failure.code,
+                          traceId: failure.traceId,
+                        });
                       },
                     },
                   );

@@ -30,19 +30,21 @@ const REVIEW = publicReviewViewSchema.parse({
 });
 
 describe('StarInput', () => {
-  it('is five 48dp buttons, each saying what it sets', () => {
+  it('is a labelled group of five 48dp radios', () => {
     const tree = render(
       <StarInput value={null} onChange={() => undefined} label="Basement Parking" />,
     );
     const stars = nodes(tree).filter((n) => n.type === 'Pressable');
     expect(stars).toHaveLength(5);
     expect(stars.map((s) => String(s.props['accessibilityLabel']))).toEqual([
-      'Rate Basement Parking 1 out of 5',
-      'Rate Basement Parking 2 out of 5',
-      'Rate Basement Parking 3 out of 5',
-      'Rate Basement Parking 4 out of 5',
-      'Rate Basement Parking 5 out of 5',
+      '1 star',
+      '2 stars',
+      '3 stars',
+      '4 stars',
+      '5 stars',
     ]);
+    const group = nodes(tree).find((n) => n.props['accessibilityRole'] === 'radiogroup');
+    expect(group?.props['accessibilityLabel']).toBe('Rate Basement Parking');
     for (const star of stars) {
       expect(style(star)['minWidth']).toBeGreaterThanOrEqual(48);
       expect(style(star)['minHeight']).toBeGreaterThanOrEqual(48);
@@ -57,8 +59,8 @@ describe('StarInput', () => {
       (stars[3]?.props['onPress'] as () => void)();
     });
     expect(onChange).toHaveBeenCalledWith(4);
-    expect(stars[2]?.props['accessibilityState']).toEqual({ selected: true });
-    expect(stars[3]?.props['accessibilityState']).toEqual({ selected: false });
+    expect(stars[2]?.props['accessibilityState']).toEqual({ checked: true });
+    expect(stars[3]?.props['accessibilityState']).toEqual({ checked: false });
   });
 });
 

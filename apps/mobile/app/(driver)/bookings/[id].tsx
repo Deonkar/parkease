@@ -2,11 +2,12 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { colors, fontSize, fontWeight, lineHeight, radius, spacing } from '@parkease/tokens';
 import { Button, ErrorState, Skeleton } from '@parkease/ui-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { formatDateIST, formatTimeIST } from '@/lib/format';
+import { warn } from '@/lib/log';
 
 import { BookingQr } from '../../../src/features/driver/components/BookingQr';
 import { BookingStatusChip } from '../../../src/features/driver/components/BookingStatusChip';
@@ -37,7 +38,14 @@ export default function BookingDetailScreen() {
   const [extendRecovery, setExtendRecovery] = useState(false);
   const [rating, setRating] = useState(false);
   // Only a completed booking inside its seven days is in here; the server decides both.
-  const toRate = usePendingReviews().data?.find((p) => p.bookingId === id);
+  const pendingReviews = usePendingReviews();
+  const toRate = pendingReviews.data?.find((p) => p.bookingId === id);
+  useEffect(() => {
+    // The card is an extra; the booking still renders. Hidden, but never without a trace.
+    if (pendingReviews.isError) {
+      warn('reviews.bookingCard: could not load pending reviews', pendingReviews.error);
+    }
+  }, [pendingReviews.isError, pendingReviews.error]);
 
   if (isPending) {
     return (

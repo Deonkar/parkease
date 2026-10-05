@@ -42,12 +42,12 @@ const styles = StyleSheet.create({
   list: { gap: spacing.xs },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   label: {
-    width: 14,
+    minWidth: 14,
     fontSize: fontSize.xs,
     color: colors.textSecondary,
     fontVariant: ['tabular-nums'],
   },
-  count: { width: 24, textAlign: 'right' },
+  count: { minWidth: 24, textAlign: 'right' },
   track: {
     flex: 1,
     height: 6,

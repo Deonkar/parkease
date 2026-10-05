@@ -1,10 +1,10 @@
 import type { PublicReviewView } from '@parkease/contracts/driver';
-import { colors, spacing } from '@parkease/tokens';
+import { colors, fontSize, spacing, touchTarget } from '@parkease/tokens';
 import { EmptyState, ErrorState, ListSkeleton, Skeleton } from '@parkease/ui-native';
 import { FlashList } from '@shopify/flash-list';
 import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { RefreshControl, StyleSheet, View } from 'react-native';
+import { Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
 import { useSpaceDetail } from '../../../src/features/driver/hooks/useBookings';
 import { ReadableColumn } from '../../../src/features/shared/components/ReadableColumn';
@@ -61,7 +61,7 @@ export default function SpaceReviewsScreen() {
             <View style={styles.pad}>
               <ListSkeleton count={5} itemHeight={96} />
             </View>
-          ) : reviews.isError ? (
+          ) : reviews.isError && reviews.data === undefined ? (
             <ErrorState
               title="We couldn't load the reviews"
               body="Check your connection and try again."
@@ -91,11 +91,21 @@ export default function SpaceReviewsScreen() {
                 reviews.isFetchingNextPage ? (
                   // Skeletons, never spinners (mobile.md): the next page's shape, not a wheel.
                   <Skeleton width="100%" height={88} style={styles.more} />
+                ) : reviews.isError ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => void reviews.fetchNextPage()}
+                    style={styles.retry}
+                  >
+                    <Text style={styles.retryText}>
+                      {"Couldn't load more reviews. Tap to retry."}
+                    </Text>
+                  </Pressable>
                 ) : null
               }
               refreshControl={
                 <RefreshControl
-                  refreshing={reviews.isRefetching}
+                  refreshing={reviews.isRefetching && !reviews.isFetchingNextPage}
                   onRefresh={() => void reviews.refetch()}
                   tintColor={colors.primary}
                 />
@@ -123,4 +133,6 @@ const styles = StyleSheet.create({
   listContent: { paddingHorizontal: spacing.base, paddingBottom: spacing['2xl'] },
   separator: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
   more: { marginVertical: spacing.base },
+  retry: { minHeight: touchTarget, justifyContent: 'center', alignItems: 'center' },
+  retryText: { fontSize: fontSize.sm, color: colors.textSecondary },
 });

@@ -35,7 +35,7 @@ interface RatingSheetProps {
  */
 export function RatingSheet({ pending, onDone }: RatingSheetProps) {
   const [rows, setRows] = useState<SheetRow[]>(() => rowsFromPending(pending));
-  const [failed, setFailed] = useState(0);
+  const [failed, setFailed] = useState<{ count: number; message: string | null } | null>(null);
   const spaceId = pending.targets.find((t) => t.targetType === 'space')?.targetId;
   const submit = useSubmitReviews(pending.bookingId, spaceId);
 
@@ -46,13 +46,13 @@ export function RatingSheet({ pending, onDone }: RatingSheetProps) {
 
   const send = () => {
     submit.mutate(rows, {
-      onSuccess: ({ saved, failed: count }) => {
+      onSuccess: ({ saved, failed: count, message }) => {
         if (count === 0) {
           onDone();
           return;
         }
-        setFailed(count);
-        setRows(outstandingRows(rows, saved));
+        setFailed({ count, message });
+        setRows((current) => outstandingRows(current, saved));
       },
     });
   };
@@ -149,13 +149,12 @@ export function RatingSheet({ pending, onDone }: RatingSheetProps) {
         </View>
       ) : null}
 
-      {failed > 0 ? (
-        <Text style={styles.error} accessibilityLiveRegion="polite">
-          {failed === 1
-            ? "One rating didn't save. The rest did. Try that one again."
-            : `${String(failed)} ratings didn't save. The rest did. Try those again.`}
-        </Text>
-      ) : null}
+      {/* Always mounted: TalkBack misses a live region that appears together with its text. */}
+      <Text style={styles.error} accessibilityLiveRegion="polite">
+        {failed === null
+          ? ''
+          : `${failed.count === 1 ? "One rating didn't save" : `${String(failed.count)} ratings didn't save`}. ${failed.message ?? 'Try again.'}`}
+      </Text>
 
       <View style={styles.actions}>
         <Button label="Submit" onPress={send} disabled={!anyRated} loading={submit.isPending} />

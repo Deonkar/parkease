@@ -36,8 +36,11 @@ export function BottomSheet({ visible, onDismiss, dismissLabel, children }: Bott
         <Pressable
           style={styles.scrimTap}
           onPress={onDismiss}
-          accessibilityRole="button"
           accessibilityLabel={dismissLabel}
+          // Out of TalkBack's order, so focus lands on the sheet's title, not "Close". Back and the
+          // sheet's own Cancel / Maybe later still dismiss it.
+          accessible={false}
+          importantForAccessibility="no"
         />
         <Animated.View
           entering={

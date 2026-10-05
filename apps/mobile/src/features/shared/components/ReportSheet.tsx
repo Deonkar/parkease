@@ -5,6 +5,9 @@ import { Button } from '@parkease/ui-native';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { warn } from '@/lib/log';
+
+import { toApiFailure } from '../api/errors';
 import { useReportReview } from '../reviews/hooks';
 
 import { BottomSheet } from './BottomSheet';
@@ -31,11 +34,13 @@ interface ReportSheetProps {
 export function ReportSheet({ as, reviewId, onDone }: ReportSheetProps) {
   const [reason, setReason] = useState<ReviewReportReason | null>(null);
   const [detail, setDetail] = useState('');
+  const [sent, setSent] = useState(false);
   const report = useReportReview(as);
 
   const close = () => {
     setReason(null);
     setDetail('');
+    setSent(false);
     report.reset();
     onDone();
   };
@@ -44,7 +49,15 @@ export function ReportSheet({ as, reviewId, onDone }: ReportSheetProps) {
     if (reviewId === null || reason === null) return;
     report.mutate(
       { reviewId, body: { reason, ...(detail.trim() === '' ? {} : { detail: detail.trim() }) } },
-      { onSuccess: close },
+      {
+        onSuccess: () => {
+          setSent(true);
+        },
+        onError: (error) => {
+          const failure = toApiFailure(error);
+          warn('reviews.report: did not send', { code: failure.code, traceId: failure.traceId });
+        },
+      },
     );
   };
 
@@ -55,62 +68,71 @@ export function ReportSheet({ as, reviewId, onDone }: ReportSheetProps) {
       dismissLabel="Close without reporting"
     >
       <View style={styles.copy}>
-        <Text style={styles.title}>Report this review</Text>
+        <Text style={styles.title} accessibilityRole="header">
+          {sent ? 'Report sent' : 'Report this review'}
+        </Text>
         <Text style={styles.body}>
-          Someone at ParkEase will read it. The review stays up while they do.
+          {sent
+            ? 'Thanks. Someone at ParkEase will read it. The review stays up while they do.'
+            : 'Someone at ParkEase will read it. The review stays up while they do.'}
         </Text>
       </View>
 
-      <View accessibilityRole="radiogroup" style={styles.reasons}>
-        {REASONS.map((option) => {
-          const selected = reason === option.value;
-          return (
-            <Pressable
-              key={option.value}
-              onPress={() => {
-                setReason(option.value);
-              }}
-              accessibilityRole="radio"
-              accessibilityState={{ selected }}
-              style={[styles.reason, selected && styles.reasonOn]}
-            >
-              <MaterialCommunityIcons
-                name={selected ? 'radiobox-marked' : 'radiobox-blank'}
-                size={20}
-                color={selected ? colors.primary : colors.textTertiary}
-              />
-              <Text style={styles.reasonText}>{option.label}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
+      {sent ? (
+        <Button label="Done" onPress={close} />
+      ) : (
+        <>
+          <View accessibilityRole="radiogroup" accessibilityLabel="Reason" style={styles.reasons}>
+            {REASONS.map((option) => {
+              const selected = reason === option.value;
+              return (
+                <Pressable
+                  key={option.value}
+                  onPress={() => {
+                    setReason(option.value);
+                  }}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: selected }}
+                  style={[styles.reason, selected && styles.reasonOn]}
+                >
+                  <MaterialCommunityIcons
+                    name={selected ? 'radiobox-marked' : 'radiobox-blank'}
+                    size={20}
+                    color={selected ? colors.primary : colors.textTertiary}
+                  />
+                  <Text style={styles.reasonText}>{option.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
 
-      <TextInput
-        value={detail}
-        onChangeText={setDetail}
-        placeholder="Anything else we should know? (optional)"
-        placeholderTextColor={colors.textTertiary}
-        maxLength={500}
-        multiline
-        style={styles.input}
-        accessibilityLabel="Details for the report"
-      />
+          <TextInput
+            value={detail}
+            onChangeText={setDetail}
+            placeholder="Anything else we should know? (optional)"
+            placeholderTextColor={colors.textTertiary}
+            maxLength={500}
+            multiline
+            style={styles.input}
+            accessibilityLabel="Details for the report"
+          />
 
-      {report.isError ? (
-        <Text style={styles.error} accessibilityLiveRegion="polite">
-          {"That didn't send. Check your connection and try again."}
-        </Text>
-      ) : null}
+          {/* Always mounted: TalkBack misses a live region that appears together with its text. */}
+          <Text style={styles.error} accessibilityLiveRegion="polite">
+            {report.isError ? toApiFailure(report.error).message : ''}
+          </Text>
 
-      <View style={styles.actions}>
-        <Button
-          label="Send report"
-          onPress={submit}
-          disabled={reason === null}
-          loading={report.isPending}
-        />
-        <Button label="Cancel" variant="ghost" onPress={close} />
-      </View>
+          <View style={styles.actions}>
+            <Button
+              label="Send report"
+              onPress={submit}
+              disabled={reason === null}
+              loading={report.isPending}
+            />
+            <Button label="Cancel" variant="ghost" onPress={close} />
+          </View>
+        </>
+      )}
     </BottomSheet>
   );
 }

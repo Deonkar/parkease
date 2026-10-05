@@ -28,12 +28,12 @@ function whatIsLeft(pending: PendingReview): string {
  * worth an error state on the home screen. The failure is logged at warn instead (R-FAIL-01).
  */
 export function ReviewPromptBanner({ onOpen }: { readonly onOpen: (p: PendingReview) => void }) {
-  const { data, isError } = usePendingReviews();
+  const { data, isError, error } = usePendingReviews();
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    if (isError) warn('reviews.banner: could not load pending reviews; hiding the prompt');
-  }, [isError]);
+    if (isError) warn('reviews.banner: could not load pending reviews; hiding the prompt', error);
+  }, [isError, error]);
 
   const first = data?.[0];
   if (dismissed || first === undefined) return null;
@@ -53,7 +53,7 @@ export function ReviewPromptBanner({ onOpen }: { readonly onOpen: (p: PendingRev
         </View>
         <View style={styles.copy}>
           <Text style={styles.title}>Rate your stay</Text>
-          <Text style={styles.body} numberOfLines={1}>
+          <Text style={styles.body} numberOfLines={2}>
             {whatIsLeft(first)}
           </Text>
         </View>
