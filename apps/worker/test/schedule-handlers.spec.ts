@@ -6,6 +6,7 @@ import {
 import { describe, it, expect, vi } from 'vitest';
 
 import { registerHandlers } from '../src/handlers.js';
+import { QUEUES } from '../src/queues.js';
 import { registerSchedule } from '../src/schedule.js';
 
 describe('worker schedule and handler coverage', () => {
@@ -101,5 +102,28 @@ describe('worker schedule and handler coverage', () => {
     for (const entry of tzValues) {
       expect(entry.tz, `job '${entry.name}' must declare tz: 'Asia/Kolkata'`).toBe('Asia/Kolkata');
     }
+  });
+
+  it('works and schedules exactly the queues ensureQueues creates (S-104)', async () => {
+    const worked: string[] = [];
+    const scheduled: string[] = [];
+    await registerHandlers(
+      {
+        work: vi.fn(async (name: string) => {
+          worked.push(name);
+          return name;
+        }),
+      } as never,
+      {} as never,
+    );
+    await registerSchedule({
+      schedule: vi.fn(async (name: string) => {
+        scheduled.push(name);
+      }),
+    } as never);
+
+    // A handler on a queue nobody creates never receives a job; a queue nobody works fills up.
+    expect([...worked].sort()).toEqual([...QUEUES].sort());
+    for (const name of scheduled) expect(QUEUES).toContain(name);
   });
 });

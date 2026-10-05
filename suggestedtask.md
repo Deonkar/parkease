@@ -1958,23 +1958,6 @@ red-screen in dev; it may also mean an icon font never finishes loading.
 - **Done means:** the font load that times out is identified, its rejection is handled (R-FAIL-01: logged at
   warn with context), and the icon font loads or falls back deliberately.
 
-### S-104 — The worker never creates its pg-boss queues, so it likely cannot boot
-
-- **Status:** `chip` (spawned 2026-09-29)
-- **Found in:** task 16a TypeScript review lens, confirmed against pg-boss 10.1.5's own DDL
-- **Surface:** worker
-
-pg-boss 10 foreign-keys `schedule.name` and `job.name` to `pgboss.queue`, and `schedule()` rethrows
-the FK violation as "Queue X not found". Nothing in `apps/` or `packages/` calls `boss.createQueue`,
-so `registerSchedule` should throw on `outbox.relay` at boot, and every outbox send should fail.
-This affects every job since task 4, including 16a's three payout jobs.
-
-- **Why deferred:** pre-existing and cross-cutting (all 17 queues). It needs its own boot-level
-  integration test against a real PgBoss, not a change folded into the payouts PR.
-- **Done means:** a Testcontainers test boots PgBoss, runs `registerHandlers` + `registerSchedule`
-  and sends one job per queue; every queue is created idempotently from one list shared by
-  `handlers.ts` and `schedule.ts`.
-
 ### S-100 — On web, focusing a price input on listing step 4 shifts the whole step sideways
 
 - **Status:** `open`
@@ -2200,3 +2183,15 @@ reveals the owner's waiver.
   driver-visible line the fee-model explanation relies on, which is a design-gate change.
 - **Done means:** a design decision to keep, reword ("Most of this goes to the owner") or drop the
   line, and the driver contracts follow it.
+
+### S-125 — The worker's tests are never linted, and one already fails
+
+- **Status:** `open`
+- **Found in:** S-104 fix, 2026-10-05
+- **Surface:** worker · tooling
+
+`apps/worker`'s lint script is `eslint src/`, so `test/` is never linted: `test/surge-recalculate.spec.ts:212-213`
+already has two `no-unused-vars` errors.
+
+- **Why deferred:** pre-existing and unrelated to queues; widening the lint scope may surface more.
+- **Done means:** the worker lints `src/` and `test/`, and passes.
