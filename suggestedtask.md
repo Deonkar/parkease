@@ -2395,3 +2395,13 @@ Deferred, each small: DB-row `.parse()` answers 400 on drift instead of 500 (add
 POST `/auth/admin/refresh` and `/logout` with `{}` (Fastify answers 400 to an empty JSON body); set `ADMIN_ORIGIN` and `TRUST_PROXY_HOPS` in prod env; verify Cloudinary `image/download` signed URLs against a real authenticated upload (no `format`, SHA-256) — untested live; a phone search must send the full number URL-encoded.
 
 - **Done means:** 18b's session client and partner document viewer are built and checked against these.
+
+### S-144 — Admin panel (18b/18c) follow-ups deferred to keep the task small
+
+- **Status:** `open`
+- **Found in:** task 18b/18c build, 2026-10-07
+- **Surface:** admin · api
+
+Not built: the surge heat map (needs an API that lists every zone's live multiplier, not only overrides); a tier-ladder editor for zone overrides (overrides are created inheriting the global ladder; cap/tiers editable via the API); the bookings/revenue chart on the dashboard; Playwright E2E for approve / request changes / grant role / refund / surge edit / remove review / export; route-level code splitting (one 1.7 MB bundle: antd + firebase); `/admin/users/:id` detail page. Verified instead: unit tests for the API client (single-flight refresh, error envelope, contract refusal) and money formatting, and every page opened against dev fixtures at desktop and 375 px.
+
+- **Done means:** each item built with a test, or ruled out here.
