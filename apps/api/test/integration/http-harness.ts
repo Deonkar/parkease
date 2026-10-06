@@ -12,7 +12,11 @@ import type { FastifyRequest } from 'fastify';
 
 import { BookingModule } from '../../src/domains/booking/booking.module.js';
 import { CarwashModule } from '../../src/domains/carwash/carwash.module.js';
+import { AdminUserQueries } from '../../src/domains/identity/admin-user.queries.js';
 import { CreateSessionCommand } from '../../src/domains/identity/commands/create-session.command.js';
+import { GrantRoleCommand } from '../../src/domains/identity/commands/grant-role.command.js';
+import { RevokeRoleCommand } from '../../src/domains/identity/commands/revoke-role.command.js';
+import { SetUserStatusCommand } from '../../src/domains/identity/commands/set-user-status.command.js';
 import { SwitchRoleCommand } from '../../src/domains/identity/commands/switch-role.command.js';
 import { RoleRepository } from '../../src/domains/identity/repositories/role.repository.js';
 import { UserRepository } from '../../src/domains/identity/repositories/user.repository.js';
@@ -49,6 +53,7 @@ import { TelephonyModule } from '../../src/platform/telephony/telephony.module.j
 import { AdminModerationController } from '../../src/roles/admin/moderation.controller.js';
 import { AdminSpacesController } from '../../src/roles/admin/spaces.controller.js';
 import { AdminSurgeController } from '../../src/roles/admin/surge.controller.js';
+import { AdminUsersController } from '../../src/roles/admin/users.controller.js';
 import { DriverBookingsController } from '../../src/roles/driver/bookings.controller.js';
 import { DriverCarwashController } from '../../src/roles/driver/carwash.controller.js';
 import { DriverPaymentsController } from '../../src/roles/driver/payments.controller.js';
@@ -183,6 +188,7 @@ class StubAuthGuard implements CanActivate {
     AdminSurgeController,
     AdminModerationController,
     AdminSpacesController,
+    AdminUsersController,
     OwnerSpacesController,
     DriverReviewsController,
     OwnerReviewsController,
@@ -222,6 +228,12 @@ class StubAuthGuard implements CanActivate {
     UserRepository,
     SwitchRoleCommand,
     CreateSessionCommand,
+    // The admin user commands and queries are provided directly, like SwitchRoleCommand above:
+    // none of them needs the verifier, so IdentityModule stays out of this test module.
+    AdminUserQueries,
+    GrantRoleCommand,
+    RevokeRoleCommand,
+    SetUserStatusCommand,
     { provide: FirebaseVerifierService, useClass: StubFirebaseVerifier },
     // Registered exactly as AppModule does, and in its order. This is the whole
     // point of these tests: the interceptor and guard stack a real request

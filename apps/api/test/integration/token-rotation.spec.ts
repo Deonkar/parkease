@@ -73,6 +73,38 @@ describe('TokenService.rotate refusals commit their writes', () => {
     expect(rows[0]?.revoked_reason).toBe('user_not_active');
   });
 
+  const reuseAudits = async (userId: string): Promise<number> => {
+    const rows = await h.sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM audit_log
+      WHERE action = 'auth.refresh-reuse-detected' AND target_id = ${userId}`;
+    return rows[0]?.n ?? -1;
+  };
+
+  it("a token an admin's block already revoked is 403, not a false reuse alarm", async () => {
+    const userId = await seedUser(h, 'driver');
+    const issued = await mint(userId);
+    await h.sql`UPDATE users SET status = 'blocked' WHERE id = ${userId}`;
+    await h.db.transaction(async (tx) => service.revokeAllForUser(tx as never, userId, 'blocked'));
+
+    await expect(service.rotate(issued.refreshToken)).rejects.toMatchObject({ status: 403 });
+
+    expect(await reuseAudits(userId)).toBe(0);
+    const rows = await tokensOf(userId);
+    expect(rows.every((r) => r.revoked_reason === 'blocked')).toBe(true);
+  });
+
+  it('once unblocked, the same revoked token is a plain 401: the user signs in again', async () => {
+    const userId = await seedUser(h, 'driver');
+    const issued = await mint(userId);
+    await h.sql`UPDATE users SET status = 'blocked' WHERE id = ${userId}`;
+    await h.db.transaction(async (tx) => service.revokeAllForUser(tx as never, userId, 'blocked'));
+    await h.sql`UPDATE users SET status = 'active' WHERE id = ${userId}`;
+
+    await expect(service.rotate(issued.refreshToken)).rejects.toMatchObject({ status: 401 });
+
+    expect(await reuseAudits(userId)).toBe(0);
+  });
+
   it('an admin whose role was suspended is 403 and the presented row is revoked and not rotated', async () => {
     const userId = await seedUser(h, 'admin');
     const issued = await mint(userId);

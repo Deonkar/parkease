@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 
+import { IdentityModule } from '../../domains/identity/identity.module.js';
 import { ReviewModule } from '../../domains/review/review.module.js';
 import { SpaceModule } from '../../domains/space/space.module.js';
 import { SurgeModule } from '../../domains/surge/surge.module.js';
@@ -7,6 +8,7 @@ import { SurgeModule } from '../../domains/surge/surge.module.js';
 import { AdminModerationController } from './moderation.controller.js';
 import { AdminSpacesController } from './spaces.controller.js';
 import { AdminSurgeController } from './surge.controller.js';
+import { AdminUsersController } from './users.controller.js';
 
 /**
  * The first `roles/admin` folder. Same shape as `roles/owner` and
@@ -14,8 +16,13 @@ import { AdminSurgeController } from './surge.controller.js';
  * imported by nothing (ADR-016).
  */
 @Module({
-  imports: [SurgeModule, ReviewModule, SpaceModule],
-  controllers: [AdminSurgeController, AdminModerationController, AdminSpacesController],
+  imports: [SurgeModule, ReviewModule, SpaceModule, IdentityModule],
+  controllers: [
+    AdminSurgeController,
+    AdminModerationController,
+    AdminSpacesController,
+    AdminUsersController,
+  ],
 })
 // eslint-disable-next-line @typescript-eslint/no-extraneous-class
 export class AdminModule {}

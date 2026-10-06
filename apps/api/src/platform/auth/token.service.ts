@@ -40,6 +40,16 @@ export interface AccessTokenPayload extends JWTPayload {
   readonly active_role: string | null;
 }
 
+/**
+ * Why a token was revoked because of the ACCOUNT, not because the token was misused. Presenting
+ * one later is a refusal about the account, never evidence of theft.
+ */
+export const BLOCKED_REVOKE_REASON = 'blocked';
+const ACCOUNT_STATE_REVOCATIONS: ReadonlySet<string | null> = new Set([
+  BLOCKED_REVOKE_REASON,
+  'user_not_active',
+]);
+
 /** Refusals that must commit their writes before the error is thrown. */
 type RotateRefusal = 'reuse_detected' | 'user_not_active' | 'role_revoked';
 
@@ -106,6 +116,18 @@ export class TokenService {
 
         const row = rows[0];
         if (!row) {
+          throw new UnauthorizedException('Your session has expired. Please log in again.');
+        }
+
+        // A block (or any non-active status) revokes every token up front, so a legitimate client's
+        // next refresh arrives with a revoked row. That is not reuse: answer for the account, and
+        // do not write a theft alarm. If the account has since been restored, it is a plain expiry.
+        if (!row.rotatedAt && row.revokedAt && ACCOUNT_STATE_REVOCATIONS.has(row.revokedReason)) {
+          const [owner] = await tx
+            .select({ status: users.status })
+            .from(users)
+            .where(eq(users.id, row.userId));
+          if (owner !== undefined && owner.status !== UserStatus.ACTIVE) return 'user_not_active';
           throw new UnauthorizedException('Your session has expired. Please log in again.');
         }
 
