@@ -174,5 +174,6 @@ describe('calculateSurge — the invariant that makes all of it safe', () => {
         expect(result.multiplierBp).toBeLessThanOrEqual(config.maxMultiplierBp);
       }
     }
-  });
+    // 240k assertions: ~2.6s alone, past vitest's 5s default when the whole monorepo tests at once.
+  }, 30_000);
 });
