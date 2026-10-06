@@ -92,6 +92,10 @@ const GET: [RegExp, () => Fixture][] = [
         activeSpaces: 412,
         pending: { spaces: 7, partners: 4, reports: 1 },
         ledger: { balanced: true, imbalancedTxnIds: [] },
+        series: Array.from({ length: 30 }, (_, n) => ({
+          day: new Date(Date.UTC(2026, 8, 8 + n)).toISOString().slice(0, 10),
+          grossPaise: 900000 + ((n * 7919) % 11) * 90000,
+        })),
       },
     }),
   ],
@@ -363,6 +367,26 @@ const GET: [RegExp, () => Fixture][] = [
     }),
   ],
   [
+    /^\/admin\/surge\/heatmap/,
+    () => ({
+      data: ['tdr1up', 'tdr1vx', 'tdr1wj', 'tdr1xk', 'tdr1v8', 'tdr1ug'].map((zoneId, n) => ({
+        zoneId,
+        activeSpaces: 3 + n,
+        overridden: zoneId === 'tdr1xk',
+        live: {
+          multiplierBp: [10000, 12500, 15000, 25000, 10000, 20000][n] ?? 10000,
+          badge:
+            [null, 'moderate_demand', 'high_demand', 'very_high_demand', null, 'very_high_demand'][
+              n
+            ] ?? null,
+          occupancyBp: 4000 + n * 1000,
+          appliedModifiers: [],
+          calculatedAt: at(3),
+        },
+      })),
+    }),
+  ],
+  [
     /^\/admin\/surge\/zones/,
     () => ({
       data: [
@@ -376,7 +400,7 @@ const GET: [RegExp, () => Fixture][] = [
             multiplierBp: 15000,
             badge: 'high_demand',
             occupancyBp: 7800,
-            appliedModifiers: ['peak'],
+            appliedModifiers: ['peak_hour'],
             calculatedAt: at(3),
           },
         },

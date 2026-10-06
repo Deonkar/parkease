@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/",
     "test": "vitest run --passWithNoTests",
+    "test:e2e": "playwright test",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -21,12 +22,15 @@
     "antd": "5.29.3",
     "dayjs": "1.11.23",
     "firebase": "12.17.1",
+    "maplibre-gl": "6.9.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "zod": "3.24.1"
   },
   "devDependencies": {
     "@parkease/config": "workspace:*",
+    "@playwright/test": "1.63.0",
+    "@types/geojson": "7946.0.16",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.6",
     "@vitejs/plugin-react": "4.3.4",

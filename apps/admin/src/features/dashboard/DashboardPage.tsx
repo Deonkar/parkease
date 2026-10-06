@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { Money, PageState } from '../../components/data';
 import { useApi, withQuery } from '../../lib/api';
 
+import { GrossChart } from './GrossChart';
 import { lastDays, rangeQuery, type Range } from './range';
 
 /** The SQL a card was computed from, so an operator who doubts a number can reproduce it in psql. */
@@ -135,6 +136,7 @@ export function DashboardPage() {
                 </Card>
               </Col>
             </Row>
+            <GrossChart series={d.series} />
             <Typography.Text type="secondary">
               Every money figure above is one ledger query. Toggle “Show queries” to see which.
             </Typography.Text>

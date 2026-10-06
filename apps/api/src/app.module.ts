@@ -6,6 +6,7 @@ import { AuthModule } from './platform/auth/auth.module.js';
 import { JwtAuthGuard } from './platform/auth/jwt-auth.guard.js';
 import { DbModule } from './platform/db/db.module.js';
 import { AllExceptionsFilter } from './platform/http/exception.filter.js';
+import { JsonOnlyGuard } from './platform/http/json-only.guard.js';
 import { TransformInterceptor } from './platform/http/transform.interceptor.js';
 import { IdempotencyInterceptor } from './platform/idempotency/idempotency.interceptor.js';
 import { IdempotencyModule } from './platform/idempotency/idempotency.module.js';
@@ -50,6 +51,7 @@ import { WasherRoleModule } from './roles/washer/washer.module.js';
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
     { provide: APP_INTERCEPTOR, useClass: TransformInterceptor },
     { provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor },
+    { provide: APP_GUARD, useClass: JsonOnlyGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_GUARD, useClass: ActiveRoleGuard },

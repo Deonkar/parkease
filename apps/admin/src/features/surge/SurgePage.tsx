@@ -1,7 +1,9 @@
 import {
   BASIS_POINTS,
+  DEFAULT_SURGE_TIERS,
   surgeConfigSchema,
   surgeSnapshotSchema,
+  surgeTierSchema,
   type SurgeConfig,
   type SurgeTier,
 } from '@parkease/contracts/admin';
@@ -16,7 +18,6 @@ import {
   Space,
   Switch,
   Table,
-  Tag,
   Typography,
 } from 'antd';
 import { useState } from 'react';
@@ -26,8 +27,12 @@ import { PageState, errorText } from '../../components/data';
 import { intentKey, useAction, useApi } from '../../lib/api';
 import { formatIst } from '../../lib/money';
 
+import { HeatMap } from './HeatMap';
+import { TierLadderEditor } from './TierLadderEditor';
+
 const x = (bp: number): string => `${(bp / BASIS_POINTS).toFixed(2)}×`;
 const pct = (bp: number): string => `${(bp / 100).toFixed(0)}%`;
+const toBp = (v: number | null): number => Math.round((v ?? 1) * BASIS_POINTS);
 
 const configRecordSchema = surgeConfigSchema.and(z.object({ updatedAt: z.string() }));
 const zoneSchema = z
@@ -36,7 +41,7 @@ const zoneSchema = z
     label: z.string(),
     enabled: z.boolean(),
     maxMultiplierBp: z.number().int().nullable().optional(),
-    tiers: z.array(z.unknown()).nullable().optional(),
+    tiers: z.array(surgeTierSchema).nullable().optional(),
     live: surgeSnapshotSchema,
   })
   .passthrough();
@@ -48,6 +53,7 @@ export function SurgePage() {
       <Typography.Title level={3} style={{ margin: 0 }}>
         Surge
       </Typography.Title>
+      <HeatMap />
       <GlobalConfig />
       <ZoneOverrides />
     </Space>
@@ -66,9 +72,6 @@ function GlobalConfig() {
   const config = draft ?? q.data?.data ?? null;
   const edit = (patch: Partial<SurgeConfig>) => {
     if (config) setDraft({ ...config, ...patch });
-  };
-  const editTier = (i: number, patch: Partial<SurgeTier>) => {
-    if (config) edit({ tiers: config.tiers.map((t, j) => (j === i ? { ...t, ...patch } : t)) });
   };
 
   return (
@@ -91,49 +94,11 @@ function GlobalConfig() {
       >
         {config ? (
           <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-            <Table<SurgeTier>
-              rowKey="minOccupancyBp"
-              size="small"
-              pagination={false}
-              dataSource={config.tiers}
-              columns={[
-                {
-                  title: 'Occupancy above',
-                  render: (_, t, i) => (
-                    <InputNumber
-                      min={0}
-                      max={100}
-                      value={t.minOccupancyBp / 100}
-                      suffix="%"
-                      onChange={(v) => {
-                        editTier(i, { minOccupancyBp: Math.round((v ?? 0) * 100) });
-                      }}
-                      disabled={i === 0}
-                    />
-                  ),
-                },
-                {
-                  title: 'Multiplier',
-                  render: (_, t, i) => (
-                    <InputNumber
-                      min={1}
-                      max={5}
-                      step={0.05}
-                      value={t.multiplierBp / BASIS_POINTS}
-                      suffix="×"
-                      onChange={(v) => {
-                        editTier(i, { multiplierBp: Math.round((v ?? 1) * BASIS_POINTS) });
-                      }}
-                      disabled={i === 0}
-                    />
-                  ),
-                },
-                {
-                  title: 'Badge',
-                  dataIndex: 'badge',
-                  render: (b: string | null) => (b ? <Tag>{b.replaceAll('_', ' ')}</Tag> : '—'),
-                },
-              ]}
+            <TierLadderEditor
+              tiers={config.tiers}
+              onChange={(tiers) => {
+                edit({ tiers });
+              }}
             />
             <Form layout="inline">
               <Form.Item label="Peak">
@@ -141,7 +106,7 @@ function GlobalConfig() {
                   step={0.05}
                   value={config.peakHourModifierBp / BASIS_POINTS}
                   onChange={(v) => {
-                    edit({ peakHourModifierBp: Math.round((v ?? 1) * BASIS_POINTS) });
+                    edit({ peakHourModifierBp: toBp(v) });
                   }}
                 />
               </Form.Item>
@@ -150,7 +115,7 @@ function GlobalConfig() {
                   step={0.05}
                   value={config.weekendModifierBp / BASIS_POINTS}
                   onChange={(v) => {
-                    edit({ weekendModifierBp: Math.round((v ?? 1) * BASIS_POINTS) });
+                    edit({ weekendModifierBp: toBp(v) });
                   }}
                 />
               </Form.Item>
@@ -159,7 +124,7 @@ function GlobalConfig() {
                   step={0.05}
                   value={config.eventModifierBp / BASIS_POINTS}
                   onChange={(v) => {
-                    edit({ eventModifierBp: Math.round((v ?? 1) * BASIS_POINTS) });
+                    edit({ eventModifierBp: toBp(v) });
                   }}
                 />
               </Form.Item>
@@ -169,7 +134,7 @@ function GlobalConfig() {
                   value={config.maxMultiplierBp / BASIS_POINTS}
                   suffix="×"
                   onChange={(v) => {
-                    edit({ maxMultiplierBp: Math.round((v ?? 1) * BASIS_POINTS) });
+                    edit({ maxMultiplierBp: toBp(v) });
                   }}
                 />
               </Form.Item>
@@ -228,7 +193,7 @@ function GlobalConfig() {
 
 function ZoneOverrides() {
   const q = useApi(z.array(zoneSchema), '/admin/surge/zones');
-  const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<Zone | 'new' | null>(null);
   const toggle = useAction(
     z.unknown(),
     ({ zoneId, enabled }: { zoneId: string; enabled: boolean }) => ({
@@ -244,7 +209,7 @@ function ZoneOverrides() {
       extra={
         <Button
           onClick={() => {
-            setAdding(true);
+            setEditing('new');
           }}
         >
           Add override
@@ -271,43 +236,57 @@ function ZoneOverrides() {
           size="small"
           pagination={false}
           dataSource={zones}
-          scroll={{ x: 640 }}
+          scroll={{ x: 720 }}
           columns={[
             {
               title: 'Zone',
               dataIndex: 'zoneId',
-              render: (z: string) => <Typography.Text code>{z}</Typography.Text>,
+              render: (zone: string) => <Typography.Text code>{zone}</Typography.Text>,
             },
             { title: 'Label', dataIndex: 'label' },
             {
               title: 'Cap',
-              render: (_, z) => (z.maxMultiplierBp ? x(z.maxMultiplierBp) : 'inherited'),
+              render: (_, zone) => (zone.maxMultiplierBp ? x(zone.maxMultiplierBp) : 'inherited'),
             },
             {
               title: 'Tiers',
-              render: (_, z) => (z.tiers ? `custom (${String(z.tiers.length)})` : 'inherited'),
+              render: (_, zone) =>
+                zone.tiers ? `custom (${String(zone.tiers.length)})` : 'inherited',
             },
             {
               title: 'Now',
-              render: (_, z) => (
+              render: (_, zone) => (
                 <>
-                  {x(z.live.multiplierBp)}{' '}
+                  {x(zone.live.multiplierBp)}{' '}
                   <Typography.Text type="secondary">
-                    at {pct(z.live.occupancyBp)} occupied
+                    at {pct(zone.live.occupancyBp)} occupied
                   </Typography.Text>
                 </>
               ),
             },
             {
               title: 'Enabled',
-              render: (_, z) => (
+              render: (_, zone) => (
                 <Switch
-                  checked={z.enabled}
+                  checked={zone.enabled}
                   loading={toggle.isPending}
                   onChange={(enabled) => {
-                    toggle.mutate({ vars: { zoneId: z.zoneId, enabled }, key: intentKey() });
+                    toggle.mutate({ vars: { zoneId: zone.zoneId, enabled }, key: intentKey() });
                   }}
                 />
+              ),
+            },
+            {
+              title: '',
+              render: (_, zone) => (
+                <Button
+                  size="small"
+                  onClick={() => {
+                    setEditing(zone);
+                  }}
+                >
+                  Edit
+                </Button>
               ),
             },
           ]}
@@ -317,61 +296,116 @@ function ZoneOverrides() {
         An override cap may exceed the global cap — that is the point of an override — but it must
         ship with a ladder containing that multiplier and a badge, or the save is rejected.
       </Typography.Paragraph>
-      {adding ? (
-        <AddZone
+      {editing === null ? null : (
+        <ZoneDialog
+          zone={editing === 'new' ? null : editing}
           onClose={() => {
-            setAdding(false);
+            setEditing(null);
           }}
         />
-      ) : null}
+      )}
     </Card>
   );
 }
 
-function AddZone({ onClose }: { onClose: () => void }) {
-  const [form] = Form.useForm<{ zoneId: string; label: string; reason: string }>();
+/** Create or edit an override: its label, cap and its own ladder (optional — none inherits). */
+function ZoneDialog({ zone, onClose }: { zone: Zone | null; onClose: () => void }) {
+  const [zoneId, setZoneId] = useState(zone?.zoneId ?? '');
+  const [label, setLabel] = useState(zone?.label ?? '');
+  const [reason, setReason] = useState('');
+  const [cap, setCap] = useState<number | null>(zone?.maxMultiplierBp ?? null);
+  const [tiers, setTiers] = useState<SurgeTier[] | null>(zone?.tiers ?? null);
   const [key] = useState(intentKey);
-  const add = useAction(z.unknown(), (body: { zoneId: string; label: string; reason: string }) => ({
-    path: '/admin/surge/zones',
-    body,
-  }));
+  const save = useAction(z.unknown(), () => {
+    const body = {
+      label,
+      reason,
+      ...(cap === null ? {} : { maxMultiplierBp: cap }),
+      ...(tiers === null ? {} : { tiers }),
+    };
+    return zone === null
+      ? { path: '/admin/surge/zones', body: { zoneId, ...body } }
+      : { path: `/admin/surge/zones/${zone.zoneId}`, method: 'PATCH' as const, body };
+  });
+  const validZone = /^[0-9b-hjkmnp-z]{6}$/.test(zoneId);
+
   return (
     <Modal
       open
-      title="Add zone override"
-      okText="Add"
-      confirmLoading={add.isPending}
+      width="min(760px, 100vw)"
+      title={zone === null ? 'Add zone override' : `Edit override — ${zone.zoneId}`}
+      okText="Save"
+      confirmLoading={save.isPending}
       onCancel={onClose}
-      onOk={() =>
-        void form.validateFields().then((v) => {
-          add.mutate({ vars: v, key }, { onSuccess: onClose });
-        })
-      }
+      okButtonProps={{ disabled: !validZone || label.trim() === '' || reason.trim() === '' }}
+      onOk={() => {
+        save.mutate({ vars: undefined, key }, { onSuccess: onClose });
+      }}
     >
-      <Form form={form} layout="vertical">
-        <Form.Item
-          name="zoneId"
-          label="Zone (geohash, 6 chars)"
-          rules={[
-            { required: true, pattern: /^[0-9b-hjkmnp-z]{6}$/, message: 'A 6-character geohash' },
-          ]}
-        >
-          <Input />
-        </Form.Item>
-        <Form.Item name="label" label="Label" rules={[{ required: true, max: 120 }]}>
-          <Input />
-        </Form.Item>
-        <Form.Item name="reason" label="Reason (audited)" rules={[{ required: true, max: 500 }]}>
-          <Input.TextArea rows={2} />
-        </Form.Item>
-      </Form>
-      <Typography.Text type="secondary">
-        Starts by inheriting the global ladder and cap. Edit tiers and cap through the API until the
-        ladder editor for overrides lands.
-      </Typography.Text>
-      {add.error ? (
-        <Alert type="error" showIcon message={errorText(add.error)} style={{ marginTop: 12 }} />
-      ) : null}
+      <Space direction="vertical" style={{ width: '100%' }}>
+        <Input
+          prefix="Zone"
+          placeholder="6-character geohash"
+          value={zoneId}
+          disabled={zone !== null}
+          onChange={(e) => {
+            setZoneId(e.target.value.trim());
+          }}
+          status={zoneId === '' || validZone ? '' : 'error'}
+        />
+        <Input
+          prefix="Label"
+          value={label}
+          maxLength={120}
+          onChange={(e) => {
+            setLabel(e.target.value);
+          }}
+        />
+        <Space>
+          Cap{' '}
+          <InputNumber
+            step={0.05}
+            placeholder="inherit"
+            value={cap === null ? null : cap / BASIS_POINTS}
+            suffix="×"
+            onChange={(v) => {
+              setCap(v === null ? null : toBp(v));
+            }}
+          />
+        </Space>
+        {tiers === null ? (
+          <Button
+            onClick={() => {
+              setTiers([...DEFAULT_SURGE_TIERS]);
+            }}
+          >
+            Use a custom ladder
+          </Button>
+        ) : (
+          <>
+            <TierLadderEditor tiers={tiers} onChange={setTiers} />
+            <Button
+              size="small"
+              onClick={() => {
+                setTiers(null);
+              }}
+            >
+              Inherit the global ladder instead
+            </Button>
+          </>
+        )}
+        <Input.TextArea
+          rows={2}
+          maxLength={500}
+          showCount
+          placeholder="Reason (audited, required)"
+          value={reason}
+          onChange={(e) => {
+            setReason(e.target.value);
+          }}
+        />
+        {save.error ? <Alert type="error" showIcon message={errorText(save.error)} /> : null}
+      </Space>
     </Modal>
   );
 }

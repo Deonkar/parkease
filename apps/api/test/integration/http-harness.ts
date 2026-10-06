@@ -42,6 +42,7 @@ import { IS_PUBLIC_KEY } from '../../src/platform/auth/public.decorator.js';
 import { TokenService } from '../../src/platform/auth/token.service.js';
 import { DB, DbModule } from '../../src/platform/db/db.module.js';
 import { AllExceptionsFilter } from '../../src/platform/http/exception.filter.js';
+import { JsonOnlyGuard } from '../../src/platform/http/json-only.guard.js';
 import { TransformInterceptor } from '../../src/platform/http/transform.interceptor.js';
 import { IdempotencyInterceptor } from '../../src/platform/idempotency/idempotency.interceptor.js';
 import { IdempotencyModule } from '../../src/platform/idempotency/idempotency.module.js';
@@ -255,6 +256,7 @@ class StubAuthGuard implements CanActivate {
     // `ratelimit-policies.spec.ts` covers the policy table on its own.
     { provide: APP_INTERCEPTOR, useClass: TransformInterceptor },
     { provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor },
+    { provide: APP_GUARD, useClass: JsonOnlyGuard },
     { provide: APP_GUARD, useClass: StubAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_GUARD, useClass: ActiveRoleGuard },

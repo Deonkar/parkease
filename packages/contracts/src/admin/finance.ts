@@ -109,6 +109,8 @@ export const dashboardSchema = z.object({
     balanced: z.boolean(),
     imbalancedTxnIds: z.array(z.string().uuid()),
   }),
+  /** Gross bookings per IST day across the range, for the dashboard chart. */
+  series: z.array(z.object({ day: istDate, grossPaise: paiseSchema })),
 });
 
 export type Dashboard = z.infer<typeof dashboardSchema>;

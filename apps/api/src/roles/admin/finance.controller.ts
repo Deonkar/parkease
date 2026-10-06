@@ -1,6 +1,4 @@
-import { Readable } from 'node:stream';
-
-import { Controller, Get, Query, Res } from '@nestjs/common';
+import { Controller, Get, Query, Req, Res } from '@nestjs/common';
 import {
   adminPayoutSchema,
   dateRangeSchema,
@@ -14,13 +12,14 @@ import {
 } from '@parkease/contracts/admin';
 import { Role } from '@parkease/contracts/enums';
 import { cursorPageOf, offsetPageOf } from '@parkease/contracts/primitives';
-import type { FastifyReply } from 'fastify';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 
 import { FinanceBalancesQuery, istRange } from '../../domains/ledger/queries/account-totals.js';
 import { LedgerExplorerQuery } from '../../domains/ledger/queries/ledger-explorer.js';
 import { LedgerExportStream } from '../../domains/ledger/queries/ledger-export.js';
 import { AdminPayoutQueries } from '../../domains/payout/admin-payout.queries.js';
+import { type AuthUser, CurrentUser } from '../../platform/auth/current-user.decorator.js';
 import { parseOutgoing } from '../../platform/http/outgoing-contract.js';
 import { Roles } from '../../platform/rbac/roles.decorator.js';
 
@@ -69,14 +68,28 @@ export class AdminFinanceController {
    * contain a quote, a newline or a semicolon: there is nothing to inject into the header.
    */
   @Get('ledger/export')
-  export(@Query() query: unknown, @Res() reply: FastifyReply): void {
+  async export(
+    @Query() query: unknown,
+    @Res() reply: FastifyReply,
+    @CurrentUser() user: AuthUser,
+    @Req() request: FastifyRequest,
+  ): Promise<void> {
     const { from, to } = ledgerExportQuerySchema.parse(query ?? {});
+    // Opened (cap checked, audit row written) before any header, so a 429 is still JSON.
+    const stream = await this.exporter.open(
+      istRange(from, to),
+      { from, to },
+      {
+        userId: user.id,
+        ipAddress: request.ip,
+      },
+    );
 
     void reply
       .header('content-type', 'text/csv; charset=utf-8')
       .header('content-disposition', `attachment; filename="ledger-${from}-${to}.csv"`)
       .header('cache-control', 'no-store')
-      .send(Readable.from(this.exporter.stream(istRange(from, to)), { objectMode: false }));
+      .send(stream);
   }
 
   @Get('payouts')

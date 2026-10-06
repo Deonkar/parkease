@@ -5,10 +5,16 @@ import {
   type SurgeConfig,
   type SurgeSnapshot,
   type SurgeZoneOverrideInput,
+  type SurgeHeatCell,
   type SurgeZoneOverridePatch,
 } from '@parkease/contracts/admin';
-import { GLOBAL_SURGE_CONFIG_KEY, surgeConfig, surgeZoneOverrides } from '@parkease/db/schema';
-import { eq } from 'drizzle-orm';
+import {
+  GLOBAL_SURGE_CONFIG_KEY,
+  spaces,
+  surgeConfig,
+  surgeZoneOverrides,
+} from '@parkease/db/schema';
+import { and, count, eq, isNull } from 'drizzle-orm';
 
 import { DB, type Database } from '../../platform/db/db.module.js';
 import { withTransaction, type TxHandle } from '../../platform/db/transaction.js';
@@ -222,6 +228,30 @@ export class SurgeAdminService {
     return rows.map((row) => ({
       ...toOverrideRecord(row),
       live: live.get(row.zoneId) ?? NO_SURGE_SNAPSHOT,
+    }));
+  }
+
+  /**
+   * Every zone that has an active space, with its live multiplier — the heat map's cells. A read of
+   * derived data, so no audit row (the finance reads do not write one either).
+   */
+  async heatmap(): Promise<SurgeHeatCell[]> {
+    const [zones, overrides] = await Promise.all([
+      this.db
+        .select({ zoneId: spaces.zoneId, activeSpaces: count() })
+        .from(spaces)
+        .where(and(eq(spaces.approvalStatus, 'active'), isNull(spaces.deletedAt)))
+        .groupBy(spaces.zoneId)
+        .orderBy(spaces.zoneId),
+      this.db.select({ zoneId: surgeZoneOverrides.zoneId }).from(surgeZoneOverrides),
+    ]);
+    const overridden = new Set(overrides.map((o) => o.zoneId));
+    const live = await this.surge.multipliersFor(zones.map((z) => z.zoneId));
+    return zones.map((z) => ({
+      zoneId: z.zoneId,
+      activeSpaces: z.activeSpaces,
+      overridden: overridden.has(z.zoneId),
+      live: live.get(z.zoneId) ?? NO_SURGE_SNAPSHOT,
     }));
   }
 
