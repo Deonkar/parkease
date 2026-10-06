@@ -23,11 +23,19 @@ describe('formatDistance', () => {
 
 describe('formatRatingLabel', () => {
   it('renders "New" for a space that was never reviewed', () => {
-    expect(formatRatingLabel(null, 0)).toBe('New');
+    expect(formatRatingLabel({ kind: 'new', label: 'New' })).toBe('New');
   });
 
   it('renders the score and review count once reviewed', () => {
-    expect(formatRatingLabel(4.2, 18)).toBe('4.2 (18)');
+    expect(formatRatingLabel({ kind: 'rated', stars: '4.2', reviewCount: 18 })).toBe('4.2 (18)');
+    expect(
+      formatRatingLabel({
+        kind: 'low_rated',
+        label: 'Mixed reviews',
+        stars: '2.9',
+        reviewCount: 3,
+      }),
+    ).toBe('2.9 (3)');
   });
 });
 

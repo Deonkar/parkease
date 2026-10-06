@@ -2,8 +2,9 @@ import type { SpaceSearchItem } from '@parkease/contracts/driver';
 import { mulRate, toPaise } from '@parkease/contracts/primitives';
 
 import { surgeRateOf } from '../../../domains/pricing/surge-rate.js';
-import { RATING_BP_PER_STAR } from '../../../domains/space/search-sql.js';
 import type { SearchResult } from '../../../domains/space/search.service.js';
+
+import { toRatingBadge } from './rating-badge.view.js';
 
 export function toSpaceResultView(result: SearchResult): SpaceSearchItem {
   const { candidate, surge } = result;
@@ -17,9 +18,8 @@ export function toSpaceResultView(result: SearchResult): SpaceSearchItem {
     location: { lat: candidate.lat, lng: candidate.lng },
     distanceM: candidate.distanceM,
     thumbnail: candidate.thumbnailUrl,
-    // null means never reviewed — the client renders "New", never a zero score.
-    rating: candidate.ratingAvgBp === null ? null : candidate.ratingAvgBp / RATING_BP_PER_STAR,
     reviewCount: candidate.ratingCount,
+    badge: toRatingBadge(candidate),
     amenities: candidate.amenities,
     availableSlots: result.availableSlots,
     basePricePaise,

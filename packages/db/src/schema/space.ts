@@ -60,6 +60,10 @@ export const spaces = pgTable(
       sql`${t.approvalStatus} IN ('pending_approval','changes_requested','rejected','active','inactive')`,
     ),
     check('spaces_pincode_check', sql`${t.pincode} ~ '^[1-9][0-9]{5}$'`),
+    check(
+      'spaces_rating_read_model_check',
+      sql`(${t.ratingCount} = 0 AND ${t.ratingAvgBp} IS NULL) OR (${t.ratingCount} > 0 AND ${t.ratingAvgBp} IS NOT NULL AND ${t.ratingAvgBp} BETWEEN 10000 AND 50000)`,
+    ),
   ],
 );
 

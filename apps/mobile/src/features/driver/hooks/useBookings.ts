@@ -3,7 +3,9 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import { useRef } from 'react';
 
 import { newIntent, type Intent } from '@/lib/api';
+import { isDevMockSession } from '@/lib/dev-mock';
 
+import { SPACE_DETAIL_KEY } from '../../shared/reviews/hooks';
 import {
   cancelBooking,
   createBooking,
@@ -18,16 +20,20 @@ import {
   type CreateBookingBody,
   type ListBookingsParams,
 } from '../api/bookings';
+import { devSpaceDetail } from '../api/dev-fixtures';
 
 export const BOOKINGS_KEY = ['driver', 'bookings'] as const;
-export const SPACE_DETAIL_KEY = ['driver', 'space'] as const;
+// One root, shared with the review hooks: a review changes what space detail shows.
+export { SPACE_DETAIL_KEY };
 
 export function useSpaceDetail(spaceId: string | undefined) {
   return useQuery({
     queryKey: [...SPACE_DETAIL_KEY, spaceId],
     enabled: spaceId !== undefined,
-    queryFn: ({ signal }) => {
+    queryFn: async ({ signal }) => {
       if (spaceId === undefined) throw new Error('Space detail requested with no id');
+      // Dev-mock sessions read the same fixtures discovery shows, so a tapped card opens.
+      if (await isDevMockSession()) return devSpaceDetail(spaceId);
       return fetchSpaceDetail(spaceId, signal);
     },
     // The free-slot counts on this screen are what the driver books against.

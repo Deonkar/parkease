@@ -16,6 +16,7 @@ export const RATE_LIMIT_POLICIES: Readonly<Record<string, RateLimitPolicy>> = {
   'POST /api/v1/auth/refresh': { limit: 30, windowSeconds: 3600, keyBy: 'user', failClosed: true },
   'GET /api/v1/driver/spaces': { limit: 60, windowSeconds: 60, keyBy: 'user' },
   'GET /api/v1/driver/spaces/:id': { limit: 60, windowSeconds: 60, keyBy: 'user' },
+  'GET /api/v1/driver/spaces/:id/reviews': { limit: 60, windowSeconds: 60, keyBy: 'user' },
   'GET /api/v1/driver/quotes': { limit: 60, windowSeconds: 60, keyBy: 'user' },
   'POST /api/v1/driver/bookings': { limit: 10, windowSeconds: 60, keyBy: 'user' },
   'GET /api/v1/driver/bookings': { limit: 60, windowSeconds: 60, keyBy: 'user' },
@@ -138,6 +139,18 @@ export const RATE_LIMIT_POLICIES: Readonly<Record<string, RateLimitPolicy>> = {
   'GET /api/v1/admin/surge/zones': { limit: 30, windowSeconds: 60, keyBy: 'user' },
   'POST /api/v1/admin/surge/zones': { limit: 10, windowSeconds: 60, keyBy: 'user' },
   'PATCH /api/v1/admin/surge/zones/:zoneId': { limit: 10, windowSeconds: 60, keyBy: 'user' },
+
+  // Reviews (task 17 §17.9). Writes at 10/min: a review is one tap per counterparty, and a
+  // tighter budget is what keeps a grudge from becoming a report flood. Moderation takes ADMIN:*.
+  'POST /api/v1/driver/reviews': { limit: 10, windowSeconds: 60, keyBy: 'user' },
+  'GET /api/v1/driver/reviews': { limit: 60, windowSeconds: 60, keyBy: 'user' },
+  'GET /api/v1/driver/reviews/pending': { limit: 60, windowSeconds: 60, keyBy: 'user' },
+  'POST /api/v1/driver/reviews/:id/report': { limit: 10, windowSeconds: 60, keyBy: 'user' },
+  'GET /api/v1/owner/reviews': { limit: 60, windowSeconds: 60, keyBy: 'user' },
+  'GET /api/v1/owner/reviews/summary': { limit: 60, windowSeconds: 60, keyBy: 'user' },
+  'POST /api/v1/owner/reviews': { limit: 10, windowSeconds: 60, keyBy: 'user' },
+  'POST /api/v1/owner/reviews/:id/respond': { limit: 10, windowSeconds: 60, keyBy: 'user' },
+  'POST /api/v1/owner/reviews/:id/report': { limit: 10, windowSeconds: 60, keyBy: 'user' },
 
   'ADMIN:*': { limit: 100, windowSeconds: 60, keyBy: 'user' },
   'WEBHOOK:*': { limit: 300, windowSeconds: 60, keyBy: 'ip' },

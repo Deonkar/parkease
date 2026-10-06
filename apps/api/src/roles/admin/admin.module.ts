@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
 
+import { ReviewModule } from '../../domains/review/review.module.js';
 import { SurgeModule } from '../../domains/surge/surge.module.js';
 
+import { AdminModerationController } from './moderation.controller.js';
 import { AdminSurgeController } from './surge.controller.js';
 
 /**
@@ -10,8 +12,8 @@ import { AdminSurgeController } from './surge.controller.js';
  * imported by nothing (ADR-016).
  */
 @Module({
-  imports: [SurgeModule],
-  controllers: [AdminSurgeController],
+  imports: [SurgeModule, ReviewModule],
+  controllers: [AdminSurgeController, AdminModerationController],
 })
 // eslint-disable-next-line @typescript-eslint/no-extraneous-class
 export class AdminModule {}

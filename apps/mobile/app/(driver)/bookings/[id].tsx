@@ -2,15 +2,17 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { colors, fontSize, fontWeight, lineHeight, radius, spacing } from '@parkease/tokens';
 import { Button, ErrorState, Skeleton } from '@parkease/ui-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { formatDateIST, formatTimeIST } from '@/lib/format';
+import { warn } from '@/lib/log';
 
 import { BookingQr } from '../../../src/features/driver/components/BookingQr';
 import { BookingStatusChip } from '../../../src/features/driver/components/BookingStatusChip';
 import { PriceBreakdown } from '../../../src/features/driver/components/PriceBreakdown';
+import { RatingSheet } from '../../../src/features/driver/components/RatingSheet';
 import {
   useBooking,
   useCancelBooking,
@@ -19,6 +21,8 @@ import {
 } from '../../../src/features/driver/hooks/useBookings';
 import { recoveryFor, toApiFailure } from '../../../src/features/shared/api/errors';
 import { ScreenHeader } from '../../../src/features/shared/components/ScreenHeader';
+import { StarRating } from '../../../src/features/shared/components/StarRating';
+import { usePendingReviews } from '../../../src/features/shared/reviews/hooks';
 
 const EXTEND_BY_MS = 3_600_000;
 
@@ -32,6 +36,16 @@ export default function BookingDetailScreen() {
   const checkIn = useSelfCheckIn(id);
   const [actionError, setActionError] = useState<string | null>(null);
   const [extendRecovery, setExtendRecovery] = useState(false);
+  const [rating, setRating] = useState(false);
+  // Only a completed booking inside its seven days is in here; the server decides both.
+  const pendingReviews = usePendingReviews();
+  const toRate = pendingReviews.data?.find((p) => p.bookingId === id);
+  useEffect(() => {
+    // The card is an extra; the booking still renders. Hidden, but never without a trace.
+    if (pendingReviews.isError) {
+      warn('reviews.bookingCard: could not load pending reviews', pendingReviews.error);
+    }
+  }, [pendingReviews.isError, pendingReviews.error]);
 
   if (isPending) {
     return (
@@ -122,6 +136,25 @@ export default function BookingDetailScreen() {
               {booking.checkInMethod === 'driver_fallback' ? ' (self check-in)' : ''}
             </Text>
           </View>
+        )}
+
+        {toRate === undefined ? null : (
+          <Pressable
+            onPress={() => {
+              setRating(true);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Rate your stay"
+            style={[styles.card, styles.rateCard]}
+          >
+            <View style={styles.rateCopy}>
+              <Text style={styles.rateTitle}>Rate your stay</Text>
+              <Text style={styles.detail}>
+                Your rating helps the next driver, and tells the host what to fix.
+              </Text>
+            </View>
+            <StarRating stars={0} size={20} />
+          </Pressable>
         )}
 
         <View style={styles.card}>
@@ -239,6 +272,16 @@ export default function BookingDetailScreen() {
           />
         )}
       </View>
+
+      {rating && toRate !== undefined ? (
+        <RatingSheet
+          key={toRate.bookingId}
+          pending={toRate}
+          onDone={() => {
+            setRating(false);
+          }}
+        />
+      ) : null}
     </>
   );
 }
@@ -288,6 +331,9 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     color: colors.availableInk,
   },
+  rateCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  rateCopy: { flex: 1, gap: spacing.xs },
+  rateTitle: { fontSize: fontSize.base, fontWeight: fontWeight.semibold, color: colors.text },
   card: {
     marginTop: spacing.md,
     padding: spacing.base,

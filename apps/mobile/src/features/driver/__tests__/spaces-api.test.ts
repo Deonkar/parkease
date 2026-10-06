@@ -24,6 +24,7 @@ const ITEM = {
   thumbnail: null,
   rating: 4.2,
   reviewCount: 18,
+  badge: { kind: 'rated', stars: '4.2', reviewCount: 18 },
   amenities: ['covered'],
   availableSlots: { car: 1, twoWheeler: 3 },
   basePricePaise: 3000,

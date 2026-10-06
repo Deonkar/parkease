@@ -1,6 +1,7 @@
 import type PgBoss from 'pg-boss';
 
 import { PAYOUT_RECONCILE_JOB, PAYOUT_RUN_WEEKLY_JOB } from './jobs/payout/payload.js';
+import { REVIEW_RECOMPUTE_AGGREGATES_JOB } from './jobs/review/recompute-aggregates.job.js';
 import { SURGE_RECALCULATE } from './jobs/surge/recalculate.job.js';
 
 const IST = 'Asia/Kolkata';
@@ -18,4 +19,6 @@ export async function registerSchedule(boss: PgBoss): Promise<void> {
   await boss.schedule(PAYOUT_RUN_WEEKLY_JOB, '0 6 * * 1', {}, { tz: IST });
   // Daily 02:00 IST (§16.7): yesterday's captures and every payout in flight.
   await boss.schedule(PAYOUT_RECONCILE_JOB, '0 2 * * *', {}, { tz: IST });
+  // Daily 03:30 IST (§17.6): reviews that aged out of the 30-day recency window yesterday.
+  await boss.schedule(REVIEW_RECOMPUTE_AGGREGATES_JOB, '30 3 * * *', {}, { tz: IST });
 }

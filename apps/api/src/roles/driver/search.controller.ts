@@ -2,20 +2,25 @@ import { Controller, Get, NotFoundException, Param, ParseUUIDPipe, Query } from 
 import { NO_SURGE_SNAPSHOT } from '@parkease/contracts/admin';
 import {
   type DefaultBooking,
+  publicReviewViewSchema,
   searchSpacesQuerySchema,
   type SpaceDetail,
   type SpaceSearchItem,
 } from '@parkease/contracts/driver';
 import { Role } from '@parkease/contracts/enums';
 import type { SpacePricing, SpaceSchedule } from '@parkease/contracts/owner';
+import { cursorPageOf, paginationQuerySchema } from '@parkease/contracts/primitives';
 
 import { defaultWindowFor } from '../../domains/booking/defaults.js';
 import { PricingQuoteService } from '../../domains/pricing/quote.service.js';
+import { toPublicReviewView } from '../../domains/review/review-view.js';
+import { ReviewService } from '../../domains/review/review.service.js';
 import { isOpenAt } from '../../domains/space/schedule.js';
 import { SearchService } from '../../domains/space/search.service.js';
 import { countSlots } from '../../domains/space/slots.js';
 import { SpaceService } from '../../domains/space/space.service.js';
 import { SurgeService } from '../../domains/surge/surge.service.js';
+import { parseOutgoing } from '../../platform/http/outgoing-contract.js';
 import { Roles } from '../../platform/rbac/roles.decorator.js';
 
 import { toSpaceDetailView } from './views/space-detail.view.js';
@@ -30,6 +35,8 @@ interface SearchSpacesResponse {
   };
 }
 
+const publicReviewPageSchema = cursorPageOf(publicReviewViewSchema);
+
 /**
  * Rate limiting comes from the `GET /api/v1/driver/spaces` policy in
  * platform/ratelimit/policies.ts — 60/min per user.
@@ -42,6 +49,7 @@ export class DriverSearchController {
     private readonly spaces: SpaceService,
     private readonly surge: SurgeService,
     private readonly quotes: PricingQuoteService,
+    private readonly reviews: ReviewService,
   ) {}
 
   /**
@@ -73,10 +81,12 @@ export class DriverSearchController {
     if (row === undefined) throw new NotFoundException('That space is no longer listed.');
 
     const now = new Date();
-    const [related, availableNow, snapshots] = await Promise.all([
+    const [related, availableNow, snapshots, reviewSummary, recent] = await Promise.all([
       this.spaces.loadRelated(id),
       this.spaces.availabilityAt(id, now),
       this.surge.multipliersFor([row.space.zoneId]),
+      this.reviews.summaryForSpace(id),
+      this.reviews.listForTarget('space', id, { limit: 3 }),
     ]);
 
     return toSpaceDetailView({
@@ -88,11 +98,34 @@ export class DriverSearchController {
       totalSlots: countSlots(related.slots),
       surge: snapshots.get(row.space.zoneId) ?? NO_SURGE_SNAPSHOT,
       photos: related.photos,
+      reviewSummary,
+      recentReviews: recent.items,
       defaultBooking:
         row.space.approvalStatus === 'active'
           ? await this.priceDefault(row.space, availableNow, now)
           : null,
     });
+  }
+
+  /**
+   * Every visible review of a live space, newest first (task 17b, closes S-127). The public view:
+   * no report flag. A space the driver cannot open is a 404 here too.
+   */
+  @Get(':id/reviews')
+  async listReviews(@Param('id', ParseUUIDPipe) id: string, @Query() query: unknown) {
+    const q = paginationQuerySchema.parse(query ?? {});
+    if ((await this.spaces.findForDriver(id)) === undefined) {
+      throw new NotFoundException('That space is no longer listed.');
+    }
+    const page = await this.reviews.listForTarget('space', id, q);
+    return parseOutgoing(
+      publicReviewPageSchema,
+      {
+        items: page.items.map(toPublicReviewView),
+        meta: { limit: q.limit, hasMore: page.hasMore, nextCursor: page.nextCursor },
+      },
+      'space reviews page',
+    );
   }
 
   /**

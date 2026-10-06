@@ -28,6 +28,10 @@ import {
 import { reconcilePayouts } from './jobs/payout/reconcile.job.js';
 import { runWeeklyPayouts } from './jobs/payout/run-weekly.job.js';
 import { sendPayout } from './jobs/payout/send.job.js';
+import {
+  recomputeAgeingAggregates,
+  REVIEW_RECOMPUTE_AGGREGATES_JOB,
+} from './jobs/review/recompute-aggregates.job.js';
 import { recalculateSurge, SURGE_RECALCULATE } from './jobs/surge/recalculate.job.js';
 import { acceptTimeout } from './jobs/valet/accept-timeout.job.js';
 import { noShow } from './jobs/valet/no-show.job.js';
@@ -108,4 +112,7 @@ export async function registerHandlers(boss: PgBoss, deps: JobDeps): Promise<voi
   await boss.work<unknown>(PAYOUT_SEND_JOB, { batchSize: 1 }, async (jobs) => {
     for (const job of jobs) await sendPayout(deps, job.data);
   });
+
+  // Task 17a. Cron-driven and payload-free, like the payout run.
+  await boss.work(REVIEW_RECOMPUTE_AGGREGATES_JOB, {}, () => recomputeAgeingAggregates(deps));
 }

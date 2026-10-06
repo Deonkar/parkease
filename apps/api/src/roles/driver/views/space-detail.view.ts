@@ -5,7 +5,10 @@ import type { DurationPricing, SpacePricing, SpaceSchedule } from '@parkease/con
 import { spaceIdSchema } from '@parkease/contracts/primitives';
 
 import { surgeRateOf } from '../../../domains/pricing/surge-rate.js';
-import { RATING_BP_PER_STAR } from '../../../domains/space/search-sql.js';
+import { toPublicReviewView } from '../../../domains/review/review-view.js';
+import type { ReviewRow, Summary } from '../../../domains/review/review.service.js';
+
+import { toRatingBadge } from './rating-badge.view.js';
 
 interface SpaceRow {
   readonly id: string;
@@ -33,6 +36,9 @@ export interface SpaceDetailInput {
   readonly surge: SurgeSnapshot;
   readonly photos: readonly { url: string; isPrimary: boolean }[];
   readonly defaultBooking: DefaultBooking | null;
+  readonly reviewSummary: Summary;
+  /** The newest visible reviews, at most three. */
+  readonly recentReviews: readonly ReviewRow[];
 }
 
 /**
@@ -85,9 +91,10 @@ export function toSpaceDetailView(input: SpaceDetailInput): SpaceDetail {
     // server actually measured instead of inferring one from the multiplier.
     surgeMultiplier: surgeRateOf(input.surge.multiplierBp),
     surgeBadge: input.surge.badge,
-    // null means never reviewed. The client renders "New", never a zero score.
-    rating: space.ratingAvgBp === null ? null : space.ratingAvgBp / RATING_BP_PER_STAR,
     reviewCount: space.ratingCount,
+    badge: toRatingBadge(space),
+    reviewSummary: input.reviewSummary,
+    recentReviews: input.recentReviews.slice(0, 3).map(toPublicReviewView),
     defaultBooking: input.defaultBooking,
     owner: {
       // First name only. The owner's full name is not the driver's business

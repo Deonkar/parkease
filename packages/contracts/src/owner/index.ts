@@ -37,7 +37,16 @@ export {
   ownerBookingSchema,
   type OwnerBooking,
 } from './bookings.js';
-export { reviewResponseSchema, type ReviewResponse } from './review-response.js';
+export {
+  ownerCreateReviewSchema,
+  type OwnerCreateReview,
+  respondToReviewSchema,
+  type RespondToReview,
+  ownerReviewsQuerySchema,
+  type OwnerReviewsQuery,
+  ownerSpaceReviewSummarySchema,
+  type OwnerSpaceReviewSummary,
+} from './review.js';
 export {
   spaceSlotQuerySchema,
   type SpaceSlotQuery,

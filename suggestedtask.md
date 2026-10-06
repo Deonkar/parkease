@@ -2213,3 +2213,120 @@ already has two `no-unused-vars` errors.
 
 - **Why deferred:** pre-existing and unrelated to queues; widening the lint scope may surface more.
 - **Done means:** the worker lints `src/` and `test/`, and passes.
+
+### S-126 — Search and space detail still send the rating as a float
+
+- **Status:** `fixed on feature/task-17b-reviews-mobile` — close when it merges
+- **Found in:** task 17a, 2026-10-05
+- **Surface:** contracts (`spaceSearchItemSchema`, `spaceDetailSchema`) · mobile
+
+Both responses carry `rating: number` (bp / 10000, e.g. 4.2) next to the new integer-backed `badge`.
+Task 17 says no float in a contract; the field stayed because mobile reads it until 17b.
+
+- **Why deferred:** removing it breaks the shipped mobile client; 17b moves the UI to `badge`.
+- **Done means:** mobile reads `badge` only, and `rating` is removed from both contracts.
+
+### S-127 — Drivers cannot page past the three newest reviews of a space
+
+- **Status:** `fixed on feature/task-17b-reviews-mobile` (`GET /driver/spaces/:id/reviews` + list screen) — close when it merges
+- **Found in:** task 17a, 2026-10-05
+- **Surface:** api (driver) · mobile
+
+Space detail returns `reviewSummary` + the 3 most recent reviews. The spec's "See all 18 reviews →"
+needs a list endpoint the §17.9 table does not define.
+
+- **Why deferred:** the screen that needs it is 17b's, and its design decides the shape.
+- **Done means:** 17b's design either drops "see all" or adds `GET /driver/spaces/:id/reviews`
+  (cursor-paged, public view) with an HTTP test that pages to the end.
+
+### S-128 — The nightly review recompute scans `reviews` by `created_at` with no index
+
+- **Status:** `open`
+- **Found in:** task 17a database review, 2026-10-05
+- **Surface:** db · worker
+
+`ageingReviewTargets` filters a week of `created_at`; no index leads with it, so it is a sequential scan.
+Fine at launch volume, linear in total reviews.
+
+- **Why deferred:** no volume yet; an index is a write cost on every review.
+- **Done means:** an EXPLAIN on a seeded volume shows the scan matters, then
+  `CREATE INDEX CONCURRENTLY … (created_at) WHERE deleted_at IS NULL` in its own migration.
+
+### S-129 — A fleet of new accounts can flood the moderation queue
+
+- **Status:** `open`
+- **Found in:** task 17a security review, 2026-10-05
+- **Surface:** api (reports)
+
+Reports are rate-limited per user (10/min) and need no relationship to the space. Each account costs
+a phone OTP, which bounds it, but nothing caps reports per review or requires a booking at the space.
+
+- **Why deferred:** reporting never hides a review, so a flood costs admin time, not content; the
+  right cap needs real report data.
+- **Done means:** a per-review cap on distinct reporters or a booking-at-this-space requirement for
+  drivers, chosen from task 18's moderation data, with an HTTP test.
+
+### S-130 — No push asks a driver to review; drivers rate nothing they are not reminded of
+
+- **Status:** `open`
+- **Found in:** task 17a scoping (user-approved cut), 2026-10-05
+- **Surface:** worker · notifications
+
+`booking.completed` has no subscriber, so the spec's `review.prompt` job was not built. The in-app
+prompt reads `GET /driver/reviews/pending`.
+
+- **Why deferred:** push delivery is task 19.
+- **Done means:** task 19 subscribes to `booking.completed` and sends a `review_request` notification
+  once per booking, idempotently.
+
+### S-131 — Owners' reviews of drivers are stored but never aggregated
+
+- **Status:** `open`
+- **Found in:** task 17a scoping (user-approved cut), 2026-10-05
+- **Surface:** db · api
+
+`recomputeRatingAggregate` is a no-op for `driver`: `users` has no rating columns and nothing reads a
+driver rating, so a read model would be maintained for no reader.
+
+- **Why deferred:** YAGNI until something gates on it (an owner auto-decline, a driver trust badge).
+- **Done means:** that consumer exists; `users` gains the rating pair with the same CHECK as
+  `spaces_rating_read_model_check`, and the recompute writes it.
+
+### S-135 — "Enable in Settings" crashes the driver home on web
+
+- **Status:** `open`
+- **Found in:** task 17b visual check, 2026-10-05
+- **Surface:** mobile (web build) · `app/(driver)/index.tsx` location-denied state
+
+`Linking.openSettings` does not exist in react-native-web, so the button throws "Linking.default.openSettings
+is not a function" and red-screens the dev build.
+
+- **Why deferred:** web is not the shipping platform (ADR-023) and the crash predates 17b.
+- **Done means:** on web the button is hidden or opens the browser's site-settings help, with a test.
+
+### S-136 — Picking a place suggestion does nothing on web (driver home, denied-location state)
+
+- **Status:** `open`
+- **Found in:** task 17b visual check, 2026-10-05
+- **Surface:** mobile (web build) · `features/driver/components/PlaceSearchBar.tsx`
+
+The input's `onBlur` sets `focused=false` on mousedown, which unmounts the dropdown before the suggestion's
+press lands, so `onSelect` never fires and the screen stays on "Enable Location". A synthetic `click()` works.
+
+- **Why deferred:** predates 17b; needs a check that Android touch does not have the same race.
+- **Done means:** a suggestion tap selects on web and Android (keep the dropdown mounted until the press
+  settles, or select on press-in), with a test.
+
+### S-137 — The owner reviews section was not opened in a running app
+
+- **Status:** `open`
+- **Found in:** task 17b visual check, 2026-10-05
+- **Surface:** mobile · `app/(owner)/listings/[id].tsx`, `features/owner/components/OwnerReviewsSection.tsx`
+
+In a dev-mock session the owner listing detail only opens listings created in that session, and creating
+one is blocked on web by the blank map (S-107, fixed on fix/web-map). The section is covered by a render
+test (ordering, chips, respond) but was not looked at on a screen.
+
+- **Why deferred:** blocked by S-107 on this branch.
+- **Done means:** after fix/web-map merges, create a listing in the web preview, open its Reviews section at
+  375 and 1280 wide, and check respond / report / show more.

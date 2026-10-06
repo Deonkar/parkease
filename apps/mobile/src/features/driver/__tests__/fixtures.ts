@@ -14,6 +14,7 @@ export function makeItem(overrides: Record<string, unknown> = {}): SpaceSearchIt
     thumbnail: null,
     rating: 4.2,
     reviewCount: 18,
+    badge: { kind: 'rated', stars: '4.2', reviewCount: 18 },
     amenities: ['covered', 'cctv'],
     availableSlots: { car: 1, twoWheeler: 3 },
     basePricePaise: 3000,

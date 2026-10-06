@@ -3,6 +3,7 @@ import type { Amenity } from '@parkease/contracts/enums';
 import { colors, fontSize, fontWeight, lineHeight, radius, spacing } from '@parkease/tokens';
 import { Button, ErrorState, Skeleton } from '@parkease/ui-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -11,9 +12,13 @@ import { formatPaise } from '@/lib/money';
 
 import { PhotoCarousel } from '../../../src/features/driver/components/PhotoCarousel';
 import { RateCardTable } from '../../../src/features/driver/components/RateCardTable';
+import { RatingMeta } from '../../../src/features/driver/components/RatingMeta';
 import { SlotPill } from '../../../src/features/driver/components/SlotPill';
 import { SurgeBanner } from '../../../src/features/driver/components/SurgeBanner';
 import { useSpaceDetail } from '../../../src/features/driver/hooks/useBookings';
+import { ReportSheet } from '../../../src/features/shared/components/ReportSheet';
+import { ReviewItem } from '../../../src/features/shared/components/ReviewItem';
+import { ReviewsSummary } from '../../../src/features/shared/components/ReviewsSummary';
 import { ScreenHeader } from '../../../src/features/shared/components/ScreenHeader';
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -44,6 +49,7 @@ export default function SpaceDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const { data: space, isPending, isError, refetch } = useSpaceDetail(id);
+  const [reporting, setReporting] = useState<string | null>(null);
 
   if (isPending) {
     return (
@@ -92,12 +98,7 @@ export default function SpaceDetailScreen() {
           </Text>
 
           <View style={styles.ratingRow}>
-            <MaterialCommunityIcons name="star" size={15} color={colors.warning} />
-            <Text style={styles.rating}>
-              {space.rating === null
-                ? 'New listing'
-                : `${space.rating.toFixed(1)} (${String(space.reviewCount)} reviews)`}
-            </Text>
+            <RatingMeta badge={space.badge} />
           </View>
 
           <Section title="Available now">
@@ -168,6 +169,35 @@ export default function SpaceDetailScreen() {
             </Section>
           ) : null}
 
+          <Section title="Reviews">
+            <ReviewsSummary badge={space.badge} summary={space.reviewSummary} />
+            {space.recentReviews.length > 0 ? (
+              <View style={styles.reviews}>
+                {space.recentReviews.map((review) => (
+                  <ReviewItem
+                    key={review.id}
+                    review={review}
+                    onReport={() => {
+                      setReporting(review.id);
+                    }}
+                  />
+                ))}
+              </View>
+            ) : null}
+            {space.reviewCount > space.recentReviews.length ? (
+              <Button
+                label={`See all ${String(space.reviewCount)} reviews`}
+                variant="ghost"
+                onPress={() => {
+                  router.push({
+                    pathname: '/(shared)/space-reviews/[id]',
+                    params: { id: space.id },
+                  });
+                }}
+              />
+            ) : null}
+          </Section>
+
           <Section title="Host">
             <Text style={styles.prose}>
               {space.owner.name} · member since{' '}
@@ -229,6 +259,14 @@ export default function SpaceDetailScreen() {
           </>
         )}
       </View>
+
+      <ReportSheet
+        as="driver"
+        reviewId={reporting}
+        onDone={() => {
+          setReporting(null);
+        }}
+      />
     </>
   );
 }
@@ -292,14 +330,12 @@ const styles = StyleSheet.create({
   },
   ratingRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
     marginTop: spacing.xs,
     marginBottom: spacing.sm,
   },
-  rating: {
-    fontSize: fontSize.sm,
-    color: colors.textSecondary,
+  reviews: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
   },
   section: {
     gap: spacing.sm,

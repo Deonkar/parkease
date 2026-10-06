@@ -13,9 +13,9 @@ import {
 import { z } from 'zod';
 
 import { api, type Intent } from '@/lib/api';
-import { warn } from '@/lib/log';
 
 import { toApiFailure } from '../api/errors';
+import { isSharedDevMock } from '../dev-mock';
 
 import { devGetPaid } from './dev-fixtures';
 
@@ -28,21 +28,7 @@ import { devGetPaid } from './dev-fixtures';
 const envelope = <T extends z.ZodTypeAny>(data: T) => z.object({ data });
 const payoutPageSchema = z.object({ data: z.array(payoutViewSchema), meta: cursorPageMetaSchema });
 
-/**
- * Whether these screens are served fixtures instead of the network, so they open in the web
- * preview with no API (the owner and washer dev-mock pattern). Never rejects: a session that
- * cannot be read goes to the network, logged (R-FAIL-01). Always false in a release build.
- */
-async function isDevMock(): Promise<boolean> {
-  if (typeof __DEV__ === 'undefined' || !__DEV__) return false;
-  try {
-    const { isDevMockSession } = await import('@/lib/dev-mock');
-    return await isDevMockSession();
-  } catch (error) {
-    warn('getPaid.isDevMock: could not read the session; serving the network', error);
-    return false;
-  }
-}
+const isDevMock = (): Promise<boolean> => isSharedDevMock('getPaid.isDevMock');
 
 async function orNullWhenNone<T>(code: string, read: () => Promise<T>): Promise<T | null> {
   try {

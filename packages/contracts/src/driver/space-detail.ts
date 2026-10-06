@@ -6,6 +6,8 @@ import { spaceScheduleSchema } from '../owner/space-schedule.js';
 import { spaceIdSchema } from '../primitives/ids.js';
 import { paiseSchema } from '../primitives/paise.js';
 
+import { publicReviewViewSchema, ratingBadgeSchema, reviewSummarySchema } from './review.js';
+
 /**
  * Base rates only, exactly as the owner set them. No fee, no GST, no surge
  * arithmetic: the driver-facing pricing table on space detail shows what an hour
@@ -87,9 +89,11 @@ export const spaceDetailSchema = z.object({
   surgeMultiplier: z.number(),
   /** The tier, or null when the zone is not surging. Drives the §2.6 banner. */
   surgeBadge: surgeBadgeSchema.nullable(),
-  /** null means never reviewed — the client renders "New", never a zero score. */
-  rating: z.number().nullable(),
   reviewCount: z.number().int().nonnegative(),
+  badge: ratingBadgeSchema,
+  reviewSummary: reviewSummarySchema,
+  /** The three most recent visible reviews. */
+  recentReviews: z.array(publicReviewViewSchema).max(3),
   defaultBooking: defaultBookingSchema.nullable(),
   owner: z.object({
     name: z.string(),
