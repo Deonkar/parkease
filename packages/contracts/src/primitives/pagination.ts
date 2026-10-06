@@ -42,6 +42,21 @@ export const page = <T extends z.ZodTypeAny>(item: T) =>
 export const cursorPageOf = <T extends z.ZodTypeAny>(item: T) =>
   z.object({ items: z.array(item), meta: cursorPageMetaSchema });
 
+/**
+ * Page-number pagination for the admin queues, where a reviewer wants "page 3 of 7" and a
+ * total — the opposite trade from `cursorPageOf`, which gives up the count to stay cheap.
+ */
+export const offsetPageMetaSchema = z.object({
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+  total: z.number().int().nonnegative(),
+});
+
+export type OffsetPageMeta = z.infer<typeof offsetPageMetaSchema>;
+
+export const offsetPageOf = <T extends z.ZodTypeAny>(item: T) =>
+  z.object({ items: z.array(item), meta: offsetPageMetaSchema });
+
 export const errorEnvelopeSchema = z.object({
   error: z.object({
     code: z.string().regex(/^[A-Z][A-Z0-9_]*$/),

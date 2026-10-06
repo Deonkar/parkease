@@ -288,28 +288,44 @@ export function refundEntries(
         ...leg(Account.REFUNDS_PAYABLE, 'credit', outcome.goodwillPaise, description),
       ];
 
-    case RefundTier.ACTIVE_GRACE: {
-      const waiver = totals.commissionWaiverPaise;
-      // Allocated over what the driver paid; a commission-free owner's subsidised share comes
-      // back in the same fraction, through the same helper, so there is one rounding rule.
-      const [ownerPaise = 0, feePaise = 0, gstPaise = 0] = allocateProportionally(
-        outcome.refundPaise,
-        [totals.ownerEarningsPaise - waiver, totals.parkeaseFeePaise, totals.gstPaise],
-      );
-      const [waiverPaise = 0] =
-        waiver === 0
-          ? [0]
-          : allocateProportionally(outcome.refundPaise, [waiver, totals.driverTotalPaise - waiver]);
-
-      return [
-        ...leg(Account.OWNER_PAYABLE, 'debit', ownerPaise + waiverPaise, description),
-        ...leg(Account.PLATFORM_REVENUE, 'debit', feePaise, description),
-        ...leg(Account.GST_PAYABLE, 'debit', gstPaise, description),
-        ...leg(Account.PROMO_EXPENSE, 'credit', waiverPaise, description),
-        ...leg(Account.REFUNDS_PAYABLE, 'credit', outcome.refundPaise, description),
-      ];
-    }
+    case RefundTier.ACTIVE_GRACE:
+      return proportionalRefundEntries(totals, outcome.refundPaise, description);
   }
+}
+
+/**
+ * Reverses a booking in the proportion `refundPaise` is of what the driver paid, so owner,
+ * platform and tax each give back the same fraction. The legs are allocated, not computed
+ * one by one, so they sum to the refund exactly.
+ *
+ * Extracted from the `ACTIVE_GRACE` tier (task 18a) because an admin-chosen refund is the
+ * same posting with a different amount: one rounding rule, one place that can be wrong.
+ */
+export function proportionalRefundEntries(
+  totals: ReceivableTotals,
+  refundPaise: Paise,
+  description: string,
+): readonly LedgerEntryDraft[] {
+  const waiver = totals.commissionWaiverPaise;
+  // Allocated over what the driver paid; a commission-free owner's subsidised share comes
+  // back in the same fraction, through the same helper, so there is one rounding rule.
+  const [ownerPaise = 0, feePaise = 0, gstPaise = 0] = allocateProportionally(refundPaise, [
+    totals.ownerEarningsPaise - waiver,
+    totals.parkeaseFeePaise,
+    totals.gstPaise,
+  ]);
+  const [waiverPaise = 0] =
+    waiver === 0
+      ? [0]
+      : allocateProportionally(refundPaise, [waiver, totals.driverTotalPaise - waiver]);
+
+  return [
+    ...leg(Account.OWNER_PAYABLE, 'debit', ownerPaise + waiverPaise, description),
+    ...leg(Account.PLATFORM_REVENUE, 'debit', feePaise, description),
+    ...leg(Account.GST_PAYABLE, 'debit', gstPaise, description),
+    ...leg(Account.PROMO_EXPENSE, 'credit', waiverPaise, description),
+    ...leg(Account.REFUNDS_PAYABLE, 'credit', refundPaise, description),
+  ];
 }
 
 /**

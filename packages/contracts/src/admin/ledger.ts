@@ -2,15 +2,19 @@ import { z } from 'zod';
 
 import { ledgerAccountSchema } from '../enums/ledger-account.js';
 import { ledgerDirectionSchema } from '../enums/ledger-direction.js';
-import { txnIdSchema } from '../primitives/ids.js';
-import { paginationQuerySchema } from '../primitives/pagination.js';
+import { bookingIdSchema, payoutIdSchema, txnIdSchema } from '../primitives/ids.js';
 import { paiseSchema } from '../primitives/paise.js';
 
-export const ledgerQuerySchema = paginationQuerySchema.extend({
+import { dateRangeSchema } from './finance.js';
+import { adminCursorQuerySchema, istDateSchema } from './query.js';
+
+export const ledgerQuerySchema = adminCursorQuerySchema.extend({
   account: ledgerAccountSchema.optional(),
-  from: z.string().datetime().optional(),
-  to: z.string().datetime().optional(),
   txnId: txnIdSchema.optional(),
+  bookingId: bookingIdSchema.optional(),
+  payoutId: payoutIdSchema.optional(),
+  from: istDateSchema.optional(),
+  to: istDateSchema.optional(),
 });
 
 export type LedgerQuery = z.infer<typeof ledgerQuerySchema>;
@@ -21,9 +25,13 @@ export const ledgerEntrySchema = z.object({
   account: ledgerAccountSchema,
   direction: ledgerDirectionSchema,
   amountPaise: paiseSchema,
-  currency: z.string().length(3),
+  bookingId: bookingIdSchema.nullable(),
+  payoutId: payoutIdSchema.nullable(),
   description: z.string(),
   occurredAt: z.string().datetime(),
 });
 
 export type LedgerEntry = z.infer<typeof ledgerEntrySchema>;
+
+export const ledgerExportQuerySchema = dateRangeSchema;
+export type LedgerExportQuery = z.infer<typeof ledgerExportQuerySchema>;
