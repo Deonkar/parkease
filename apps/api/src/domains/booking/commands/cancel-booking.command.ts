@@ -6,6 +6,7 @@ import { DB, type Database } from '../../../platform/db/db.module.js';
 import { type TxHandle, withTransaction } from '../../../platform/db/transaction.js';
 import { type AdminActor, AuditService } from '../../../platform/observability/audit.service.js';
 import { OutboxService } from '../../../platform/outbox/outbox.service.js';
+import { LiveBookingPaymentNotCapturedError } from '../../payment/errors.js';
 import { PaymentService } from '../../payment/payment.service.js';
 import { type RefundablePayment, RefundService } from '../../payment/refund.service.js';
 import { AvailabilityService } from '../availability.service.js';
@@ -101,7 +102,7 @@ export class CancelBookingCommand {
       // (`isAdminRefundable`). Anything else would be refunded in full a second time, so it
       // fails loudly instead (R-FAIL-01).
       if (payment !== undefined && payment.status !== 'captured') {
-        throw new Error(`Booking ${booking.id} is live but its payment is ${payment.status}`);
+        throw new LiveBookingPaymentNotCapturedError(booking.id, payment.id, payment.status);
       }
 
       const result = await this.cancel(tx, {

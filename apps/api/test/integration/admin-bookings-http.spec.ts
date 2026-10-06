@@ -596,4 +596,73 @@ describe('admin bookings HTTP', () => {
       });
     });
   });
+
+  /**
+   * A second parking payment that `reconcile-orphan.job.ts` already refunded in full — a late
+   * capture on a failed order, or the loser of two concurrent create-order calls. Its capture is
+   * the NEWEST on the booking, so a "latest capture" lookup picks it; none of these may.
+   */
+  describe('an orphan-refunded payment on the same booking', () => {
+    const addOrphan = async (bookingId: string, driverId: string): Promise<string> => {
+      const [orphan] = await h.sql<{ id: string }[]>`
+        INSERT INTO payments (booking_id, user_id, razorpay_order_id, razorpay_payment_id,
+                              expected_total_paise, captured_paise, status, captured_at)
+        VALUES (${bookingId}, ${driverId}, ${`order_o_${bookingId.slice(-12)}`},
+                ${`pay_o_${bookingId.slice(-12)}`}, 9702, 9702, 'refunded',
+                now() + interval '1 minute')
+        RETURNING id`;
+      if (orphan === undefined) throw new Error('failed to seed orphan payment');
+      await h.sql`
+        INSERT INTO refunds (payment_id, amount_paise, reason, status)
+        VALUES (${orphan.id}, 9702, 'orphan_capture', 'pending')`;
+      return orphan.id;
+    };
+
+    const realPaymentOf = async (bookingId: string): Promise<string | undefined> => {
+      const [row] = await h.sql<{ id: string }[]>`
+        SELECT id FROM payments WHERE booking_id = ${bookingId} AND status <> 'refunded'
+        ORDER BY created_at LIMIT 1`;
+      return row?.id;
+    };
+
+    const nonOrphanRefunds = (bookingId: string) =>
+      h.sql<{ payment_id: string; amount_paise: number; reason: string }[]>`
+        SELECT r.payment_id, r.amount_paise::int AS amount_paise, r.reason
+        FROM refunds r JOIN payments p ON p.id = r.payment_id
+        WHERE p.booking_id = ${bookingId} AND r.reason <> 'orphan_capture'`;
+
+    it('driver cancel answers 201 and refunds the real captured payment', async () => {
+      const booking = await paidBooking({ status: 'confirmed', hoursAhead: 12 });
+      const real = await realPaymentOf(booking.id);
+      await addOrphan(booking.id, booking.driverId);
+
+      actingAs.user = { id: booking.driverId, roles: ['driver'], activeRole: 'driver' };
+      const response = await write(`/api/v1/driver/bookings/${booking.id}/cancel`, {});
+      expect(response.status).toBe(201);
+
+      const rows = await nonOrphanRefunds(booking.id);
+      expect(rows).toEqual([{ payment_id: real, amount_paise: 8702, reason: 'before_start' }]);
+      expect(await unbalancedTxns()).toEqual([]);
+    });
+
+    it('admin refund on a completed booking still offers, and takes, the full balance', async () => {
+      const booking = await paidBooking();
+      const real = await realPaymentOf(booking.id);
+      await addOrphan(booking.id, booking.driverId);
+
+      const detail = detailOf(await read(`${BASE}/${booking.id}`));
+      expect(detail.refundablePaise).toBe(9702);
+      expect(detail.refundOptions).toEqual([
+        { option: 'full_minus_fee', amountPaise: 8702 },
+        { option: 'half', amountPaise: 4851 },
+      ]);
+
+      const response = await refund(booking.id, { option: 'full_minus_fee', reason: 'flooded' });
+      expect(response.status).toBe(200);
+      expect(await nonOrphanRefunds(booking.id)).toEqual([
+        { payment_id: real, amount_paise: 8702, reason: 'admin' },
+      ]);
+      expect(detailOf(response).refundablePaise).toBe(1000);
+    });
+  });
 });

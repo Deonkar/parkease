@@ -18,7 +18,10 @@ import { alias } from 'drizzle-orm/pg-core';
 import type { z } from 'zod';
 
 import { DB, type Database } from '../../platform/db/db.module.js';
-import { CAPTURED_PAYMENT_STATUSES } from '../payment/payment.service.js';
+import {
+  CAPTURED_PAYMENT_STATUSES,
+  ORPHAN_CAPTURE_REFUND_REASON,
+} from '../payment/payment.service.js';
 import { isAdminRefundable, refundableOf, refundOptions } from '../payment/refund-options.js';
 
 /**
@@ -114,7 +117,8 @@ export class AdminBookingQueries {
    * refunds, and what an admin may still refund.
    *
    * The refundable balance is computed by the same rules `AdminRefundCommand` applies under its
-   * lock — the same payment (`CAPTURED_PAYMENT_STATUSES`, newest capture) and `refundableOf` — so
+   * lock — the same payment (`CAPTURED_PAYMENT_STATUSES`, not orphan-refunded, newest capture) and
+   * `refundableOf` — so
    * the options shown are the options that will be honoured. A live booking still shows its
    * balance but no options: cancelling is how it is refunded (`isAdminRefundable`).
    */
@@ -169,7 +173,10 @@ export class AdminBookingQueries {
         (p) =>
           CAPTURED_PAYMENT_STATUSES.some((s) => s === p.status) &&
           p.razorpayPaymentId !== null &&
-          p.capturedPaise !== null,
+          p.capturedPaise !== null &&
+          !refundRows.some(
+            (r) => r.paymentId === p.id && r.reason === ORPHAN_CAPTURE_REFUND_REASON,
+          ),
       )
       .sort((a, b) => (b.capturedAt?.getTime() ?? 0) - (a.capturedAt?.getTime() ?? 0))[0];
     const refundablePaise: Paise =

@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { PaymentStatus } from '@parkease/contracts/enums';
 import { bookings, linkedAccounts, payments, refunds, spaces, washJobs } from '@parkease/db/schema';
-import { and, desc, eq, inArray, isNotNull } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, notExists } from 'drizzle-orm';
 
 import { DB, type Database } from '../../platform/db/db.module.js';
 import type { TxHandle } from '../../platform/db/transaction.js';
@@ -27,6 +27,15 @@ export const CAPTURED_PAYMENT_STATUSES: PaymentStatus[] = [
   'partially_refunded',
   'refunded',
 ];
+
+/**
+ * The `refunds.reason` the worker's `reconcile-orphan.job.ts` writes when it refunds, in full, a
+ * capture that landed with no live booking behind it (a late capture on a failed order, or the
+ * loser of two concurrent create-order calls). That payment is marked `refunded` with a fresh
+ * `captured_at`, so it is the newest capture on the booking — and it is not the booking's money.
+ * The worker cannot import from `apps/api`, so the literal lives in both places; change together.
+ */
+export const ORPHAN_CAPTURE_REFUND_REASON = 'orphan_capture';
 
 /**
  * Every read and write against `payments`, `refunds` and `linked_accounts`.
@@ -225,7 +234,9 @@ export class PaymentService {
    * "Captured" means money reached us at some point: a partly or fully refunded payment still
    * matches, so a second partial refund finds it and a fully refunded one answers with a zero
    * balance rather than "never paid". Scoped to `purpose = 'booking'`: a car wash order hangs off
-   * the same booking, and its money is not the parking's to refund.
+   * the same booking, and its money is not the parking's to refund. A payment the orphan job
+   * refunded (`ORPHAN_CAPTURE_REFUND_REASON`) is excluded too: it is newer than the real capture
+   * and already gone back in full, so picking it would refund nothing or the wrong gateway payment.
    */
   async lockCapturedForBooking(tx: TxHandle, bookingId: string) {
     const [row] = await tx
@@ -238,11 +249,22 @@ export class PaymentService {
           inArray(payments.status, CAPTURED_PAYMENT_STATUSES),
           isNotNull(payments.razorpayPaymentId),
           isNotNull(payments.capturedPaise),
+          notExists(
+            tx
+              .select({ id: refunds.id })
+              .from(refunds)
+              .where(
+                and(
+                  eq(refunds.paymentId, payments.id),
+                  eq(refunds.reason, ORPHAN_CAPTURE_REFUND_REASON),
+                ),
+              ),
+          ),
         ),
       )
       .orderBy(desc(payments.capturedAt))
       .limit(1)
-      .for('update');
+      .for('update', { of: payments });
     return row;
   }
 

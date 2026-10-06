@@ -120,3 +120,24 @@ export class BookingNotSettledError extends PaymentDomainError {
     );
   }
 }
+
+/**
+ * Not an HttpException, deliberately: a live (confirmed or active) booking whose parking payment
+ * is anything but `captured` cannot happen — admin refunds wait until a booking is over, and the
+ * orphan job's payments are excluded from the lookup. If it ever does, cancelling would refund
+ * the full total a second time, so it reaches the filter unmapped: a 500, logged at error with
+ * the trace id and these ids (R-FAIL-01).
+ */
+export class LiveBookingPaymentNotCapturedError extends Error {
+  constructor(
+    readonly bookingId: string,
+    readonly paymentId: string,
+    readonly paymentStatus: string,
+  ) {
+    super(
+      `Booking ${bookingId} is live but its parking payment ${paymentId} is ${paymentStatus}; ` +
+        'refusing to cancel and refund it again',
+    );
+    this.name = 'LiveBookingPaymentNotCapturedError';
+  }
+}
