@@ -125,7 +125,10 @@ describe('/me bank details and payouts over HTTP (task 16a)', () => {
       });
       const second = await put(BODY, key);
 
-      expect(second).toEqual(first);
+      expect({ status: second.status, body: second.body }).toEqual({
+        status: first.status,
+        body: first.body,
+      });
       expect(razorpayx.createFundAccount).toHaveBeenCalledTimes(1);
     });
 

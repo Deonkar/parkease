@@ -5,7 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 
 import { pgConstraintName, pgSqlState } from '../../src/platform/db/errors.js';
 import {
-  hashCanonicalBody,
+  hashRequest,
   IDEMPOTENCY_IN_FLIGHT_STALE_MS,
   IdempotencyService,
 } from '../../src/platform/idempotency/idempotency.service.js';
@@ -1001,7 +1001,7 @@ describe('idempotency', () => {
       key: headers['idempotency-key'],
       userId: washerId,
       endpoint: 'PUT /api/v1/washer/services/:serviceName',
-      requestHash: hashCanonicalBody(payload),
+      requestHash: hashRequest({ serviceName: 'premium_wash' }, payload),
     });
 
     asUser(washerId, ['washer']);
@@ -1038,7 +1038,7 @@ describe('idempotency', () => {
         key,
         userId: washerId,
         endpoint: 'PUT /api/v1/washer/services/:serviceName',
-        requestHash: hashCanonicalBody(payload),
+        requestHash: hashRequest({ serviceName: 'premium_wash' }, payload),
       });
       await h.sql`
         UPDATE idempotency_keys
