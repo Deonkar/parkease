@@ -202,9 +202,9 @@ describe('IdempotencyInterceptor — the store and release writes are observed',
 });
 
 /**
- * An unauthenticated request's key is bound to its cookie. The admin refresh
- * sends an empty body and authenticates by cookie, so without this a replayed
- * key returned a live access token to someone holding no credential at all.
+ * An unauthenticated request's key is bound to its cookie, so a replayed key never answers someone
+ * holding no credential at all. The admin refresh, the route this was written for, is no longer
+ * cached at all (SEC-L3 / SF-4, below); the fold still guards every other public mutation.
  */
 describe('IdempotencyInterceptor — public routes bind the key to the cookie', () => {
   const publicContext = (cookie: string | undefined, user?: { id: string }): ExecutionContext =>
@@ -212,11 +212,11 @@ describe('IdempotencyInterceptor — public routes bind the key to the cookie', 
       switchToHttp: () => ({
         getRequest: () => ({
           method: 'POST',
-          url: '/api/v1/auth/admin/refresh',
+          url: '/api/v1/auth/refresh',
           headers: { 'idempotency-key': KEY, ...(cookie === undefined ? {} : { cookie }) },
           body: {},
           ...(user === undefined ? {} : { user }),
-          routeOptions: { url: '/api/v1/auth/admin/refresh' },
+          routeOptions: { url: '/api/v1/auth/refresh' },
         }),
       }),
     }) as unknown as ExecutionContext;
@@ -297,4 +297,36 @@ describe('IdempotencyInterceptor — public routes bind the key to the cookie', 
 
     expect(await hashFor('a=1')).toBe(await hashFor('a=2'));
   });
+});
+
+/**
+ * SEC-L3 / SF-4 (task 18a review). The admin session routes are not cached. A cached refresh held
+ * a live access token at rest, and its replay answered without a Set-Cookie, so the browser kept a
+ * cookie the server had already rotated and the next refresh read as theft. Rotation is the
+ * protection there: a retry rotates again, or trips reuse detection.
+ */
+describe('IdempotencyInterceptor — /auth/admin/* is not cached', () => {
+  it.each(['session', 'refresh', 'logout'])(
+    'passes POST /auth/admin/%s straight through, key or no key',
+    async (route) => {
+      const claim = vi.fn();
+      const interceptor = new IdempotencyInterceptor({ claim } as unknown as IdempotencyService);
+      const context = {
+        switchToHttp: () => ({
+          getRequest: () => ({
+            method: 'POST',
+            url: `/api/v1/auth/admin/${route}`,
+            headers: {},
+            body: {},
+            routeOptions: { url: `/api/v1/auth/admin/${route}` },
+          }),
+        }),
+      } as unknown as ExecutionContext;
+
+      const answer = await interceptor.intercept(context, { handle: () => of({ ok: true }) });
+
+      await expect(firstValueFrom(answer)).resolves.toEqual({ ok: true });
+      expect(claim).not.toHaveBeenCalled();
+    },
+  );
 });

@@ -78,9 +78,11 @@ export class AdminAuthController {
   }
 
   /**
-   * A replay of this request (same Idempotency-Key and cookie) is answered from
-   * the idempotency store: the cached body, and NO Set-Cookie. A client that lost
-   * the first response must treat it as a re-login, not retry with the old key.
+   * Not idempotency-cached (the interceptor skips `/auth/admin/*`, SEC-L3 / SF-4): a
+   * cached body would be an access token at rest, and its replay carried no
+   * Set-Cookie. Every call rotates. A retry with the current cookie gets a fresh
+   * pair; a retry with a cookie that was already rotated is reuse, which revokes
+   * the family. A client that lost a response therefore signs in again.
    */
   @Post('refresh')
   @HttpCode(HttpStatus.OK)

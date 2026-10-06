@@ -244,25 +244,37 @@ describe('admin session HTTP', () => {
     });
   });
 
-  it('an idempotent replay is bound to the cookie: same cookie replays, another or none is 422', async () => {
-    const { token } = await login();
+  /**
+   * SEC-L3 / SF-4 (task 18a review). This used to assert that a retry with the same key replayed
+   * the cached body with no Set-Cookie. That replay was the bug: the browser kept a cookie the
+   * server had already rotated, and its next refresh read as theft. The admin routes are now not
+   * cached at all; rotation is the protection, and a retry rotates again.
+   */
+  it('a retry with the same Idempotency-Key is not served from a cache: it rotates again', async () => {
+    const { userId, token } = await login();
     const headers = idem();
 
     const first = await post(REFRESH, token, headers);
     expect(first.status).toBe(200);
-    // Let the interceptor's detached store write land before replaying.
+    const next = tokenFrom(setCookies(first)[0]);
+    // Give a detached store the time it used to need, then check it never happened.
     await new Promise((resolve) => setTimeout(resolve, 300));
+    const stored = await h.sql`
+      SELECT 1 FROM idempotency_keys WHERE key = ${headers['idempotency-key'] ?? ''}`;
+    expect(stored, 'no access token is kept at rest in the idempotency store').toHaveLength(0);
 
-    const replay = await post(REFRESH, token, headers);
-    expect(replay.status).toBe(200);
-    expect(setCookies(replay)).toHaveLength(0);
+    const retry = await post(REFRESH, next, headers);
+    expect(retry.status).toBe(200);
+    expect(tokenFrom(setCookies(retry)[0]), 'a fresh rotation, with its own cookie').not.toBe(next);
 
-    const other = await post(REFRESH, 'o'.repeat(43), headers);
-    expect(other.status).toBe(422);
-    expect(JSON.stringify(other.body)).not.toContain('accessToken');
-
-    const none = await post(REFRESH, null, headers);
-    expect(none.status).toBe(422);
-    expect(JSON.stringify(none.body)).not.toContain('accessToken');
+    // The same key with the cookie that was already rotated is reuse, not a replay.
+    const stale = await post(REFRESH, token, headers);
+    expect(stale.status).toBe(401);
+    expect(JSON.stringify(stale.body)).not.toContain('accessToken');
+    expect(await liveTokens(userId)).toBe(0);
+    const alarms = await h.sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM audit_log
+      WHERE action = 'auth.refresh-reuse-detected' AND target_id = ${userId}`;
+    expect(alarms[0]?.n).toBe(1);
   });
 });

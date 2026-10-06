@@ -16,6 +16,7 @@ import { type Observable, catchError, of, tap, throwError } from 'rxjs';
 import { z } from 'zod';
 
 import type { AuthUser } from '../auth/current-user.decorator.js';
+import { routePattern } from '../http/route-pattern.js';
 import { logger } from '../observability/logger.js';
 
 import { IdempotencyService, hashCanonicalBody } from './idempotency.service.js';
@@ -28,6 +29,16 @@ const uuidSchema = z.string().uuid();
  * drift apart into a route that is exempt here but rejected by the database.
  */
 const WEBHOOK_PATH_PREFIX = '/api/v1/webhooks/';
+
+/**
+ * The admin panel's session routes (SEC-L3 / SF-4, task 18a review). Not cached, and no key
+ * demanded: a stored refresh body is a live access token at rest, and its replay answered without
+ * a Set-Cookie, so the browser kept a cookie the server had already rotated and its next refresh
+ * read as theft (a family revocation and a false alarm). Rotation is the protection here instead:
+ * a retry with the current cookie rotates again, and one with an already-rotated cookie trips
+ * reuse detection. A double login is two sessions, which logout and expiry already handle.
+ */
+const ADMIN_AUTH_PATH_PREFIX = '/api/v1/auth/admin/';
 
 const sha256 = (value: string): string => createHash('sha256').update(value).digest('hex');
 
@@ -50,7 +61,10 @@ export class IdempotencyInterceptor implements NestInterceptor {
     // delivery id, and `WebhookService` claims that in the same table (ADR-011)
     // — so demanding a client UUID here would 400 every Razorpay event before
     // the controller ever saw it.
-    if (request.url.startsWith(WEBHOOK_PATH_PREFIX)) {
+    // On the matched route, not the raw URL, like the guards (SEC-H1): a percent-encoded spelling
+    // is the same route and must get the same treatment.
+    const route = routePattern(request);
+    if (route.startsWith(WEBHOOK_PATH_PREFIX) || route.startsWith(ADMIN_AUTH_PATH_PREFIX)) {
       return next.handle();
     }
 
@@ -68,16 +82,16 @@ export class IdempotencyInterceptor implements NestInterceptor {
     // With no authenticated user the key is not tied to anyone, so on its own it
     // would replay a cached response to whoever presents it — and keys are
     // logged and pass through proxies. On a route whose credential is a cookie
-    // (the admin refresh has an empty body) that replay would hand out a live
-    // access token. Folding the cookie into the hash makes the replay answer
+    // that replay would hand out whatever the first caller got (the admin
+    // refresh, which needed this first, is now not cached at all; see
+    // ADMIN_AUTH_PATH_PREFIX). Folding the cookie into the hash makes the replay answer
     // only the caller who holds the same credential; anyone else gets the
     // key-reused-with-a-different-request 422.
     const requestHash =
       request.user === undefined
         ? credentialBoundHash(hashCanonicalBody(request.body), request.headers.cookie)
         : hashCanonicalBody(request.body);
-    const routeUrl = (request.routeOptions as { url?: string } | undefined)?.url ?? request.url;
-    const endpoint = `${request.method} ${routeUrl}`;
+    const endpoint = `${request.method} ${route}`;
     // This attempt's claim token: `store` and `release` carry it back, so a
     // write from an attempt a newer retry has taken over lands on nothing.
     const claimedAt = new Date();
