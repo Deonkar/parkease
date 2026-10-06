@@ -20,6 +20,7 @@ interface SpaceRow {
   submittedAt: Date | null;
   approvedAt: Date | null;
   rejectionReason: string | null;
+  reviewNotes: string | null;
   createdAt: Date;
 }
 
@@ -64,6 +65,7 @@ export function toSpaceDetail(
     photos: photoViews,
     submittedAt: space.submittedAt?.toISOString() ?? null,
     approvedAt: space.approvedAt?.toISOString() ?? null,
-    rejectionReason: space.rejectionReason,
+    // The admin's notes live in `review_notes`; `rejection_reason` is only the legacy column.
+    rejectionReason: space.reviewNotes ?? space.rejectionReason,
   };
 }

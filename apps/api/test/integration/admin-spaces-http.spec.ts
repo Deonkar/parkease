@@ -310,6 +310,34 @@ describe('admin spaces HTTP', () => {
     });
   });
 
+  describe('what the owner sees of a decision', () => {
+    const ownerReads = async (id: string) => {
+      asOwner();
+      const response = await http.request({ method: 'GET', url: `/api/v1/owner/spaces/${id}` });
+      expect(response.status).toBe(200);
+      return response.body as { data: { approvalStatus: string; rejectionReason: string | null } };
+    };
+
+    it.each([
+      ['request-changes', 'changes_requested', 'Add a photo of the gate'],
+      ['reject', 'rejected', 'Not a parking space'],
+    ])('shows the notes from %s in rejectionReason', async (route, status, notes) => {
+      const id = await pendingSpace();
+      await write('POST', `${BASE}/${id}/${route}`, { notes });
+
+      const { data } = await ownerReads(id);
+      expect(data.approvalStatus).toBe(status);
+      expect(data.rejectionReason).toBe(notes);
+    });
+
+    it('still shows a legacy rejection_reason when there are no review notes', async () => {
+      const id = await pendingSpace('rejected');
+      await h.sql`UPDATE spaces SET rejection_reason = ${'Legacy reason'} WHERE id = ${id}`;
+
+      expect((await ownerReads(id)).data.rejectionReason).toBe('Legacy reason');
+    });
+  });
+
   describe('owner edits after a decision', () => {
     it('resubmits a changes_requested space and keeps the notes', async () => {
       const id = await pendingSpace();
