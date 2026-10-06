@@ -26,6 +26,6 @@
     "@parkease/config": "workspace:*",
     "@parkease/testing": "workspace:*",
     "tsx": "4.19.2",
-    "vitest": "2.1.8"
+    "vitest": "3.2.7"
   }
 }

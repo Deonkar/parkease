@@ -15,6 +15,6 @@
   "dependencies": {
     "@parkease/contracts": "workspace:*",
     "postgres": "3.4.5",
-    "testcontainers": "10.18.0"
+    "testcontainers": "11.14.0"
   }
 }

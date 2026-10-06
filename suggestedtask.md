@@ -466,7 +466,8 @@ The two should be decided together: the radius ladder is server-side for both pa
 
 ### S-25 — `pnpm audit` is red, and R-GIT-07 says it must be green
 
-- **Status:** `open`
+- **Status:** `fixed on chore/dep-audit-2026-10` — close when it merges. `pnpm audit --audit-level=high`
+  exits 0; 37 high/critical → 0 (4 accepted below, each with no reachable path).
 - **Found in:** task 13, the pre-PR gate
 - **Surface:** tooling / dependencies
 
@@ -497,6 +498,23 @@ published against unchanged versions (e.g. `sharp` 2026-09-08); both criticals a
 - **Done means:** `pnpm audit --prod` is clean, `pnpm audit` has no critical or high, the full
   suite is green afterwards, and either CI enforces it or `rules.md` records the accepted
   residual with a reason per advisory.
+
+**Resolved 2026-10-06.** Direct upgrades: vitest 3.2.7, vite 6.4.3, fastify 5.12.5, @nestjs/_ 12.0.4,
+next 15.5.27, testcontainers 11.14.0, @opentelemetry/_ 0.222 / 2.x (`Resource` → `resourceFromAttributes`).
+Scoped overrides: brace-expansion 1/2/5, @grpc/grpc-js 1.14.5, tar-fs@2, postcss, next>sharp 0.35.5,
+vitest>tinypool 2.1.2 and compression 1.8.2 (three advisories published 2026-10-05, mid-sweep).
+**Accepted residual** (`auditConfig.ignoreGhsas` in the root `package.json`), no patched release exists or
+the patch breaks the consumer:
+
+- `GHSA-86w9-cpqp-85rv` node-forge — RSA signature verification inside `@expo/cli`'s code-signing helper.
+  ParkEase uses no `expo-updates` and no code signing, so the path never runs. No fixed version exists.
+- `GHSA-vfj7-8cjw-p6xm` braces — stack-exhaustion DoS on nested patterns, reached only through the eslint
+  import resolver on our own glob patterns. No fixed version exists.
+- `GHSA-5p2g-fcmc-qvqq`, `GHSA-w3rx-r6r6-pgpr` image-size — DoS on crafted JXL/HEIF/ICNS files. Metro sizes
+  only our own committed assets at build time. The fix (2.x) drops path input, and Metro 0.87 calls
+  `imageSize(path)`, so overriding it breaks every image asset in the bundle (verified: it throws).
+  Moderates remain (16, none in a request path we control); `rules.md` allows them.
+  Re-check the four when Expo, eslint or Metro next upgrade — any of them may ship a fix.
 
 ### S-26 — No erasure path for partner and job personal data
 
