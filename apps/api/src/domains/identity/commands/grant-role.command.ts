@@ -40,7 +40,9 @@ export class GrantRoleCommand {
         .select({ id: users.id })
         .from(users)
         .where(eq(users.id, userId))
-        .for('update');
+        // NO KEY UPDATE, not UPDATE: the audit insert below takes FOR KEY SHARE on the ACTOR's row, so
+        // two admins acting on each other deadlocked under FOR UPDATE (DB-9). Writers still serialise.
+        .for('no key update');
       if (user === undefined) throw new NotFoundException('User not found.');
 
       const [existing] = await tx
