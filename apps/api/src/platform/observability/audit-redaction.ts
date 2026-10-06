@@ -62,6 +62,11 @@ export function redactAuditValue(value: unknown, depth = 0): unknown {
   const out: Record<string, unknown> = {};
   for (const [key, child] of Object.entries(value)) {
     if (isSecretKey(key)) continue;
+    // JSON.parse yields `__proto__` as an own key, but `out[key] = …` would set the output's
+    // prototype instead (TS-L3). No command writes that key; a row that has one is hostile or
+    // corrupt, and dropping it is the only assignment-safe answer. `constructor` and `prototype`
+    // are plain own properties when assigned, so they are kept.
+    if (key === '__proto__') continue;
     out[key] = redactAuditValue(child, depth + 1);
   }
   return out;

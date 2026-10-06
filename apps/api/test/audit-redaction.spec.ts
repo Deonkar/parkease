@@ -135,4 +135,25 @@ describe('redactAuditValue', () => {
     for (let i = 0; i < 8; i++) deep = { child: deep };
     expect(redactAuditValue(deep)).toEqual(deep);
   });
+
+  /**
+   * TS-L3 (task 18a review). A stored jsonb key `__proto__` comes back from JSON.parse as an own
+   * property. Assigning it with `out[key] = …` set the output's PROTOTYPE instead, so the key
+   * vanished from the own properties every check walks and its contents rode along inherited.
+   */
+  it('a __proto__ key does not become the output prototype, at the top or nested', () => {
+    const input: unknown = JSON.parse(
+      '{"__proto__":{"polluted":1},"note":"ok","nested":{"__proto__":{"polluted":2}}}',
+    );
+
+    const out = redactAuditValue(input) as Record<string, unknown>;
+    const nested = out['nested'] as Record<string, unknown>;
+
+    expect(Object.getPrototypeOf(out)).toBe(Object.prototype);
+    expect(Object.getPrototypeOf(nested)).toBe(Object.prototype);
+    expect('polluted' in out).toBe(false);
+    expect('polluted' in nested).toBe(false);
+    expect(JSON.stringify(out)).toBe('{"note":"ok","nested":{}}');
+    expect(({} as Record<string, unknown>)['polluted']).toBeUndefined();
+  });
 });
