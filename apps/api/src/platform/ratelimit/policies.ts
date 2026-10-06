@@ -208,6 +208,11 @@ function matches(pattern: string, routeKey: string): boolean {
   return patternParts.every((part, i) => isParam(part) || part === routeParts[i]);
 }
 
+/**
+ * `url` is the route the router matched (`routePattern`), not the raw request URL: the guard
+ * passes the pattern so a percent-encoded spelling of a route resolves to that route's policy
+ * (SEC-H1). A concrete path still resolves the same way, which is what the unit tests feed it.
+ */
 export function resolvePolicy(method: string, url: string): RateLimitPolicy {
   const pathOnly = url.split('?')[0] ?? url;
   const routeKey = `${method} ${pathOnly}`;

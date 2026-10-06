@@ -10,6 +10,7 @@ import type { FastifyRequest } from 'fastify';
 
 import type { AuthUser } from '../auth/current-user.decorator.js';
 import { IS_PUBLIC_KEY } from '../auth/public.decorator.js';
+import { routePattern } from '../http/route-pattern.js';
 
 const ROLE_SEGMENTS = new Set<string>([
   Role.DRIVER,
@@ -34,8 +35,9 @@ export class ActiveRoleGuard implements CanActivate {
     const user = request.user;
     if (!user) return true;
 
-    const pathOnly = request.url.split('?')[0] ?? request.url;
-    const segment = pathOnly.split('/')[3];
+    // The matched route, not the raw URL: the router decodes `/api/v1/%61dmin/...` to the admin
+    // route, and reading the client's spelling here let a driver-active session through (SEC-H1).
+    const segment = routePattern(request).split('/')[3];
 
     if (!segment || !ROLE_SEGMENTS.has(segment)) return true;
 
