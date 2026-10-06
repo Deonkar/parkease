@@ -41,6 +41,71 @@ describe('redactAuditValue', () => {
     expect(redactAuditValue(undefined)).toBeUndefined();
   });
 
+  describe('phones inside free text', () => {
+    it('masks a phone embedded in a sentence', () => {
+      expect(
+        redactAuditValue({ reason: 'customer called from +919876543210 about a refund' }),
+      ).toEqual({ reason: 'customer called from +91 98765***10 about a refund' });
+    });
+
+    it('masks every phone in one string', () => {
+      expect(redactAuditValue('+919876543210 and +919811122233, not +91 98765 43210')).toBe(
+        '+91 98765***10 and +91 98111***33, not +91 98765 43210',
+      );
+    });
+
+    it('masks phones in an array of strings and in nested notes', () => {
+      expect(
+        redactAuditValue({ notes: ['call +919876543210', 'fine', { detail: 'x+919811122233y' }] }),
+      ).toEqual({ notes: ['call +91 98765***10', 'fine', { detail: 'x+91 98111***33y' }] });
+    });
+
+    it('leaves a string with no phone, and a bare ten-digit run, alone', () => {
+      expect(redactAuditValue('order 9876543210 shipped')).toBe('order 9876543210 shipped');
+    });
+  });
+
+  describe('identity and payment keys', () => {
+    it.each([
+      'pan',
+      'PAN',
+      'panNumber',
+      'pan_number',
+      'PANNumber',
+      'aadhaar',
+      'aadhaarNumber',
+      'upi',
+      'upiId',
+      'upi_id',
+      'vpa',
+      'payerVpa',
+      'cvv',
+      'card',
+      'cardNumber',
+      'card_number',
+      'api_key',
+      'apiKey',
+      'API_KEY',
+      'authorization',
+      'Authorization',
+    ])('drops the key %s', (key) => {
+      expect(redactAuditValue({ [key]: 'v', keep: 'k' })).toEqual({ keep: 'k' });
+    });
+
+    it.each([
+      'cardinality',
+      'company',
+      'expand',
+      'span',
+      'panel',
+      'discard',
+      'cardholderless',
+      'upside',
+    ])('keeps the unrelated key %s', (key) => {
+      expect(redactAuditValue({ [key]: 'v' })).toEqual({ [key]: 'v' });
+    });
+  });
+
   it('hides a foreign-format number behind *** rather than passing it through', () => {
     expect(redactAuditValue('+14155550123')).toBe('***');
   });
