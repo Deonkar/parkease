@@ -1,7 +1,16 @@
+import { RequestMethod } from '@nestjs/common';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { AdminModule } from '../../src/roles/admin/admin.module.js';
+
 import { seedUser, startHarness, stopHarness, type Harness } from './harness.js';
-import { actingAs, type HttpApp, startHttpApp, stopHttpApp } from './http-harness.js';
+import {
+  actingAs,
+  type HttpApp,
+  HttpTestModule,
+  startHttpApp,
+  stopHttpApp,
+} from './http-harness.js';
 
 const ADMIN_PREFIX = '/api/v1/admin/';
 
@@ -29,6 +38,42 @@ const asMethod = (method: string): AdminRoute['method'] => {
   const found = METHODS.find((m) => m === method);
   if (found === undefined) throw new Error(`admin route with unexpected method ${method}`);
   return found;
+};
+
+type Controller = abstract new (...args: never[]) => unknown;
+
+const slashless = (path: string): string => path.replace(/^\/+|\/+$/g, '');
+
+/**
+ * The routes a controller declares, read from the same `@Controller`/`@Get`/`@Post` metadata
+ * Nest itself reads, as `METHOD /api/v1/<controller path>/<handler path>`.
+ */
+const declaredRoutes = (controller: Controller): string[] => {
+  const base = Reflect.getMetadata('path', controller) as string | string[];
+  const prefix = slashless(Array.isArray(base) ? (base[0] ?? '') : base);
+  const proto = controller.prototype as Record<string, unknown>;
+  const routes: string[] = [];
+  for (const name of Object.getOwnPropertyNames(proto)) {
+    const handler = proto[name];
+    if (typeof handler !== 'function') continue;
+    const method = Reflect.getMetadata('method', handler) as RequestMethod | undefined;
+    if (method === undefined) continue;
+    const own = Reflect.getMetadata('path', handler) as string | string[];
+    const path = slashless(Array.isArray(own) ? (own[0] ?? '') : own);
+    routes.push(
+      `${RequestMethod[method]} /api/v1/${[prefix, path].filter((x) => x !== '').join('/')}`,
+    );
+  }
+  return routes;
+};
+
+const controllersOf = (module: object): Controller[] =>
+  (Reflect.getMetadata('controllers', module) as Controller[] | undefined) ?? [];
+
+const isAdminController = (controller: Controller): boolean => {
+  const base = Reflect.getMetadata('path', controller) as string | string[];
+  const path = slashless(Array.isArray(base) ? (base[0] ?? '') : base);
+  return path === 'admin' || path.startsWith('admin/');
 };
 
 const NON_ADMIN_ROLES = ['driver', 'owner', 'valet', 'washer'] as const;
@@ -82,10 +127,28 @@ describe('admin authorisation, every route', () => {
       ...(route.method === 'GET' ? {} : { payload: {} }),
     });
 
-  it('enumerates the admin route table, and the enumeration is not empty', () => {
-    // 34 at the time of writing. The floor is what stops an enumeration that silently captured
-    // nothing (a hook registered too late) from passing every other test here vacuously.
-    expect(routes.length).toBeGreaterThanOrEqual(30);
+  it('registers in the harness exactly the controllers AdminModule declares', () => {
+    // The route enumeration below can only see what the harness mounts. A controller added to
+    // `admin.module.ts` but not to `HttpTestModule` would be invisible to every test in this
+    // file, so the two lists are compared directly, by class, in both directions.
+    const declared = controllersOf(AdminModule).map((c) => c.name);
+    const mounted = controllersOf(HttpTestModule)
+      .filter(isAdminController)
+      .map((c) => c.name);
+
+    expect(declared.length).toBeGreaterThan(0);
+    expect(mounted.sort()).toEqual(declared.sort());
+  });
+
+  it('captures every route each AdminModule controller declares, and nothing else', () => {
+    // Replaces a bare "at least N routes" floor: the expected set is derived from the
+    // controllers' own decorator metadata, so it grows with the module. An empty capture (hook
+    // registered too late) fails here because every declared route is missing.
+    const expected = controllersOf(AdminModule).flatMap(declaredRoutes).sort();
+    const captured = routes.map((r) => `${r.method} ${r.pattern}`).sort();
+
+    expect(expected.length).toBeGreaterThan(0);
+    expect(captured).toEqual(expected);
     expect(routes.some((r) => r.method !== 'GET')).toBe(true);
   });
 

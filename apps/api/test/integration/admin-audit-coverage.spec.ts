@@ -20,9 +20,19 @@ const ZONE_ID = 'tdr1v0';
 interface Mutation {
   /** `METHOD /pattern` exactly as Fastify registers it, so the guard below can match on it. */
   readonly route: string;
+  /** The `audit_log.action` the row must carry. */
+  readonly action: string;
   readonly expectStatus: 200 | 201;
-  /** Builds the rows the request acts on and returns the concrete request. */
-  readonly arrange: () => Promise<{ url: string; payload: unknown }>;
+  /**
+   * Builds the rows the request acts on and returns the concrete request, plus the id the audit
+   * row must name as its target: the id itself, or a lookup for one the request creates or that
+   * is not in the URL.
+   */
+  readonly arrange: () => Promise<{
+    url: string;
+    payload: unknown;
+    target: string | (() => Promise<string>);
+  }>;
 }
 
 /**
@@ -164,130 +174,227 @@ describe('admin audit coverage, every mutation', () => {
 
   // ---- the table ----------------------------------------------------------------------------
 
+  /** Surge rows are keyed by their own uuid, not by the zone or key in the URL. */
+  const surgeConfigId = async (): Promise<string> => {
+    const [row] = await h.sql<{ id: string }[]>`SELECT id FROM surge_config WHERE key = 'global'`;
+    if (row === undefined) throw new Error('surge_config has no global row');
+    return row.id;
+  };
+  const surgeZoneId = async (): Promise<string> => {
+    const [row] = await h.sql<{ id: string }[]>`
+      SELECT id FROM surge_zone_overrides WHERE zone_id = ${ZONE_ID}`;
+    if (row === undefined) throw new Error('no surge zone override was written');
+    return row.id;
+  };
+
   const table: Mutation[] = [
     {
       route: `POST ${ADMIN}/spaces/:id/approve`,
+      action: 'space.approve',
       expectStatus: 200,
-      arrange: async () => ({
-        url: `${ADMIN}/spaces/${await pendingSpace()}/approve`,
-        payload: {},
-      }),
+      arrange: async () => {
+        const id = await pendingSpace();
+        return {
+          url: `${ADMIN}/spaces/${id}/approve`,
+          payload: {},
+          target: id,
+        };
+      },
     },
     {
       route: `POST ${ADMIN}/spaces/:id/reject`,
+      action: 'space.reject',
       expectStatus: 200,
-      arrange: async () => ({
-        url: `${ADMIN}/spaces/${await pendingSpace()}/reject`,
-        payload: { notes: 'photos do not show the entrance' },
-      }),
+      arrange: async () => {
+        const id = await pendingSpace();
+        return {
+          url: `${ADMIN}/spaces/${id}/reject`,
+          payload: { notes: 'photos do not show the entrance' },
+          target: id,
+        };
+      },
     },
     {
       route: `POST ${ADMIN}/spaces/:id/request-changes`,
+      action: 'space.request-changes',
       expectStatus: 200,
-      arrange: async () => ({
-        url: `${ADMIN}/spaces/${await pendingSpace()}/request-changes`,
-        payload: { notes: 'add a photo of the gate' },
-      }),
+      arrange: async () => {
+        const id = await pendingSpace();
+        return {
+          url: `${ADMIN}/spaces/${id}/request-changes`,
+          payload: { notes: 'add a photo of the gate' },
+          target: id,
+        };
+      },
     },
     {
       route: `POST ${ADMIN}/users/:id/roles`,
+      action: 'user.role.grant',
       expectStatus: 201,
-      arrange: async () => ({
-        url: `${ADMIN}/users/${await person()}/roles`,
-        payload: { role: 'owner', reason: 'verified in person' },
-      }),
+      arrange: async () => {
+        const id = await person();
+        return {
+          url: `${ADMIN}/users/${id}/roles`,
+          payload: { role: 'owner', reason: 'verified in person' },
+          target: id,
+        };
+      },
     },
     {
       route: `POST ${ADMIN}/users/:id/roles/:role/revoke`,
+      action: 'user.role.revoke',
       expectStatus: 200,
-      arrange: async () => ({
-        url: `${ADMIN}/users/${await seedUser(h, 'owner')}/roles/owner/revoke`,
-        payload: { reason: 'left the team' },
-      }),
+      arrange: async () => {
+        const id = await seedUser(h, 'owner');
+        return {
+          url: `${ADMIN}/users/${id}/roles/owner/revoke`,
+          payload: { reason: 'left the team' },
+          target: id,
+        };
+      },
     },
     {
       route: `POST ${ADMIN}/users/:id/block`,
+      action: 'user.block',
       expectStatus: 200,
-      arrange: async () => ({
-        url: `${ADMIN}/users/${await person()}/block`,
-        payload: { reason: 'chargeback fraud' },
-      }),
+      arrange: async () => {
+        const id = await person();
+        return {
+          url: `${ADMIN}/users/${id}/block`,
+          payload: { reason: 'chargeback fraud' },
+          target: id,
+        };
+      },
     },
     {
       route: `POST ${ADMIN}/users/:id/unblock`,
+      action: 'user.unblock',
       expectStatus: 200,
       arrange: async () => {
         const id = await person();
         await h.sql`UPDATE users SET status = 'blocked' WHERE id = ${id}`;
-        return { url: `${ADMIN}/users/${id}/unblock`, payload: { reason: 'appeal upheld' } };
+        return {
+          url: `${ADMIN}/users/${id}/unblock`,
+          payload: { reason: 'appeal upheld' },
+          target: id,
+        };
       },
     },
     {
       route: `POST ${ADMIN}/partners/:id/verify`,
+      action: 'partner.verify',
       expectStatus: 200,
-      arrange: async () => ({
-        url: `${ADMIN}/partners/${await pendingValet()}/verify`,
-        payload: { kind: 'valet' },
-      }),
+      arrange: async () => {
+        const id = await pendingValet();
+        return {
+          url: `${ADMIN}/partners/${id}/verify`,
+          payload: { kind: 'valet' },
+          target: id,
+        };
+      },
     },
     {
       route: `POST ${ADMIN}/partners/:id/reject`,
+      action: 'partner.reject',
       expectStatus: 200,
-      arrange: async () => ({
-        url: `${ADMIN}/partners/${await pendingValet()}/reject`,
-        payload: { kind: 'valet', notes: 'licence is unreadable' },
-      }),
+      arrange: async () => {
+        const id = await pendingValet();
+        return {
+          url: `${ADMIN}/partners/${id}/reject`,
+          payload: { kind: 'valet', notes: 'licence is unreadable' },
+          target: id,
+        };
+      },
     },
     {
       route: `POST ${ADMIN}/bookings/:id/cancel`,
+      action: 'booking.cancel',
       expectStatus: 200,
-      arrange: async () => ({
-        url: `${ADMIN}/bookings/${await paidBooking('confirmed')}/cancel`,
-        payload: { reason: 'owner unreachable' },
-      }),
+      arrange: async () => {
+        const id = await paidBooking('confirmed');
+        return {
+          url: `${ADMIN}/bookings/${id}/cancel`,
+          payload: { reason: 'owner unreachable' },
+          target: id,
+        };
+      },
     },
     {
       route: `POST ${ADMIN}/bookings/:id/refund`,
+      action: 'booking.refund',
       expectStatus: 200,
-      arrange: async () => ({
-        url: `${ADMIN}/bookings/${await paidBooking('completed')}/refund`,
-        payload: { option: 'full_minus_fee', reason: 'spot flooded' },
-      }),
+      arrange: async () => {
+        const id = await paidBooking('completed');
+        return {
+          url: `${ADMIN}/bookings/${id}/refund`,
+          payload: { option: 'full_minus_fee', reason: 'spot flooded' },
+          target: id,
+        };
+      },
     },
     {
       route: `POST ${ADMIN}/moderation/reviews/:id/remove`,
+      action: 'review.remove',
       expectStatus: 200,
-      arrange: async () => ({
-        url: `${ADMIN}/moderation/reviews/${await reportedReview()}/remove`,
-        payload: { reason: 'spam_or_fake' },
-      }),
+      arrange: async () => {
+        const id = await reportedReview();
+        return {
+          url: `${ADMIN}/moderation/reviews/${id}/remove`,
+          payload: { reason: 'spam_or_fake' },
+          target: id,
+        };
+      },
     },
     {
       route: `POST ${ADMIN}/moderation/reviews/:id/dismiss`,
+      action: 'review.dismiss',
       expectStatus: 200,
-      arrange: async () => ({
-        url: `${ADMIN}/moderation/reviews/${await reportedReview()}/dismiss`,
-        payload: {},
-      }),
+      arrange: async () => {
+        const id = await reportedReview();
+        return {
+          url: `${ADMIN}/moderation/reviews/${id}/dismiss`,
+          payload: {},
+          target: id,
+        };
+      },
     },
     {
       route: `PUT ${ADMIN}/surge/config`,
+      action: 'admin.surge.config.replace',
       expectStatus: 200,
-      arrange: async () => ({ url: `${ADMIN}/surge/config`, payload: surgeConfig() }),
+      arrange: async () => {
+        return {
+          url: `${ADMIN}/surge/config`,
+          payload: surgeConfig(),
+          target: surgeConfigId,
+        };
+      },
     },
     {
       route: `POST ${ADMIN}/surge/zones`,
+      action: 'admin.surge.zone.create',
       expectStatus: 201,
-      arrange: async () => ({ url: `${ADMIN}/surge/zones`, payload: surgeZone }),
+      arrange: async () => {
+        return {
+          url: `${ADMIN}/surge/zones`,
+          payload: surgeZone,
+          target: surgeZoneId,
+        };
+      },
     },
     {
       route: `PATCH ${ADMIN}/surge/zones/:zoneId`,
+      action: 'admin.surge.zone.update',
       expectStatus: 200,
       arrange: async () => {
         // Seeded through the API, so the override exists in exactly the shape the PATCH reads.
         const created = await send('POST', `${ADMIN}/surge/zones`, surgeZone);
         expect(created.status).toBe(201);
-        return { url: `${ADMIN}/surge/zones/${ZONE_ID}`, payload: { enabled: false } };
+        return {
+          url: `${ADMIN}/surge/zones/${ZONE_ID}`,
+          payload: { enabled: false },
+          target: surgeZoneId,
+        };
       },
     },
   ];
@@ -323,7 +430,7 @@ describe('admin audit coverage, every mutation', () => {
 
   for (const mutation of table) {
     it(`${mutation.route} writes exactly one audit row`, async () => {
-      const { url, payload } = await mutation.arrange();
+      const { url, payload, target } = await mutation.arrange();
       const before = await auditCount();
       const method = mutation.route.split(' ')[0] as 'POST' | 'PUT' | 'PATCH';
 
@@ -334,6 +441,8 @@ describe('admin audit coverage, every mutation', () => {
       const row = await lastAudit();
       expect(row?.actor_user_id).toBe(adminId);
       expect(row?.actor_role).toBe('admin');
+      expect(row?.action).toBe(mutation.action);
+      expect(row?.target_id).toBe(typeof target === 'string' ? target : await target());
     });
   }
 

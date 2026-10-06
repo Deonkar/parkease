@@ -262,7 +262,7 @@ class StubAuthGuard implements CanActivate {
   ],
 })
 // eslint-disable-next-line @typescript-eslint/no-extraneous-class
-class HttpTestModule {}
+export class HttpTestModule {}
 
 export interface HttpApp {
   readonly app: NestFastifyApplication;
