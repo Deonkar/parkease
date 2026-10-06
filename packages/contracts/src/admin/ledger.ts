@@ -5,17 +5,20 @@ import { ledgerDirectionSchema } from '../enums/ledger-direction.js';
 import { bookingIdSchema, payoutIdSchema, txnIdSchema } from '../primitives/ids.js';
 import { paiseSchema } from '../primitives/paise.js';
 
-import { dateRangeSchema } from './finance.js';
+import { dateRangeSchema, refineDateRange } from './finance.js';
 import { adminCursorQuerySchema, istDateSchema } from './query.js';
 
-export const ledgerQuerySchema = adminCursorQuerySchema.extend({
-  account: ledgerAccountSchema.optional(),
-  txnId: txnIdSchema.optional(),
-  bookingId: bookingIdSchema.optional(),
-  payoutId: payoutIdSchema.optional(),
-  from: istDateSchema.optional(),
-  to: istDateSchema.optional(),
-});
+/** An open-ended filter is legal; a closed range obeys the same bounds as every finance query. */
+export const ledgerQuerySchema = adminCursorQuerySchema
+  .extend({
+    account: ledgerAccountSchema.optional(),
+    txnId: txnIdSchema.optional(),
+    bookingId: bookingIdSchema.optional(),
+    payoutId: payoutIdSchema.optional(),
+    from: istDateSchema.optional(),
+    to: istDateSchema.optional(),
+  })
+  .superRefine(refineDateRange);
 
 export type LedgerQuery = z.infer<typeof ledgerQuerySchema>;
 

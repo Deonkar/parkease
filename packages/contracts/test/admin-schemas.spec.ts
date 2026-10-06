@@ -78,6 +78,31 @@ describe('dateRangeSchema', () => {
   });
 });
 
+describe('ledgerQuerySchema range', () => {
+  it('accepts a missing, one-sided or ordinary range', () => {
+    expect(ledgerQuerySchema.safeParse({}).success).toBe(true);
+    expect(ledgerQuerySchema.safeParse({ from: '2026-10-01' }).success).toBe(true);
+    expect(ledgerQuerySchema.safeParse({ to: '2026-10-01' }).success).toBe(true);
+    expect(ledgerQuerySchema.safeParse({ from: '2026-10-01', to: '2026-10-08' }).success).toBe(
+      true,
+    );
+  });
+
+  it('accepts exactly 366 days', () => {
+    expect(ledgerQuerySchema.safeParse({ from: '2026-01-01', to: '2027-01-02' }).success).toBe(
+      true,
+    );
+  });
+
+  it.each([
+    ['from equal to to', { from: '2026-10-01', to: '2026-10-01' }],
+    ['from after to', { from: '2026-10-02', to: '2026-10-01' }],
+    ['a 400-day span', { from: '2026-01-01', to: '2027-02-05' }],
+  ])('rejects %s when both ends are set', (_label, input) => {
+    expect(ledgerQuerySchema.safeParse(input).success).toBe(false);
+  });
+});
+
 describe('grantRoleSchema', () => {
   it('rejects an unknown role', () => {
     expect(grantRoleSchema.safeParse({ role: 'superadmin', reason: 'x' }).success).toBe(false);

@@ -173,6 +173,11 @@ export const RATE_LIMIT_POLICIES: Readonly<Record<string, RateLimitPolicy>> = {
   'POST /api/v1/owner/reviews/:id/respond': { limit: 10, windowSeconds: 60, keyBy: 'user' },
   'POST /api/v1/owner/reviews/:id/report': { limit: 10, windowSeconds: 60, keyBy: 'user' },
 
+  // The ledger export streams the whole table slice for a range, holding a pooled connection for
+  // as long as the client reads. Five a minute is a finance person pulling a month; more than that
+  // is a script, and a script should not be able to hold the pool.
+  'GET /api/v1/admin/ledger/export': { limit: 5, windowSeconds: 60, keyBy: 'user' },
+
   'ADMIN:*': { limit: 100, windowSeconds: 60, keyBy: 'user' },
   'WEBHOOK:*': { limit: 300, windowSeconds: 60, keyBy: 'ip' },
   'UNAUTHENTICATED:*': { limit: 30, windowSeconds: 60, keyBy: 'ip' },

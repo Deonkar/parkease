@@ -13,32 +13,42 @@ const MS_PER_DAY = 86_400_000;
 const istDate = istDateSchema;
 
 /**
+ * The one definition of a valid range, shared by every schema that carries a `from` and a `to`.
+ * Inert unless both ends are present, so a one-sided filter stays legal where a filter is optional.
+ */
+export function refineDateRange(
+  range: { from?: string | undefined; to?: string | undefined },
+  ctx: z.RefinementCtx,
+): void {
+  if (range.from === undefined || range.to === undefined) return;
+  const from = Date.parse(`${range.from}T00:00:00Z`);
+  const to = Date.parse(`${range.to}T00:00:00Z`);
+  // An unparseable date already carries its own issue from `.date()`.
+  if (Number.isNaN(from) || Number.isNaN(to)) return;
+
+  if (from >= to) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['to'],
+      message: '`to` must be after `from`',
+    });
+  } else if ((to - from) / MS_PER_DAY > MAX_RANGE_DAYS) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['to'],
+      message: `Range cannot exceed ${String(MAX_RANGE_DAYS)} days`,
+    });
+  }
+}
+
+/**
  * IST calendar dates, `to` exclusive, so `2026-10-01` to `2026-10-08` is seven whole days.
  * The span is capped because every finance query is one GROUP BY over the ledger, and an
  * unbounded range is an unbounded scan on a table that only grows.
  */
 export const dateRangeSchema = z
   .object({ from: istDate, to: istDate })
-  .superRefine((range, ctx) => {
-    const from = Date.parse(`${range.from}T00:00:00Z`);
-    const to = Date.parse(`${range.to}T00:00:00Z`);
-    // An unparseable date already carries its own issue from `.date()`.
-    if (Number.isNaN(from) || Number.isNaN(to)) return;
-
-    if (from >= to) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['to'],
-        message: '`to` must be after `from`',
-      });
-    } else if ((to - from) / MS_PER_DAY > MAX_RANGE_DAYS) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['to'],
-        message: `Range cannot exceed ${String(MAX_RANGE_DAYS)} days`,
-      });
-    }
-  });
+  .superRefine(refineDateRange);
 
 export type DateRange = z.infer<typeof dateRangeSchema>;
 

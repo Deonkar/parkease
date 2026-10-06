@@ -46,6 +46,19 @@ describe('rate limit policies', () => {
     }
   });
 
+  it('the ledger export is 5 a minute per user, the other finance reads take ADMIN:* (task 18a)', () => {
+    expect(
+      resolvePolicy('GET', '/api/v1/admin/ledger/export?from=2026-10-01&to=2026-10-02'),
+    ).toEqual({
+      limit: 5,
+      windowSeconds: 60,
+      keyBy: 'user',
+    });
+    for (const url of ['/api/v1/admin/ledger', '/api/v1/admin/finance/balances']) {
+      expect(resolvePolicy('GET', url)).toBe(RATE_LIMIT_POLICIES['ADMIN:*']);
+    }
+  });
+
   it('DEFAULT_POLICY is the strictest (10 per 60s)', () => {
     expect(DEFAULT_POLICY.limit).toBe(10);
     expect(DEFAULT_POLICY.windowSeconds).toBe(60);
