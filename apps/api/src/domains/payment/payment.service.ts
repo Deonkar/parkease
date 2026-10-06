@@ -212,25 +212,10 @@ export class PaymentService {
   }
 
   /**
-   * The captured payment for a booking, if the driver ever actually paid.
-   *
-   * A booking may carry several rows — failed attempts then a success — and only
-   * a captured one has money at the gateway to send back. Returning the newest
-   * matters when a driver paid, was refunded, and paid again.
-   */
-  async findLatestCapturedForBooking(bookingId: string) {
-    const [row] = await this.db
-      .select()
-      .from(payments)
-      .where(and(eq(payments.bookingId, bookingId), eq(payments.status, 'captured')))
-      .orderBy(desc(payments.capturedAt))
-      .limit(1);
-    return row;
-  }
-
-  /**
    * The booking's captured parking payment, row-locked (`FOR UPDATE`) — the first statement of an
-   * admin refund's transaction.
+   * admin refund's transaction and of every cancellation's (driver or admin). It is the only
+   * way a booking's payment is looked up for a refund, so the purpose filter below cannot be
+   * forgotten by a second, unfiltered query.
    *
    * The lock is what makes "what is left to refund" safe to read: two admins refunding the same
    * booking queue here, and the second reads the refund total only after the first has committed,

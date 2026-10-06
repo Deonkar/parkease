@@ -244,21 +244,26 @@ export class BookingService {
     return row;
   }
 
+  /**
+   * A compare-and-set: the row is cancelled only if it is still in the status the caller checked
+   * the transition against. `undefined` means it moved — another cancellation, or a check-in, got
+   * there first — and the caller must refuse rather than refund a booking twice.
+   */
   async markCancelled(
     tx: TxHandle,
     bookingId: string,
-    status: BookingStatus,
+    transition: { readonly from: BookingStatus; readonly to: BookingStatus },
     reason: string | null,
   ) {
     const [row] = await tx
       .update(bookings)
       .set({
-        status,
+        status: transition.to,
         cancelledAt: new Date(),
         cancellationReason: reason,
         updatedAt: new Date(),
       })
-      .where(eq(bookings.id, bookingId))
+      .where(and(eq(bookings.id, bookingId), eq(bookings.status, transition.from)))
       .returning();
     return row;
   }

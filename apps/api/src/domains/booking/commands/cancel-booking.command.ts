@@ -10,7 +10,7 @@ import { PaymentService } from '../../payment/payment.service.js';
 import { type RefundablePayment, RefundService } from '../../payment/refund.service.js';
 import { AvailabilityService } from '../availability.service.js';
 import { BookingService } from '../booking.service.js';
-import { BookingEvent, assertTransition } from '../lifecycle.js';
+import { BookingEvent, IllegalBookingTransitionError, assertTransition } from '../lifecycle.js';
 
 /**
  * Who is cancelling. A driver reaches only their own bookings; an admin reaches any booking, and
@@ -60,46 +60,38 @@ export class CancelBookingCommand {
    * ledger first, money second (R-BE-04, R-ASYNC-01).
    */
   execute(input: CancelBookingInput): Promise<CancelBookingResult> {
-    return input.by.kind === 'driver'
-      ? this.asDriver(input, input.by.driverId)
-      : this.asAdmin(input, input.by.actor);
-  }
-
-  private async asDriver(input: CancelBookingInput, driverId: string) {
-    const booking = await this.bookings.findOwnedByDriver(input.bookingId, driverId);
-    // 404, not 403: confirming that someone else's booking exists is itself a leak.
-    if (booking === undefined) throw new NotFoundException('That booking does not exist.');
-
-    const nextStatus = assertTransition(booking.status, BookingEvent.CANCEL);
-
-    // Read before the transaction opens: it is a plain lookup, and keeping it
-    // out keeps the transaction to the writes that must commit together.
-    const payment = await this.payments.findLatestCapturedForBooking(booking.id);
-    const at = new Date();
-
-    return withTransaction(this.db, (tx) =>
-      this.cancel(tx, {
-        booking,
-        nextStatus,
-        payment,
-        at,
-        reason: input.reason,
-        cancelledBy: 'driver',
-      }),
-    );
+    return this.run(input);
   }
 
   /**
-   * Any booking, by id. Both reads are locks inside the transaction, payment first and booking
-   * second — the order `AdminRefundCommand` and payment capture take, so the three cannot deadlock
-   * one another. The transition is checked on the locked row, so two admins cancelling at once
-   * get one cancellation and one 409, and only one audit row.
+   * One path for both callers, so they lock in one order and check the transition on one row.
+   *
+   * A driver's ownership is checked first, outside the transaction, so a stranger's request
+   * answers 404 without ever taking a lock on someone else's booking.
+   *
+   * Inside, both reads are locks: payment first, booking second — the order `AdminRefundCommand`
+   * and payment capture take, so no two of them can deadlock. The transition is checked on the
+   * locked row, and `markCancelled` is a compare-and-set on that status besides, so two
+   * cancellations racing (driver and admin, or a driver's double tap under two idempotency keys)
+   * produce one cancellation and one 409 — never two refunds.
    */
-  private asAdmin(input: CancelBookingInput, actor: AdminActor) {
+  private async run(input: CancelBookingInput): Promise<CancelBookingResult> {
+    const { by } = input;
+    if (by.kind === 'driver') {
+      const owned = await this.bookings.findOwnedByDriver(input.bookingId, by.driverId);
+      // 404, not 403: confirming that someone else's booking exists is itself a leak.
+      if (owned === undefined) throw new NotFoundException('That booking does not exist.');
+    }
+    const at = new Date();
+
     return withTransaction(this.db, async (tx) => {
       const payment = await this.payments.lockCapturedForBooking(tx, input.bookingId);
       const booking = await this.bookings.findForUpdate(tx, input.bookingId);
-      if (booking === undefined || booking.deletedAt !== null) {
+      if (
+        booking === undefined ||
+        booking.deletedAt !== null ||
+        (by.kind === 'driver' && booking.driverId !== by.driverId)
+      ) {
         throw new NotFoundException('That booking does not exist.');
       }
 
@@ -116,26 +108,28 @@ export class CancelBookingCommand {
         booking,
         nextStatus,
         payment,
-        at: new Date(),
+        at,
         reason: input.reason,
-        cancelledBy: 'admin',
+        cancelledBy: by.kind,
       });
 
-      await this.audit.record(tx, {
-        actorUserId: actor.userId,
-        actorRole: 'admin',
-        action: 'booking.cancel',
-        targetType: 'booking',
-        targetId: booking.id,
-        before: { status: booking.status },
-        after: {
-          status: nextStatus,
-          reason: input.reason,
-          refundPaise: result.refundPaise,
-          refundTier: result.refundTier,
-        },
-        ipAddress: actor.ipAddress,
-      });
+      if (by.kind === 'admin') {
+        await this.audit.record(tx, {
+          actorUserId: by.actor.userId,
+          actorRole: 'admin',
+          action: 'booking.cancel',
+          targetType: 'booking',
+          targetId: booking.id,
+          before: { status: booking.status },
+          after: {
+            status: nextStatus,
+            reason: input.reason,
+            refundPaise: result.refundPaise,
+            refundTier: result.refundTier,
+          },
+          ipAddress: by.actor.ipAddress,
+        });
+      }
 
       return result;
     });
@@ -157,9 +151,14 @@ export class CancelBookingCommand {
     const cancelled = await this.bookings.markCancelled(
       tx,
       booking.id,
-      input.nextStatus,
+      { from: booking.status, to: input.nextStatus },
       input.reason,
     );
+    // The row moved since it was read: someone else cancelled (or checked in) first. Refused
+    // here, inside the transaction and before any refund is written.
+    if (cancelled === undefined) {
+      throw new IllegalBookingTransitionError(booking.status, BookingEvent.CANCEL);
+    }
 
     // A status change, not a delete: the row leaves the exclusion constraint's
     // predicate, so the slot_index is allocatable again the moment this commits.

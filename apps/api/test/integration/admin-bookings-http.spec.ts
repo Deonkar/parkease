@@ -1,3 +1,4 @@
+import { HttpException } from '@nestjs/common';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { type BookingStack, buildBookingStack, windowFromNow, zoneOf } from './booking-harness.js';
@@ -479,6 +480,120 @@ describe('admin bookings HTTP', () => {
       const noReason = await write(`${BASE}/${booking.id}/cancel`, {});
       expect(noReason.status).toBe(400);
       expect(errorCode(noReason)).toBe('VALIDATION_FAILED');
+    });
+  });
+
+  /**
+   * A booking is cancelled once, whoever asks and however many times at once. Each race runs ten
+   * times on a fresh booking: one lucky interleaving that happens to serialise proves nothing.
+   */
+  describe('cancel races', () => {
+    const RUNS = 10;
+
+    /** One refund row, one cancellation posting, one `booking.cancelled` message. */
+    const expectCancelledOnce = async (bookingId: string) => {
+      expect(await refundRows(bookingId)).toHaveLength(1);
+      const postings = await h.sql<{ txn_id: string }[]>`
+        SELECT DISTINCT txn_id FROM ledger_entries
+        WHERE booking_id = ${bookingId} AND description LIKE 'refund: %'`;
+      expect(postings).toHaveLength(1);
+      const cancelled = await h.sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM outbox_messages
+        WHERE type = 'booking.cancelled' AND payload->>'bookingId' = ${bookingId}`;
+      expect(cancelled[0]?.n).toBe(1);
+      const [row] = await h.sql<
+        { status: string }[]
+      >`SELECT status FROM bookings WHERE id = ${bookingId}`;
+      expect(row?.status).toBe('cancelled');
+    };
+
+    const statusOf = (outcome: PromiseSettledResult<unknown>): number => {
+      if (outcome.status === 'fulfilled') return 200;
+      return outcome.reason instanceof HttpException ? outcome.reason.getStatus() : 500;
+    };
+
+    it('driver and admin cancelling together: one cancels, the other is refused 409', async () => {
+      for (let run = 0; run < RUNS; run += 1) {
+        const booking = await paidBooking({ status: 'confirmed', hoursAhead: 12 });
+
+        const outcomes = await Promise.allSettled([
+          stack.cancel.execute({
+            bookingId: booking.id,
+            reason: null,
+            by: { kind: 'driver', driverId: booking.driverId },
+          }),
+          stack.cancel.execute({
+            bookingId: booking.id,
+            reason: 'admin',
+            by: { kind: 'admin', actor: { userId: adminId, ipAddress: null } },
+          }),
+        ]);
+
+        expect(outcomes.map(statusOf).sort()).toEqual([200, 409]);
+        await expectCancelledOnce(booking.id);
+        // The audit row exists exactly when the admin's cancel was the one that landed.
+        const adminWon = outcomes[1]?.status === 'fulfilled';
+        expect(await auditRows('booking.cancel', booking.id)).toHaveLength(adminWon ? 1 : 0);
+      }
+      expect(await unbalancedTxns()).toEqual([]);
+    });
+
+    it('two driver cancels with different keys: one 201, one 409', async () => {
+      for (let run = 0; run < RUNS; run += 1) {
+        const booking = await paidBooking({ status: 'confirmed', hoursAhead: 12 });
+        actingAs.user = { id: booking.driverId, roles: ['driver'], activeRole: 'driver' };
+
+        const url = `/api/v1/driver/bookings/${booking.id}/cancel`;
+        const responses = await Promise.all([write(url, {}), write(url, {})]);
+
+        expect(responses.map((r) => r.status).sort()).toEqual([201, 409]);
+        await expectCancelledOnce(booking.id);
+      }
+      expect(await unbalancedTxns()).toEqual([]);
+    });
+  });
+
+  describe('cancel refunds the parking payment, never a wash on the same booking', () => {
+    it.each(['driver', 'admin'] as const)('%s cancel', async (kind) => {
+      const booking = await paidBooking({ status: 'active', hoursAhead: 12 });
+      const [parking] = await h.sql<{ id: string }[]>`
+        SELECT id FROM payments WHERE booking_id = ${booking.id}`;
+
+      // A wash bought on the same booking and captured AFTER the parking: the newest capture.
+      const [job] = await h.sql<{ id: string }[]>`
+        INSERT INTO wash_jobs (booking_id, driver_user_id, status, service_name, vehicle_type,
+                               space_location, commission_rate)
+        VALUES (${booking.id}, ${booking.driverId}, 'offered', 'premium_wash', 'car',
+                ST_SetSRID(ST_MakePoint(77.6266, 12.9345), 4326)::geography, 0.200)
+        RETURNING id`;
+      await h.sql`
+        INSERT INTO payments (booking_id, user_id, razorpay_order_id, razorpay_payment_id,
+                              expected_total_paise, captured_paise, status, captured_at,
+                              purpose, wash_job_id)
+        VALUES (${booking.id}, ${booking.driverId}, ${`order_w_${booking.id.slice(-12)}`},
+                ${`pay_w_${booking.id.slice(-12)}`}, 39900, 39900, 'captured',
+                now() + interval '1 minute', 'carwash', ${job?.id ?? null})`;
+
+      await stack.cancel.execute({
+        bookingId: booking.id,
+        reason: null,
+        by:
+          kind === 'driver'
+            ? { kind: 'driver', driverId: booking.driverId }
+            : { kind: 'admin', actor: { userId: adminId, ipAddress: null } },
+      });
+
+      const refunds = await h.sql<{ payment_id: string; amount_paise: number }[]>`
+        SELECT r.payment_id, r.amount_paise::int AS amount_paise
+        FROM refunds r JOIN payments p ON p.id = r.payment_id
+        WHERE p.booking_id = ${booking.id}`;
+      expect(refunds).toHaveLength(1);
+      expect(refunds[0]?.payment_id).toBe(parking?.id);
+      const [issue] = await outboxRows('payment.issue-refund');
+      expect(issue?.payload).toMatchObject({
+        paymentId: parking?.id,
+        razorpayPaymentId: `pay_${booking.id.slice(-12)}`,
+      });
     });
   });
 });
