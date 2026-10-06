@@ -58,6 +58,15 @@ export const envSchema = z
       .optional(),
 
     /**
+     * How many reverse proxies sit in front of the API (SEC-M3, task 18a review). Fastify takes
+     * the client address that many hops back along X-Forwarded-For. `trustProxy: true` took the
+     * LEFT-most entry, which the client writes itself: audit `ip_address` was spoofable and every
+     * IP-keyed rate limit bypassable. A count, never a yes: 0 trusts no header, 1 (the default)
+     * is one load balancer.
+     */
+    TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(1),
+
+    /**
      * §11.9. Valet ships without in-app calling if no telephony provider is ready,
      * and the behaviour in that case is defined rather than improvised: the
      * [Call Valet] control is hidden rather than rendered disabled, and its place

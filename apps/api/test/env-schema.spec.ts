@@ -39,3 +39,26 @@ describe('env schema: ADMIN_ORIGIN (SEC-M2, task 18a review)', () => {
     );
   });
 });
+
+describe('env schema: TRUST_PROXY_HOPS (SEC-M3, task 18a review)', () => {
+  it('defaults to one hop, the load balancer in front of the API', () => {
+    const parsed = envSchema.safeParse(base());
+    expect(parsed.success).toBe(true);
+    expect(parsed.data?.TRUST_PROXY_HOPS).toBe(1);
+  });
+
+  it.each([
+    ['0', 0],
+    ['2', 2],
+  ])('parses an explicit %s as the number %d', (raw, hops) => {
+    const parsed = envSchema.safeParse({ ...base(), TRUST_PROXY_HOPS: raw });
+    expect(parsed.data?.TRUST_PROXY_HOPS).toBe(hops);
+  });
+
+  it.each(['-1', '1.5', 'true', 'all'])(
+    'refuses %s: trust is a hop count, never a blanket yes',
+    (raw) => {
+      expect(envSchema.safeParse({ ...base(), TRUST_PROXY_HOPS: raw }).success).toBe(false);
+    },
+  );
+});
