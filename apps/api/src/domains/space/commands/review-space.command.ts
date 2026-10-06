@@ -68,6 +68,9 @@ export class ReviewSpaceCommand {
     return withTransaction(this.db, async (tx) => {
       const [before] = await tx
         .select({
+          // The canonical id: the path id may be this one in capitals, since Postgres compares a
+          // uuid case-insensitively. Audit, outbox and the answer all carry this one (SEC-L1).
+          id: spaces.id,
           ownerId: spaces.ownerId,
           approvalStatus: spaces.approvalStatus,
           reviewNotes: spaces.reviewNotes,
@@ -77,6 +80,7 @@ export class ReviewSpaceCommand {
         .for('update');
 
       if (before === undefined) throw new NotFoundException('Space not found.');
+      const id = before.id;
       if (before.approvalStatus !== ApprovalStatus.PENDING_APPROVAL) {
         throw new IllegalApprovalTransitionError();
       }
@@ -93,14 +97,14 @@ export class ReviewSpaceCommand {
           // The owner's own view reads these two for "approved on".
           ...(decision === 'approve' ? { approvedAt: now, approvedByUserId: actor.userId } : {}),
         })
-        .where(eq(spaces.id, spaceId));
+        .where(eq(spaces.id, id));
 
       await this.audit.record(tx, {
         actorUserId: actor.userId,
         actorRole: 'admin',
         action: audit,
         targetType: 'space',
-        targetId: spaceId,
+        targetId: id,
         before: { approvalStatus: before.approvalStatus, reviewNotes: before.reviewNotes },
         after: { approvalStatus: to, reviewNotes: notes },
         ipAddress: actor.ipAddress,
@@ -108,10 +112,10 @@ export class ReviewSpaceCommand {
 
       await this.outbox.enqueue(tx, {
         type: event,
-        payload: { spaceId, ownerId: before.ownerId, notes },
+        payload: { spaceId: id, ownerId: before.ownerId, notes },
       });
 
-      return { id: spaceId, approvalStatus: to };
+      return { id, approvalStatus: to };
     });
   }
 }

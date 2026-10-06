@@ -233,6 +233,26 @@ describe('admin spaces HTTP', () => {
       expect(outbox[0]?.payload).toMatchObject({ spaceId: id, ownerId });
     });
 
+    /**
+     * SEC-L1 (task 18a review). Postgres matches a uuid case-insensitively, so the path id may be
+     * the space's id in capitals. The audit row, the outbox event and the answer must carry the
+     * canonical id the database holds, or a consumer keyed on the id misses the event.
+     */
+    it('approving by an uppercase id records, announces and answers the canonical id', async () => {
+      const id = await pendingSpace();
+      const response = await write('POST', `${BASE}/${id.toUpperCase()}/approve`);
+      expect(response.status).toBe(200);
+      expect(envelope(response).data).toEqual({ id, approvalStatus: 'active' });
+
+      const [row] = await h.sql<{ target_id: string }[]>`
+        SELECT target_id FROM audit_log WHERE action = 'space.approve'`;
+      expect(row?.target_id).toBe(id);
+      const [event] = await h.sql<{ payload: { spaceId: string } }[]>`
+        SELECT payload FROM outbox_messages WHERE type = 'space.approved'
+         ORDER BY created_at DESC LIMIT 1`;
+      expect(event?.payload.spaceId).toBe(id);
+    });
+
     it('refuses a reject or request-changes without notes, and changes nothing', async () => {
       const id = await pendingSpace();
       const none = await write('POST', `${BASE}/${id}/reject`, {});
