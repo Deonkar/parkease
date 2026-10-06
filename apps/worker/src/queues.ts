@@ -63,6 +63,10 @@ export const UNSUBSCRIBED_EVENTS = [
   'space.updated',
   'space.photos_updated',
   'space.deleted',
+  // Task 18a: the owner hears about a decision in task 19.
+  'space.approved',
+  'space.rejected',
+  'space.changes-requested',
   'identity.session-created',
   'valet.offer-withdrawn',
   'carwash.offer-withdrawn',

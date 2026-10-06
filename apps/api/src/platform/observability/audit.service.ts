@@ -16,6 +16,16 @@ export interface AuditEntry {
   readonly ipAddress: string | null;
 }
 
+/**
+ * The admin behind a request, carried down from the controller: the IP belongs to the connection
+ * and the audit row is written inside the command, three layers below it. Every admin command
+ * takes one of these (the audit row's role is always `admin`, so it is not carried).
+ */
+export interface AdminActor {
+  readonly userId: string;
+  readonly ipAddress: string | null;
+}
+
 @Injectable()
 export class AuditService {
   constructor(@Inject(DB) private readonly db: Database) {}

@@ -47,6 +47,7 @@ import { REDIS, RedisModule } from '../../src/platform/redis/redis.module.js';
 import { StorageModule } from '../../src/platform/storage/storage.module.js';
 import { TelephonyModule } from '../../src/platform/telephony/telephony.module.js';
 import { AdminModerationController } from '../../src/roles/admin/moderation.controller.js';
+import { AdminSpacesController } from '../../src/roles/admin/spaces.controller.js';
 import { AdminSurgeController } from '../../src/roles/admin/surge.controller.js';
 import { DriverBookingsController } from '../../src/roles/driver/bookings.controller.js';
 import { DriverCarwashController } from '../../src/roles/driver/carwash.controller.js';
@@ -59,6 +60,7 @@ import { OwnerBookingsController } from '../../src/roles/owner/bookings.controll
 import { OwnerDashboardController } from '../../src/roles/owner/dashboard.controller.js';
 import { OwnerEarningsController } from '../../src/roles/owner/earnings.controller.js';
 import { OwnerReviewsController } from '../../src/roles/owner/reviews.controller.js';
+import { OwnerSpacesController } from '../../src/roles/owner/spaces.controller.js';
 import { AdminAuthController } from '../../src/roles/public/admin-auth.controller.js';
 import { RazorpayWebhookController } from '../../src/roles/public/webhooks/razorpay.controller.js';
 import { MeController } from '../../src/roles/shared/me.controller.js';
@@ -180,6 +182,8 @@ class StubAuthGuard implements CanActivate {
     AdminAuthController,
     AdminSurgeController,
     AdminModerationController,
+    AdminSpacesController,
+    OwnerSpacesController,
     DriverReviewsController,
     OwnerReviewsController,
     DriverBookingsController,

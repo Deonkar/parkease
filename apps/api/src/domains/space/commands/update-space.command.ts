@@ -8,6 +8,7 @@ import { DB, type Database } from '../../../platform/db/db.module.js';
 import { withTransaction } from '../../../platform/db/transaction.js';
 import { zoneIdFor } from '../../../platform/geo/geohash.js';
 import { OutboxService } from '../../../platform/outbox/outbox.service.js';
+import { SpaceRejectedError } from '../errors.js';
 import { expandSlotRows } from '../slots.js';
 
 export interface UpdateSpaceInput {
@@ -37,6 +38,8 @@ export class UpdateSpaceCommand {
         );
 
       if (!existing) throw new NotFoundException('Space not found.');
+      // Terminal: a rejection is the end of that listing, not a request to edit and resubmit.
+      if (existing.approvalStatus === ApprovalStatus.REJECTED) throw new SpaceRejectedError();
 
       const set: Record<string, unknown> = { updatedAt: new Date() };
       const b = input.body;
@@ -65,13 +68,10 @@ export class UpdateSpaceCommand {
       if (b.amenities !== undefined) set['amenities'] = b.amenities;
       if (b.accessInstructions !== undefined) set['accessInstructions'] = b.accessInstructions;
 
-      if (
-        existing.approvalStatus === ApprovalStatus.CHANGES_REQUESTED ||
-        existing.approvalStatus === ApprovalStatus.REJECTED
-      ) {
+      // `review_notes` stays: the admin's request is still what the owner is answering.
+      if (existing.approvalStatus === ApprovalStatus.CHANGES_REQUESTED) {
         set['approvalStatus'] = ApprovalStatus.PENDING_APPROVAL;
         set['submittedAt'] = new Date();
-        set['rejectionReason'] = null;
       }
 
       await tx.update(spaces).set(set).where(eq(spaces.id, input.spaceId));
