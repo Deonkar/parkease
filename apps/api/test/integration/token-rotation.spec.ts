@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -119,4 +119,33 @@ describe('TokenService.rotate refusals commit their writes', () => {
     expect(rows[0]?.revoked_reason).toBe('role_revoked');
     expect(rows[0]?.rotated_at).toBeNull();
   });
+
+  /**
+   * SF-3 (task 18a review). `role_revoked` and `logout` revoke only the presented token, on
+   * purpose. Presenting it again (a second tab, a retry after the 403, logout in one tab then
+   * refresh in another) is not theft: it must not kill the person's other sessions (their mobile
+   * app included) or write an `auth.refresh-reuse-detected` alarm that reads like an attack.
+   */
+  it.each(['role_revoked', 'logout'])(
+    'a token revoked for %s, presented again, is a plain 401: no family revocation, no alarm',
+    async (reason) => {
+      const userId = await seedUser(h, 'admin');
+      const presented = await mint(userId);
+      const sibling = await mint(userId);
+      await h.sql`
+        UPDATE refresh_tokens SET revoked_at = now(), revoked_reason = ${reason}
+        WHERE token_hash = ${createHash('sha256').update(presented.refreshToken).digest('hex')}`;
+
+      await expect(
+        service.rotate(presented.refreshToken, undefined, { requireRole: 'admin' }),
+      ).rejects.toMatchObject({ status: 401 });
+
+      expect(await reuseAudits(userId)).toBe(0);
+      const reasons = (await tokensOf(userId)).map((r) => r.revoked_reason ?? 'live').sort();
+      expect(reasons, 'the sibling session is untouched').toEqual(['live', reason].sort());
+      await expect(service.rotate(sibling.refreshToken)).resolves.toMatchObject({
+        expiresIn: 900,
+      });
+    },
+  );
 });

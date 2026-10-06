@@ -50,6 +50,16 @@ const ACCOUNT_STATE_REVOCATIONS: ReadonlySet<string | null> = new Set([
   'user_not_active',
 ]);
 
+/**
+ * Revocations of ONE token for a reason that is not misuse (SF-3, task 18a review): the admin
+ * refresh that found the role withdrawn, and a logout. Each revokes only the presented token, so
+ * presenting it again (a second tab, a retry, logout in one tab then refresh in another) is an
+ * expected client race. Treated as theft it revoked every session the person has, mobile included,
+ * and wrote an `auth.refresh-reuse-detected` row that read like an attack. Answered as a plain
+ * expiry instead. A ROTATED token is still reuse, whatever its revocation reason.
+ */
+const BENIGN_SINGLE_REVOCATIONS: ReadonlySet<string | null> = new Set(['role_revoked', 'logout']);
+
 /** Refusals that must commit their writes before the error is thrown. */
 type RotateRefusal = 'reuse_detected' | 'user_not_active' | 'role_revoked';
 
@@ -128,6 +138,11 @@ export class TokenService {
             .from(users)
             .where(eq(users.id, row.userId));
           if (owner !== undefined && owner.status !== UserStatus.ACTIVE) return 'user_not_active';
+          throw new UnauthorizedException('Your session has expired. Please log in again.');
+        }
+
+        // Nothing is written on this path, so throwing inside the transaction loses nothing.
+        if (!row.rotatedAt && row.revokedAt && BENIGN_SINGLE_REVOCATIONS.has(row.revokedReason)) {
           throw new UnauthorizedException('Your session has expired. Please log in again.');
         }
 
