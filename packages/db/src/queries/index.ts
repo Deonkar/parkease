@@ -16,6 +16,7 @@ export {
 export { PAYABLE_BALANCE, partnerPayable } from './partner-payable.js';
 
 export {
+  COUNTS_TOWARD_RATING,
   recomputeRatingAggregate,
   ageingReviewTargets,
   type RatingAggregate,

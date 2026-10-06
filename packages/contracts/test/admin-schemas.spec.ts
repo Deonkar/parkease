@@ -8,6 +8,7 @@ import {
   adminSpaceQueueQuerySchema,
   adminUserSchema,
   adminUsersQuerySchema,
+  auditQuerySchema,
   dateRangeSchema,
   grantRoleSchema,
   ledgerQuerySchema,
@@ -103,6 +104,23 @@ describe('ledgerQuerySchema range', () => {
   });
 });
 
+describe('auditQuerySchema range', () => {
+  it('accepts a missing, one-sided or ordinary range', () => {
+    expect(auditQuerySchema.safeParse({}).success).toBe(true);
+    expect(auditQuerySchema.safeParse({ from: '2026-10-01' }).success).toBe(true);
+    expect(auditQuerySchema.safeParse({ from: '2026-10-01', to: '2026-10-08' }).success).toBe(true);
+    expect(auditQuerySchema.safeParse({ from: '2026-01-01', to: '2027-01-02' }).success).toBe(true);
+  });
+
+  it.each([
+    ['from equal to to', { from: '2026-10-01', to: '2026-10-01' }],
+    ['from after to', { from: '2026-10-02', to: '2026-10-01' }],
+    ['a 400-day span', { from: '2026-01-01', to: '2027-02-05' }],
+  ])('rejects %s when both ends are set', (_label, input) => {
+    expect(auditQuerySchema.safeParse(input).success).toBe(false);
+  });
+});
+
 describe('grantRoleSchema', () => {
   it('rejects an unknown role', () => {
     expect(grantRoleSchema.safeParse({ role: 'superadmin', reason: 'x' }).success).toBe(false);
@@ -184,8 +202,13 @@ describe('moderationQueueItemSchema impact', () => {
     reports: [],
   };
 
-  it('parses an item without impact', () => {
-    expect(moderationQueueItemSchema.safeParse(item).success).toBe(true);
+  it('rejects an item without impact', () => {
+    expect(moderationQueueItemSchema.safeParse(item).success).toBe(false);
+  });
+
+  it('parses an item whose target would be left with no rating', () => {
+    const impact = { currentAvgBp: 10_000, avgBpIfRemoved: null, countIfRemoved: 0 };
+    expect(moderationQueueItemSchema.safeParse({ ...item, impact }).success).toBe(true);
   });
 
   it('parses an item with impact', () => {

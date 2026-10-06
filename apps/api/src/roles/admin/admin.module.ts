@@ -10,6 +10,7 @@ import { SpaceModule } from '../../domains/space/space.module.js';
 import { SurgeModule } from '../../domains/surge/surge.module.js';
 import { StorageModule } from '../../platform/storage/storage.module.js';
 
+import { AdminAuditController } from './audit.controller.js';
 import { AdminBookingsController } from './bookings.controller.js';
 import { AdminDashboardController } from './dashboard.controller.js';
 import { AdminFinanceController } from './finance.controller.js';
@@ -45,6 +46,7 @@ import { AdminUsersController } from './users.controller.js';
     AdminBookingsController,
     AdminDashboardController,
     AdminFinanceController,
+    AdminAuditController,
   ],
 })
 // eslint-disable-next-line @typescript-eslint/no-extraneous-class

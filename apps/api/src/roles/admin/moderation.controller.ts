@@ -58,7 +58,7 @@ export class AdminModerationController {
     return parseOutgoing(
       queuePageSchema,
       {
-        items: page.items.map(({ review, reports }) => ({
+        items: page.items.map(({ review, reports, impact }) => ({
           id: review.id,
           targetType: review.targetType,
           targetId: review.targetId,
@@ -66,6 +66,7 @@ export class AdminModerationController {
           comment: review.comment,
           createdAt: review.createdAt.toISOString(),
           reports: reports.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() })),
+          impact,
         })),
         meta: { limit: q.limit, hasMore: page.hasMore, nextCursor: page.nextCursor },
       },

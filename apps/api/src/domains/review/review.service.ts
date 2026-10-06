@@ -1,5 +1,7 @@
 import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import type { ReviewReportReason, ReviewTargetType } from '@parkease/contracts/enums';
+import { weightedAverageBp } from '@parkease/contracts/primitives';
+import { COUNTS_TOWARD_RATING } from '@parkease/db/queries';
 import {
   bookings,
   reviewReports,
@@ -58,9 +60,17 @@ export interface PendingBooking {
   readonly reviewed: ReadonlySet<string>;
 }
 
+/** What removing a review does to its target's rating. A null average means no rating remains. */
+export interface RemovalImpact {
+  readonly currentAvgBp: number | null;
+  readonly avgBpIfRemoved: number | null;
+  readonly countIfRemoved: number;
+}
+
 export interface QueueItem {
   readonly review: ReviewRecord;
   readonly reports: { reason: ReviewReportReason; detail: string | null; createdAt: Date }[];
+  readonly impact: RemovalImpact;
 }
 
 const cursorSchema = z.string().uuid();
@@ -287,7 +297,7 @@ export class ReviewService {
   }
 
   /** Reported and not removed, oldest first: the queue an admin works through. */
-  async moderationQueue(q: PageQuery): Promise<Page<QueueItem>> {
+  async moderationQueue(q: PageQuery, now: Date = new Date()): Promise<Page<QueueItem>> {
     const after = q.cursor === undefined ? undefined : this.cursorOf(q.cursor);
     const rows = await this.db
       .select()
@@ -321,6 +331,8 @@ export class ReviewService {
             )
             .orderBy(reviewReports.createdAt);
 
+    const rated = await this.ratedReviewsOf(items);
+
     return {
       items: items.map((review) => ({
         review,
@@ -331,10 +343,53 @@ export class ReviewService {
             detail: r.detail,
             createdAt: r.createdAt,
           })),
+        impact: removalImpact(review, rated, now),
       })),
       hasMore,
       nextCursor: hasMore ? (items.at(-1)?.id ?? null) : null,
     };
+  }
+
+  /**
+   * Every review that counts toward the rating of any target on this page, in one query: a page of
+   * fifty items is one round trip, not fifty. The row filter is the recompute's own, so the preview
+   * and the outcome read the same rows. A driver has no rating (the recompute returns null and 0),
+   * so a driver target is not read at all.
+   */
+  private async ratedReviewsOf(
+    items: readonly ReviewRecord[],
+  ): Promise<Map<string, { id: string; rating: number; createdAt: Date }[]>> {
+    const targets = new Map<string, ReviewRecord>();
+    for (const item of items) {
+      if (item.targetType !== 'driver') targets.set(targetKey(item), item);
+    }
+    if (targets.size === 0) return new Map();
+
+    const pairs = [...targets.values()].map((t) => sql`(${t.targetType}, ${t.targetId}::uuid)`);
+    const rows = await this.db
+      .select({
+        id: reviews.id,
+        targetType: reviews.targetType,
+        targetId: reviews.targetId,
+        rating: reviews.rating,
+        createdAt: reviews.createdAt,
+      })
+      .from(reviews)
+      .where(
+        and(
+          sql`(${reviews.targetType}, ${reviews.targetId}) IN (${sql.join(pairs, sql`, `)})`,
+          COUNTS_TOWARD_RATING,
+        ),
+      );
+
+    const byTarget = new Map<string, { id: string; rating: number; createdAt: Date }[]>();
+    for (const row of rows) {
+      const key = targetKey(row);
+      const list = byTarget.get(key) ?? [];
+      list.push({ id: row.id, rating: row.rating, createdAt: row.createdAt });
+      byTarget.set(key, list);
+    }
+    return byTarget;
   }
 
   private async page(q: PageQuery, where: SQL): Promise<Page<ReviewRow>> {
@@ -362,6 +417,31 @@ export class ReviewService {
     }
     return parsed.data;
   }
+}
+
+const targetKey = (r: { targetType: string; targetId: string }): string =>
+  `${r.targetType}:${r.targetId}`;
+
+/**
+ * The same arithmetic the recompute uses (`weightedAverageBp`, over the same rows), run once with
+ * the review and once without it. A review that already does not count (it was removed since the
+ * page was read) changes nothing, which is also what removing it would do.
+ */
+function removalImpact(
+  review: ReviewRecord,
+  rated: ReadonlyMap<string, readonly { id: string; rating: number; createdAt: Date }[]>,
+  now: Date,
+): RemovalImpact {
+  if (review.targetType === 'driver') {
+    return { currentAvgBp: null, avgBpIfRemoved: null, countIfRemoved: 0 };
+  }
+  const all = rated.get(targetKey(review)) ?? [];
+  const without = all.filter((r) => r.id !== review.id);
+  return {
+    currentAvgBp: weightedAverageBp(all, now),
+    avgBpIfRemoved: weightedAverageBp(without, now),
+    countIfRemoved: without.length,
+  };
 }
 
 /** `reviews_rating_check` keeps this in 1..5; anything else is a broken database, not input. */

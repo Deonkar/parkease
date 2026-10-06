@@ -3,15 +3,19 @@ import { z } from 'zod';
 import { roleSchema } from '../enums/role.js';
 import { userIdSchema } from '../primitives/ids.js';
 
+import { refineDateRange } from './finance.js';
 import { adminCursorQuerySchema, istDateSchema } from './query.js';
 
-export const auditQuerySchema = adminCursorQuerySchema.extend({
-  actorUserId: userIdSchema.optional(),
-  action: z.string().trim().min(1).max(100).optional(),
-  targetType: z.string().trim().min(1).max(50).optional(),
-  from: istDateSchema.optional(),
-  to: istDateSchema.optional(),
-});
+/** A one-sided range is a filter; a closed one obeys the same bounds as every finance query. */
+export const auditQuerySchema = adminCursorQuerySchema
+  .extend({
+    actorUserId: userIdSchema.optional(),
+    action: z.string().trim().min(1).max(100).optional(),
+    targetType: z.string().trim().min(1).max(50).optional(),
+    from: istDateSchema.optional(),
+    to: istDateSchema.optional(),
+  })
+  .superRefine(refineDateRange);
 
 export type AuditQuery = z.infer<typeof auditQuerySchema>;
 

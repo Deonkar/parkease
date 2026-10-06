@@ -2,57 +2,19 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { ledgerEntrySchema, LedgerQuery } from '@parkease/contracts/admin';
 import { ledgerAccountSchema, ledgerDirectionSchema } from '@parkease/contracts/enums';
 import { ledgerEntries } from '@parkease/db/schema';
-import { and, desc, eq, gte, lt, type SQL, sql } from 'drizzle-orm';
-import { z } from 'zod';
+import { and, desc, eq, gte, lt, type SQL } from 'drizzle-orm';
+import type { z } from 'zod';
 
 import { DB, type Database } from '../../../platform/db/db.module.js';
-
-import { istDayStart } from './account-totals.js';
+import { istDayStart } from '../../../platform/db/ist.js';
+import {
+  afterInstantCursor,
+  decodeInstantCursor,
+  encodeInstantCursor,
+  instantText,
+} from '../../../platform/http/instant-cursor.js';
 
 type EntryView = z.input<typeof ledgerEntrySchema>;
-
-/**
- * `occurred_at` at full microsecond precision. A JS `Date` carries milliseconds, so a cursor built
- * from one would sit up to 999 microseconds before the row it names, and that row would come back
- * on the next page. The cursor is therefore the text Postgres itself formats.
- */
-const OCCURRED_AT_TEXT = sql<string>`to_char(${ledgerEntries.occurredAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
-
-/**
- * The shape alone is not enough: `9999-99-99T99:99:99.000000Z` and 30 February both match it, and
- * Postgres refuses the `::timestamptz` cast (22008), which would answer a tampered cursor with a
- * 500. A real instant survives the round trip through `Date` at second precision; one that was
- * normalised (month 99, hour 24, 29 February in a common year) does not. The microseconds are
- * left to Postgres, which is why this compares only the first 19 characters.
- */
-function isRealInstant(text: string): boolean {
-  const date = new Date(text);
-  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 19) === text.slice(0, 19);
-}
-
-const cursorSchema = z.object({
-  occurredAt: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/)
-    .refine(isRealInstant, 'not a real instant'),
-  id: z.string().uuid(),
-});
-
-type Cursor = z.infer<typeof cursorSchema>;
-
-const SEPARATOR = '|';
-
-export const encodeLedgerCursor = (cursor: Cursor): string =>
-  Buffer.from(`${cursor.occurredAt}${SEPARATOR}${cursor.id}`, 'utf8').toString('base64url');
-
-/**
- * A cursor is client input however opaque it looks: it is parsed, and a malformed one is a
- * ZodError, which the exception filter answers as 400 VALIDATION_FAILED.
- */
-export function decodeLedgerCursor(raw: string): Cursor {
-  const [occurredAt, id, ...rest] = Buffer.from(raw, 'base64url').toString('utf8').split(SEPARATOR);
-  return cursorSchema.parse({ occurredAt, id: rest.length === 0 ? id : undefined });
-}
 
 export interface LedgerPage {
   readonly items: EntryView[];
@@ -75,7 +37,7 @@ export class LedgerExplorerQuery {
   constructor(@Inject(DB) private readonly db: Database) {}
 
   async page(q: LedgerQuery): Promise<LedgerPage> {
-    const cursor = q.cursor === undefined ? undefined : decodeLedgerCursor(q.cursor);
+    const cursor = q.cursor === undefined ? undefined : decodeInstantCursor(q.cursor);
 
     const where: (SQL | undefined)[] = [
       q.account === undefined ? undefined : eq(ledgerEntries.account, q.account),
@@ -87,7 +49,7 @@ export class LedgerExplorerQuery {
       q.to === undefined ? undefined : lt(ledgerEntries.occurredAt, istDayStart(q.to)),
       cursor === undefined
         ? undefined
-        : sql`(${ledgerEntries.occurredAt}, ${ledgerEntries.id}) < (${cursor.occurredAt}::timestamptz, ${cursor.id}::uuid)`,
+        : afterInstantCursor(ledgerEntries.occurredAt, ledgerEntries.id, cursor),
     ];
 
     // One extra row says whether there is a next page without a count.
@@ -102,7 +64,7 @@ export class LedgerExplorerQuery {
         payoutId: ledgerEntries.payoutId,
         description: ledgerEntries.description,
         occurredAt: ledgerEntries.occurredAt,
-        occurredAtText: OCCURRED_AT_TEXT,
+        occurredAtText: instantText(ledgerEntries.occurredAt),
       })
       .from(ledgerEntries)
       .where(and(...where))
@@ -130,7 +92,7 @@ export class LedgerExplorerQuery {
         hasMore,
         nextCursor:
           hasMore && last !== undefined
-            ? encodeLedgerCursor({ occurredAt: last.occurredAtText, id: last.id })
+            ? encodeInstantCursor({ occurredAt: last.occurredAtText, id: last.id })
             : null,
       },
     };

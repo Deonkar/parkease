@@ -29,14 +29,11 @@ export const moderationQueueItemSchema = z.object({
    * What removing this review does to the target's rating, so the moderator sees the cost of
    * the decision before making it. Null averages mean no rating would remain (or none exists).
    */
-  // Optional until Task 9 of 18a supplies it from the review service, then it becomes required.
-  impact: z
-    .object({
-      currentAvgBp: z.number().int().nullable(),
-      avgBpIfRemoved: z.number().int().nullable(),
-      countIfRemoved: z.number().int().nonnegative(),
-    })
-    .optional(),
+  impact: z.object({
+    currentAvgBp: z.number().int().nullable(),
+    avgBpIfRemoved: z.number().int().nullable(),
+    countIfRemoved: z.number().int().nonnegative(),
+  }),
 });
 
 export type ModerationQueueItem = z.infer<typeof moderationQueueItemSchema>;

@@ -11,6 +11,7 @@ import { and, gte, lt, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
 import { DB, type Database } from '../../../platform/db/db.module.js';
+import { istDayStart } from '../../../platform/db/ist.js';
 
 export type Reader = Pick<Database, 'select'>;
 
@@ -18,13 +19,6 @@ export interface IstRange {
   readonly fromTs: Date;
   readonly toTs: Date;
 }
-
-/**
- * IST calendar dates to the instants that bound them: `from` at 00:00 IST, `to` exclusive. The
- * dates are already Zod-validated `YYYY-MM-DD`; the offset is written out rather than read from
- * the server's zone, so a deploy in UTC and a laptop in Bengaluru bucket the same entry the same way.
- */
-export const istDayStart = (day: string): Date => new Date(`${day}T00:00:00+05:30`);
 
 export const istRange = (from: string, to: string): IstRange => ({
   fromTs: istDayStart(from),

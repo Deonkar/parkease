@@ -639,6 +639,123 @@ describe('reviews HTTP', () => {
       expect(requeued?.reports.map((r) => r.reason)).toEqual(['inappropriate']);
     });
 
+    describe('impact preview', () => {
+      interface Impact {
+        currentAvgBp: number | null;
+        avgBpIfRemoved: number | null;
+        countIfRemoved: number;
+      }
+      interface QueueRow {
+        id: string;
+        impact: Impact;
+      }
+
+      const insertReview = async (
+        rating: number,
+        opts: { reported?: boolean; daysAgo?: number; targetId?: string } = {},
+      ): Promise<string> => {
+        const reviewer = await seedUser(h, 'driver');
+        const [row] = await h.sql<{ id: string }[]>`
+          INSERT INTO reviews (booking_id, reviewer_user_id, reviewer_role, target_type, target_id,
+                               rating, is_reported, created_at)
+          VALUES (${bookingId}, ${reviewer}, 'driver', 'space', ${opts.targetId ?? spaceId}, ${rating},
+                  ${opts.reported ?? false},
+                  now() - make_interval(secs => ${(opts.daysAgo ?? 0) * 86_400}))
+          RETURNING id`;
+        return row!.id;
+      };
+
+      const queue = async () => data<QueueRow[]>(await get('/api/v1/admin/moderation/reviews'));
+
+      it('equals the average the space actually has after the removal', async () => {
+        // An old 5 (weight 1), a recent 5 and the reported recent 1 (weight 2 each).
+        await insertReview(5, { daysAgo: 40 });
+        await insertReview(5);
+        const reported = await insertReview(1, { reported: true });
+        asAdmin();
+
+        const [item] = await queue();
+        expect(item?.id).toBe(reported);
+        // (5*1 + 5*2 + 1*2) / 5 = 3.4 stars; without the 1: (5 + 10) / 3 = 5.0.
+        expect(item?.impact).toEqual({
+          currentAvgBp: 34_000,
+          avgBpIfRemoved: 50_000,
+          countIfRemoved: 2,
+        });
+
+        const removed = await post(`/api/v1/admin/moderation/reviews/${reported}/remove`, {
+          reason: 'spam_or_fake',
+        });
+        expect(removed.status).toBe(200);
+        const after = await readModel('spaces', 'id', spaceId);
+        expect(after).toEqual({
+          avg: item?.impact.avgBpIfRemoved,
+          count: item?.impact.countIfRemoved,
+        });
+      });
+
+      it('says no rating would remain when the reported review is the only one', async () => {
+        await insertReview(2, { reported: true });
+        asAdmin();
+        const [item] = await queue();
+        expect(item?.impact).toEqual({
+          currentAvgBp: 20_000,
+          avgBpIfRemoved: null,
+          countIfRemoved: 0,
+        });
+      });
+
+      it('reads each target from its own reviews, in one pass over a page that mixes targets', async () => {
+        const otherSpace = await seedSpace(h, { ...ORIGIN, title: 'Second space' });
+        const a = await insertReview(1, { reported: true });
+        await insertReview(5);
+        const b = await insertReview(4, { reported: true, targetId: otherSpace });
+        await insertReview(4, { targetId: otherSpace });
+        asAdmin();
+
+        const impacts = new Map((await queue()).map((row) => [row.id, row.impact]));
+        expect(impacts.get(a)).toEqual({
+          currentAvgBp: 30_000,
+          avgBpIfRemoved: 50_000,
+          countIfRemoved: 1,
+        });
+        expect(impacts.get(b)).toEqual({
+          currentAvgBp: 40_000,
+          avgBpIfRemoved: 40_000,
+          countIfRemoved: 1,
+        });
+      });
+
+      it('ignores reviews that are already removed, as the recompute does', async () => {
+        const gone = await insertReview(1);
+        await h.sql`UPDATE reviews SET moderation_status = 'removed', deleted_at = now() WHERE id = ${gone}`;
+        await insertReview(5);
+        await insertReview(3, { reported: true });
+        asAdmin();
+        const [item] = await queue();
+        expect(item?.impact).toEqual({
+          currentAvgBp: 40_000,
+          avgBpIfRemoved: 50_000,
+          countIfRemoved: 1,
+        });
+      });
+
+      it('has no rating to move for a driver, matching the recompute (null, 0)', async () => {
+        const [row] = await h.sql<{ id: string }[]>`
+          INSERT INTO reviews (booking_id, reviewer_user_id, reviewer_role, target_type, target_id,
+                               rating, is_reported)
+          VALUES (${bookingId}, ${h.ownerId}, 'owner', 'driver', ${h.driverId}, 2, true)
+          RETURNING id`;
+        asAdmin();
+        const item = (await queue()).find((r) => r.id === row!.id);
+        expect(item?.impact).toEqual({
+          currentAvgBp: null,
+          avgBpIfRemoved: null,
+          countIfRemoved: 0,
+        });
+      });
+    });
+
     it('pages the queue in order without repeats, and refuses a forged cursor', async () => {
       const ids: string[] = [];
       for (let i = 0; i < 3; i++) {
