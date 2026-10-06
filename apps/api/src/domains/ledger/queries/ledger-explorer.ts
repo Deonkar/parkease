@@ -18,8 +18,23 @@ type EntryView = z.input<typeof ledgerEntrySchema>;
  */
 const OCCURRED_AT_TEXT = sql<string>`to_char(${ledgerEntries.occurredAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
 
+/**
+ * The shape alone is not enough: `9999-99-99T99:99:99.000000Z` and 30 February both match it, and
+ * Postgres refuses the `::timestamptz` cast (22008), which would answer a tampered cursor with a
+ * 500. A real instant survives the round trip through `Date` at second precision; one that was
+ * normalised (month 99, hour 24, 29 February in a common year) does not. The microseconds are
+ * left to Postgres, which is why this compares only the first 19 characters.
+ */
+function isRealInstant(text: string): boolean {
+  const date = new Date(text);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 19) === text.slice(0, 19);
+}
+
 const cursorSchema = z.object({
-  occurredAt: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/),
+  occurredAt: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/)
+    .refine(isRealInstant, 'not a real instant'),
   id: z.string().uuid(),
 });
 

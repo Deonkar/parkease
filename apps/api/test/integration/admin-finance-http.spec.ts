@@ -394,6 +394,22 @@ describe('admin finance HTTP', () => {
         expect(garbage.status).toBe(400);
         expect(envelope(garbage).error?.code).toBe('VALIDATION_FAILED');
 
+        // Valid shape, impossible instant: Postgres would refuse the cast, so it must stop at Zod.
+        const id = '0192f1c0-0000-7000-8000-000000000001';
+        for (const text of [
+          `9999-99-99T99:99:99.000000Z|${id}`,
+          `2026-02-30T00:00:00.000000Z|${id}`,
+          'not base64url json at all',
+        ]) {
+          const cursor = Buffer.from(text, 'utf8').toString('base64url');
+          const tampered = await read(`/api/v1/admin/ledger?cursor=${cursor}`);
+          expect(tampered.status, text).toBe(400);
+          expect(envelope(tampered).error?.code, text).toBe('VALIDATION_FAILED');
+        }
+        const notBase64 = await read('/api/v1/admin/ledger?cursor=%7B%22a%22%3A1%7D');
+        expect(notBase64.status).toBe(400);
+        expect(envelope(notBase64).error?.code).toBe('VALIDATION_FAILED');
+
         const inverted = await read('/api/v1/admin/ledger?from=2026-10-08&to=2026-10-01');
         expect(inverted.status).toBe(400);
         expect(envelope(inverted).error?.code).toBe('VALIDATION_FAILED');
