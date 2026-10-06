@@ -300,6 +300,18 @@ export function refundEntries(
  *
  * Extracted from the `ACTIVE_GRACE` tier (task 18a) because an admin-chosen refund is the
  * same posting with a different amount: one rounding rule, one place that can be wrong.
+ *
+ * **Precondition: `refundPaise ≤ totals.driverTotalPaise`**, and across several calls against the
+ * same booking, the sum of their `refundPaise` must stay within it too. This function does not
+ * check either: it cannot see earlier refunds. The caller enforces it — `AdminRefundCommand`
+ * refuses any amount above the balance it reads under the payment lock.
+ *
+ * **Several partial refunds drift by at most a paisa per leg.** Each call allocates against the
+ * booking's ORIGINAL totals, and largest-remainder rounding is per call, so two partials that sum
+ * to X can split X differently from one refund of X — a leg may end up one paisa above or below
+ * its exact share. Every posting still balances on its own (the legs always sum to `refundPaise`),
+ * so the ledger-balance invariant holds; only the owner/platform/tax attribution can be off by
+ * ≤1 paisa per leg per refund. Accepted in task 18a rather than tracking per-leg remainders.
  */
 export function proportionalRefundEntries(
   totals: ReceivableTotals,

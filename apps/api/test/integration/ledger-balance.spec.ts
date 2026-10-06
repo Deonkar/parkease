@@ -115,15 +115,19 @@ describe('ledger balance', () => {
     await capture(beforeStart.booking.id, driverB, beforeStart.booking.totalPaise);
     await stack.cancel.execute({
       bookingId: beforeStart.booking.id,
-      driverId: driverB,
       reason: 'plans changed',
+      by: { kind: 'driver', driverId: driverB },
     });
 
     // Cancelled with nothing captured: a full reversal, not a refund.
     const driverC = await seedUser(h, 'driver');
     const unpaid = await book(spaceId, driverC, 50, 2);
     await h.sql`UPDATE bookings SET status = 'confirmed' WHERE id = ${unpaid.booking.id}`;
-    await stack.cancel.execute({ bookingId: unpaid.booking.id, driverId: driverC, reason: null });
+    await stack.cancel.execute({
+      bookingId: unpaid.booking.id,
+      reason: null,
+      by: { kind: 'driver', driverId: driverC },
+    });
 
     expect(await unbalancedTxns()).toEqual([]);
     expect(surged.booking.surgePremiumPaise).toBeGreaterThan(0);
@@ -156,13 +160,21 @@ describe('ledger balance', () => {
     const driverB = await seedUser(h, 'driver');
     const paid = await book(spaceId, driverB, 40, 2);
     await capture(paid.booking.id, driverB, paid.booking.totalPaise);
-    await stack.cancel.execute({ bookingId: paid.booking.id, driverId: driverB, reason: null });
+    await stack.cancel.execute({
+      bookingId: paid.booking.id,
+      reason: null,
+      by: { kind: 'driver', driverId: driverB },
+    });
 
     // Never paid, cancelled: the receivable reversed, the waiver with it.
     const driverC = await seedUser(h, 'driver');
     const unpaid = await book(spaceId, driverC, 50, 2);
     await h.sql`UPDATE bookings SET status = 'confirmed' WHERE id = ${unpaid.booking.id}`;
-    await stack.cancel.execute({ bookingId: unpaid.booking.id, driverId: driverC, reason: null });
+    await stack.cancel.execute({
+      bookingId: unpaid.booking.id,
+      reason: null,
+      by: { kind: 'driver', driverId: driverC },
+    });
 
     expect(await unbalancedTxns()).toEqual([]);
     expect(await promoNet(kept.booking.id)).toBe(keptRow?.waiver);
@@ -259,7 +271,11 @@ describe('ledger balance', () => {
     const { booking } = await book(spaceId, h.driverId, 2, 2);
     await h.sql`UPDATE bookings SET status = 'confirmed' WHERE id = ${booking.id}`;
 
-    await stack.cancel.execute({ bookingId: booking.id, driverId: h.driverId, reason: null });
+    await stack.cancel.execute({
+      bookingId: booking.id,
+      reason: null,
+      by: { kind: 'driver', driverId: h.driverId },
+    });
 
     expect(await ownerBalance.forBooking(booking.id)).toBe(0);
     expect(await unbalancedTxns()).toEqual([]);

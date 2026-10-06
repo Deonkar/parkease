@@ -52,6 +52,7 @@ import { RolesGuard } from '../../src/platform/rbac/roles.guard.js';
 import { REDIS, RedisModule } from '../../src/platform/redis/redis.module.js';
 import { StorageModule } from '../../src/platform/storage/storage.module.js';
 import { TelephonyModule } from '../../src/platform/telephony/telephony.module.js';
+import { AdminBookingsController } from '../../src/roles/admin/bookings.controller.js';
 import { AdminModerationController } from '../../src/roles/admin/moderation.controller.js';
 import { AdminPartnersController } from '../../src/roles/admin/partners.controller.js';
 import { AdminSpacesController } from '../../src/roles/admin/spaces.controller.js';
@@ -193,6 +194,7 @@ class StubAuthGuard implements CanActivate {
     AdminSpacesController,
     AdminUsersController,
     AdminPartnersController,
+    AdminBookingsController,
     OwnerSpacesController,
     DriverReviewsController,
     OwnerReviewsController,

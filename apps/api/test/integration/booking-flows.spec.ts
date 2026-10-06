@@ -184,8 +184,8 @@ describe('booking flows', () => {
 
       await stack.cancel.execute({
         bookingId: booking.id,
-        driverId: h.driverId,
         reason: 'plans changed',
+        by: { kind: 'driver', driverId: h.driverId },
       });
 
       expect((await bookingRow(booking.id))?.status).toBe('cancelled');
@@ -209,10 +209,18 @@ describe('booking flows', () => {
       const { booking } = await book(spaceId, h.driverId, windowFromNow(2, 2));
       await markConfirmed(h, booking.id);
 
-      await stack.cancel.execute({ bookingId: booking.id, driverId: h.driverId, reason: null });
+      await stack.cancel.execute({
+        bookingId: booking.id,
+        reason: null,
+        by: { kind: 'driver', driverId: h.driverId },
+      });
 
       await expect(
-        stack.cancel.execute({ bookingId: booking.id, driverId: h.driverId, reason: null }),
+        stack.cancel.execute({
+          bookingId: booking.id,
+          reason: null,
+          by: { kind: 'driver', driverId: h.driverId },
+        }),
       ).rejects.toBeInstanceOf(IllegalBookingTransitionError);
 
       const txns = await h.sql<{ n: number }[]>`
@@ -226,7 +234,11 @@ describe('booking flows', () => {
       const { booking } = await book(spaceId, h.driverId, windowFromNow(2, 2));
 
       await expect(
-        stack.cancel.execute({ bookingId: booking.id, driverId: h.driverId, reason: null }),
+        stack.cancel.execute({
+          bookingId: booking.id,
+          reason: null,
+          by: { kind: 'driver', driverId: h.driverId },
+        }),
       ).rejects.toBeInstanceOf(IllegalBookingTransitionError);
     });
 
@@ -235,7 +247,11 @@ describe('booking flows', () => {
       const { booking } = await book(spaceId, h.driverId, windowFromNow(2, 2));
       await markActive(h, booking.id);
 
-      await stack.cancel.execute({ bookingId: booking.id, driverId: h.driverId, reason: null });
+      await stack.cancel.execute({
+        bookingId: booking.id,
+        reason: null,
+        by: { kind: 'driver', driverId: h.driverId },
+      });
       expect((await bookingRow(booking.id))?.status).toBe('cancelled');
       expect((await slotRow(booking.id))?.status).toBe('released');
     });
@@ -247,7 +263,11 @@ describe('booking flows', () => {
       const stranger = await seedUser(h, 'driver');
 
       await expect(
-        stack.cancel.execute({ bookingId: booking.id, driverId: stranger, reason: null }),
+        stack.cancel.execute({
+          bookingId: booking.id,
+          reason: null,
+          by: { kind: 'driver', driverId: stranger },
+        }),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
@@ -373,7 +393,11 @@ describe('booking flows', () => {
       const window = windowFromNow(2, 2);
       const { booking } = await book(spaceId, h.driverId, window);
       await markConfirmed(h, booking.id);
-      await stack.cancel.execute({ bookingId: booking.id, driverId: h.driverId, reason: null });
+      await stack.cancel.execute({
+        bookingId: booking.id,
+        reason: null,
+        by: { kind: 'driver', driverId: h.driverId },
+      });
 
       await expect(
         stack.extend.execute({
@@ -553,7 +577,11 @@ describe('booking flows', () => {
       await markConfirmed(h, booking.id);
       await deactivate(spaceId);
 
-      await stack.cancel.execute({ bookingId: booking.id, driverId: h.driverId, reason: null });
+      await stack.cancel.execute({
+        bookingId: booking.id,
+        reason: null,
+        by: { kind: 'driver', driverId: h.driverId },
+      });
       expect((await bookingRow(booking.id))?.status).toBe('cancelled');
     });
 
@@ -599,8 +627,8 @@ describe('booking flows', () => {
       await markConfirmed(h, cancelled.booking.id);
       await stack.cancel.execute({
         bookingId: cancelled.booking.id,
-        driverId: driverB,
         reason: 'nope',
+        by: { kind: 'driver', driverId: driverB },
       });
 
       expect(await unbalancedTxns()).toHaveLength(0);

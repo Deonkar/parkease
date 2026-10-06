@@ -114,8 +114,8 @@ export class DriverBookingsController {
 
     await this.cancelBooking.execute({
       bookingId: id,
-      driverId: user.id,
       reason: input.reason ?? null,
+      by: { kind: 'driver', driverId: user.id },
     });
 
     return this.detail(user, id);

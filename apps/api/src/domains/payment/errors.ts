@@ -79,3 +79,44 @@ export class TransferExceedsCaptureError extends Error {
     this.name = 'TransferExceedsCaptureError';
   }
 }
+
+/**
+ * An admin refund asked for more than is left, or for nothing at all. 422 rather than 400: the
+ * body parsed, and it is the booking's balance — read under the payment lock — that refuses it.
+ * A malformed body is still 400 `VALIDATION_FAILED` from the filter (task 18a ruling).
+ */
+export class RefundExceedsBalanceError extends PaymentDomainError {
+  constructor() {
+    super(
+      'REFUND_EXCEEDS_BALANCE',
+      'That refund is more than is left to refund on this booking.',
+      HttpStatus.UNPROCESSABLE_ENTITY,
+    );
+  }
+}
+
+/** The booking was never paid for, so there is no money at the gateway to send back. */
+export class NoCapturedPaymentError extends PaymentDomainError {
+  constructor() {
+    super(
+      'NO_CAPTURED_PAYMENT',
+      'This booking has no captured payment to refund.',
+      HttpStatus.CONFLICT,
+    );
+  }
+}
+
+/**
+ * An admin refund on a booking that is still live. Cancelling is the refund for an upcoming or
+ * running booking: it releases the slot and refunds by the published tier, whereas a partial
+ * refund here would leave a confirmed booking whose later cancellation refunds it a second time.
+ */
+export class BookingNotSettledError extends PaymentDomainError {
+  constructor() {
+    super(
+      'BOOKING_NOT_SETTLED',
+      'Refund a booking once it has finished. To refund a live booking, cancel it.',
+      HttpStatus.CONFLICT,
+    );
+  }
+}

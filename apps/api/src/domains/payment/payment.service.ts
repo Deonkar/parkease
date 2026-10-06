@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { PaymentStatus } from '@parkease/contracts/enums';
 import { bookings, linkedAccounts, payments, refunds, spaces, washJobs } from '@parkease/db/schema';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull } from 'drizzle-orm';
 
 import { DB, type Database } from '../../platform/db/db.module.js';
 import type { TxHandle } from '../../platform/db/transaction.js';
@@ -17,6 +17,16 @@ export interface InsertPaymentInput {
   /** The Route transfer attached to the order; null when it carried none. */
   readonly routeTransferPaise: number | null;
 }
+
+/**
+ * A payment whose money reached us, whatever has been refunded since. The admin refund lock and
+ * the booking detail's refundable balance must pick the same payment, so they share this.
+ */
+export const CAPTURED_PAYMENT_STATUSES: PaymentStatus[] = [
+  'captured',
+  'partially_refunded',
+  'refunded',
+];
 
 /**
  * Every read and write against `payments`, `refunds` and `linked_accounts`.
@@ -216,6 +226,53 @@ export class PaymentService {
       .orderBy(desc(payments.capturedAt))
       .limit(1);
     return row;
+  }
+
+  /**
+   * The booking's captured parking payment, row-locked (`FOR UPDATE`) — the first statement of an
+   * admin refund's transaction.
+   *
+   * The lock is what makes "what is left to refund" safe to read: two admins refunding the same
+   * booking queue here, and the second reads the refund total only after the first has committed,
+   * so neither can spend a balance the other already spent (task 18a). It is taken before anything
+   * else in the transaction so every writer to this payment acquires the same lock first.
+   *
+   * "Captured" means money reached us at some point: a partly or fully refunded payment still
+   * matches, so a second partial refund finds it and a fully refunded one answers with a zero
+   * balance rather than "never paid". Scoped to `purpose = 'booking'`: a car wash order hangs off
+   * the same booking, and its money is not the parking's to refund.
+   */
+  async lockCapturedForBooking(tx: TxHandle, bookingId: string) {
+    const [row] = await tx
+      .select()
+      .from(payments)
+      .where(
+        and(
+          eq(payments.bookingId, bookingId),
+          eq(payments.purpose, 'booking'),
+          inArray(payments.status, CAPTURED_PAYMENT_STATUSES),
+          isNotNull(payments.razorpayPaymentId),
+          isNotNull(payments.capturedPaise),
+        ),
+      )
+      .orderBy(desc(payments.capturedAt))
+      .limit(1)
+      .for('update');
+    return row;
+  }
+
+  /**
+   * Every refund issued against a payment, whatever its gateway status: its ledger posting
+   * committed when it was created. Read inside the caller's transaction, after
+   * `lockCapturedForBooking`, so it includes everything committed before the lock was granted.
+   * The reason travels with the amount because a full-reversal tier zeroes what is left
+   * (`refundableOf`).
+   */
+  async refundsFor(tx: TxHandle, paymentId: string) {
+    return tx
+      .select({ amountPaise: refunds.amountPaise, reason: refunds.reason })
+      .from(refunds)
+      .where(eq(refunds.paymentId, paymentId));
   }
 
   async markCaptured(
