@@ -501,7 +501,8 @@ published against unchanged versions (e.g. `sharp` 2026-09-08); both criticals a
 
 **Resolved 2026-10-06.** Direct upgrades: vitest 3.2.7, vite 6.4.3, fastify 5.12.5, @nestjs/_ 12.0.4,
 next 15.5.27, testcontainers 11.14.0, @opentelemetry/_ 0.222 / 2.x (`Resource` → `resourceFromAttributes`).
-Scoped overrides: brace-expansion 1/2/5, @grpc/grpc-js 1.14.5, tar-fs@2, postcss, next>sharp 0.35.5.
+Scoped overrides: brace-expansion 1/2/5, @grpc/grpc-js 1.14.5, tar-fs@2, postcss, next>sharp 0.35.5,
+vitest>tinypool 2.1.2 and compression 1.8.2 (three advisories published 2026-10-05, mid-sweep).
 **Accepted residual** (`auditConfig.ignoreGhsas` in the root `package.json`), no patched release exists or
 the patch breaks the consumer:
 
