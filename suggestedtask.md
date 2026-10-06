@@ -2348,7 +2348,7 @@ unfiltered explorer page or a whole-range export sorts every row in range before
 
 ### S-139 — JSON endpoints accept form-encoded and text/plain bodies
 
-- **Status:** `open`
+- **Status:** `fixed` — task 18 completion: `JsonOnlyGuard` answers 415 to any non-JSON write; the pentest case runs
 - **Found in:** task 18a pentest (F3), 2026-10-06
 - **Surface:** api · platform/http
 
@@ -2358,7 +2358,7 @@ A role grant executed from an `application/x-www-form-urlencoded` body. Not a CS
 
 ### S-140 — Admin dashboard p95 is 9.76 s at 200 concurrent over a 250k-row ledger
 
-- **Status:** `open`
+- **Status:** `fixed` — task 18 completion: counts in one statement, identical concurrent reads coalesced; 200 concurrent dashboards p95 213 ms (was 9.76 s); the stress case runs
 - **Found in:** task 18a stress run, 2026-10-06
 - **Surface:** api · `domains/ledger/queries/dashboard.ts`
 
@@ -2368,7 +2368,7 @@ A single dashboard is ~152 ms; `imbalancedTxnIds` is ~80% of it (full txn_id ind
 
 ### S-141 — Ledger export can hold pooled connections while a client stalls, and is not audited
 
-- **Status:** `open`
+- **Status:** `fixed` — task 18 completion: at most 2 concurrent exports (429 EXPORT_BUSY), a 5-minute deadline destroys a stalled stream, one `ledger.export` audit row each
 - **Found in:** task 18a review (security M1, database H1, silent-failure 5), 2026-10-06
 - **Surface:** api · `ledger-export.ts`, `finance.controller.ts`
 
@@ -2398,7 +2398,7 @@ POST `/auth/admin/refresh` and `/logout` with `{}` (Fastify answers 400 to an em
 
 ### S-144 — Admin panel (18b/18c) follow-ups deferred to keep the task small
 
-- **Status:** `open`
+- **Status:** `fixed` except the user detail page (the list already shows every field it would) — task 18 completion: heat map (`GET /admin/surge/heatmap` + MapLibre), override ladder editor, dashboard chart (`series`), 10 Playwright flows on fixtures, route-level code splitting
 - **Found in:** task 18b/18c build, 2026-10-07
 - **Surface:** admin · api
 

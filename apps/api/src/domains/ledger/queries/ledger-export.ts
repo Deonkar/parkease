@@ -1,7 +1,11 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Readable } from 'node:stream';
+
+import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { trace } from '@opentelemetry/api';
 
 import { DB, type Database } from '../../../platform/db/db.module.js';
+import { withTransaction } from '../../../platform/db/transaction.js';
+import { AuditService, type AdminActor } from '../../../platform/observability/audit.service.js';
 import { logger } from '../../../platform/observability/logger.js';
 
 import type { IstRange } from './account-totals.js';
@@ -125,9 +129,63 @@ export async function* streamLedgerCsv(sql: SqlClient, range: IstRange): AsyncGe
 /** The export's seam to Nest: hands the one shared client to the generator. */
 @Injectable()
 export class LedgerExportStream {
-  constructor(@Inject(DB) private readonly db: Database) {}
+  private active = 0;
 
-  stream(range: IstRange): AsyncGenerator<string> {
-    return streamLedgerCsv(this.db.$client, range);
+  constructor(
+    @Inject(DB) private readonly db: Database,
+    private readonly audit: AuditService,
+  ) {}
+
+  /**
+   * Each export holds one pooled connection for as long as the client reads (S-141). So at most
+   * MAX_CONCURRENT_EXPORTS run at once, a stalled one is destroyed at the deadline (which returns
+   * the generator, closing its cursor and its connection), and every export is audited before the
+   * first byte — who pulled the whole ledger, for which range, from where.
+   */
+  async open(
+    range: IstRange,
+    label: { from: string; to: string },
+    actor: AdminActor,
+  ): Promise<Readable> {
+    if (this.active >= MAX_CONCURRENT_EXPORTS) throw new ExportBusyError();
+    await withTransaction(this.db, (tx) =>
+      this.audit.record(tx, {
+        actorUserId: actor.userId,
+        actorRole: 'admin',
+        action: 'ledger.export',
+        targetType: 'ledger',
+        targetId: null,
+        after: label,
+        ipAddress: actor.ipAddress,
+      }),
+    );
+
+    this.active += 1;
+    const stream = Readable.from(streamLedgerCsv(this.db.$client, range), { objectMode: false });
+    const deadline = setTimeout(() => {
+      logger.warn(
+        { ...label, actor: actor.userId },
+        'ledger export hit its deadline; destroying it',
+      );
+      stream.destroy(new Error('ledger export exceeded its deadline'));
+    }, EXPORT_DEADLINE_MS);
+    stream.once('close', () => {
+      clearTimeout(deadline);
+      this.active -= 1;
+    });
+    return stream;
+  }
+}
+
+export const MAX_CONCURRENT_EXPORTS = 2;
+/** Long enough for a year's ledger on a slow link; short enough that a stalled client lets go. */
+export const EXPORT_DEADLINE_MS = 5 * 60_000;
+
+export class ExportBusyError extends HttpException {
+  constructor() {
+    super(
+      { error: 'EXPORT_BUSY', message: 'Two exports are already running. Try again in a minute.' },
+      HttpStatus.TOO_MANY_REQUESTS,
+    );
   }
 }

@@ -262,3 +262,15 @@ export const NO_SURGE_SNAPSHOT: SurgeSnapshot = {
   appliedModifiers: [],
   calculatedAt: null,
 };
+
+/**
+ * One geohash cell on the admin heat map (task 18 §18.11): every zone with an active space, its live
+ * snapshot, and whether an override governs it. Colour on the map is always paired with this number.
+ */
+export const surgeHeatCellSchema = z.object({
+  zoneId: z.string(),
+  activeSpaces: z.number().int().nonnegative(),
+  overridden: z.boolean(),
+  live: surgeSnapshotSchema,
+});
+export type SurgeHeatCell = z.infer<typeof surgeHeatCellSchema>;

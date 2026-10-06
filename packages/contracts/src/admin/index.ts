@@ -117,6 +117,8 @@ export {
   surgeZoneOverridePatchSchema,
   type SurgeZoneOverridePatch,
   surgeSnapshotSchema,
+  surgeHeatCellSchema,
+  type SurgeHeatCell,
   type SurgeSnapshot,
   NO_SURGE_SNAPSHOT,
   SURGE_KEY_PREFIX,

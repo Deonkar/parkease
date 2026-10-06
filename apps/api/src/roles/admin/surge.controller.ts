@@ -12,12 +12,14 @@ import {
 } from '@nestjs/common';
 import {
   surgeConfigSchema,
+  surgeHeatCellSchema,
   surgeZoneOverrideInputSchema,
   surgeZoneOverridePatchSchema,
   zoneIdSchema,
 } from '@parkease/contracts/admin';
 import { Role } from '@parkease/contracts/enums';
 import type { FastifyRequest } from 'fastify';
+import { z } from 'zod';
 
 import {
   SurgeAdminService,
@@ -27,6 +29,7 @@ import {
   type ZoneOverrideWithLive,
 } from '../../domains/surge/surge-admin.service.js';
 import { CurrentUser, type AuthUser } from '../../platform/auth/current-user.decorator.js';
+import { parseOutgoing } from '../../platform/http/outgoing-contract.js';
 import { Roles } from '../../platform/rbac/roles.decorator.js';
 
 /**
@@ -66,6 +69,15 @@ export class AdminSurgeController {
     // config that would not parse on the way out cannot be saved on the way in.
     const next = surgeConfigSchema.parse(body);
     return this.surgeAdmin.replaceConfig(actorOf(user, request), next);
+  }
+
+  @Get('heatmap')
+  async heatmap() {
+    return parseOutgoing(
+      z.array(surgeHeatCellSchema),
+      await this.surgeAdmin.heatmap(),
+      'surge heatmap',
+    );
   }
 
   @Get('zones')
