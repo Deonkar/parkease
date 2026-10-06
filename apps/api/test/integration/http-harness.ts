@@ -294,6 +294,12 @@ export async function startHttpApp(
   razorpay?: unknown,
   razorpayx?: unknown,
   route?: unknown,
+  /**
+   * Called once per route Fastify registers, so a spec can enumerate the real route table
+   * instead of keeping its own list. The hook goes on before `app.init()` because Fastify's
+   * `onRoute` only sees routes added after it — Nest registers every controller during init.
+   */
+  onRoute?: (route: { readonly method: string; readonly url: string }) => void,
 ): Promise<HttpApp> {
   const moduleRef = await Test.createTestingModule({ imports: [HttpTestModule] })
     .overrideProvider(DB)
@@ -317,6 +323,16 @@ export async function startHttpApp(
     rawBody: true,
   });
   app.setGlobalPrefix('api/v1');
+
+  if (onRoute !== undefined) {
+    app
+      .getHttpAdapter()
+      .getInstance()
+      .addHook('onRoute', (opts) => {
+        const methods = Array.isArray(opts.method) ? opts.method : [opts.method];
+        for (const method of methods) onRoute({ method, url: opts.url });
+      });
+  }
 
   await app.init();
   await app.getHttpAdapter().getInstance().ready();
