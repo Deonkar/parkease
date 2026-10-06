@@ -9,6 +9,7 @@ import {
   Req,
   Res,
   UnauthorizedException,
+  UseGuards,
 } from '@nestjs/common';
 import { Role } from '@parkease/contracts/enums';
 import { createSessionSchema, sessionResponseSchema } from '@parkease/contracts/public';
@@ -21,6 +22,7 @@ import { env } from '../../platform/config/env.schema.js';
 import { parseOutgoing } from '../../platform/http/index.js';
 
 import { clearAdminCookie, readAdminCookie, serializeAdminCookie } from './admin-cookie.js';
+import { AdminOriginGuard } from './admin-origin.guard.js';
 
 // The refresh token never appears in these bodies — it travels only in the cookie.
 const adminSessionBodySchema = sessionResponseSchema.omit({ refreshToken: true });
@@ -40,9 +42,13 @@ const secureCookies = (): boolean => env.NODE_ENV === 'production';
  *
  * `passthrough` keeps Nest in charge of the response, so the
  * TransformInterceptor still wraps the body in `{ data }`.
+ *
+ * `AdminOriginGuard` binds every route here to ADMIN_ORIGIN: the refresh cookie is a credential
+ * that CORS alone would hand to any configured origin (SEC-M2).
  */
 @Controller('auth/admin')
 @Public()
+@UseGuards(AdminOriginGuard)
 export class AdminAuthController {
   constructor(
     private readonly createSession: CreateSessionCommand,

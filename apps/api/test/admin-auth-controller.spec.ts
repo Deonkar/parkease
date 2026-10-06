@@ -137,6 +137,8 @@ describe('AdminAuthController', () => {
     it('follows NODE_ENV=production, never the Host header', async () => {
       vi.resetModules();
       vi.stubEnv('NODE_ENV', 'production');
+      // Production refuses to boot without the admin origin (SEC-M2).
+      vi.stubEnv('ADMIN_ORIGIN', 'https://admin.parkease.test');
       const { AdminAuthController: Prod } = await import(
         '../src/roles/public/admin-auth.controller.js'
       );

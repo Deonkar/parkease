@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+
+import { env } from '../../src/platform/config/env.schema.js';
 
 import { type Harness, seedUser, startHarness, stopHarness } from './harness.js';
 import { firebaseStub, type HttpApp, startHttpApp, stopHttpApp } from './http-harness.js';
@@ -175,6 +177,71 @@ describe('admin session HTTP', () => {
 
     expect(res.status).toBe(204);
     expect(setCookies(res)[0]).toContain('Max-Age=0');
+  });
+
+  /**
+   * SEC-M2 (task 18a review). CORS lets credentialed requests through from every configured
+   * origin, the marketing site included, and SameSite=Strict does not separate same-site
+   * subdomains. So an XSS on the web origin could POST /auth/admin/refresh with credentials and
+   * read an admin access token. With ADMIN_ORIGIN set, only that origin may reach these routes.
+   */
+  describe('admin origin', () => {
+    const ADMIN = 'https://admin.parkease.test';
+    const WEB = 'https://www.parkease.test';
+    let saved: string | undefined;
+
+    beforeEach(() => {
+      saved = env.ADMIN_ORIGIN;
+      env.ADMIN_ORIGIN = ADMIN;
+    });
+    afterEach(() => {
+      env.ADMIN_ORIGIN = saved;
+    });
+
+    /** Signs in with no origin check, then turns the check on for the request under test. */
+    const loginUnchecked = async () => {
+      env.ADMIN_ORIGIN = undefined;
+      const session = await login();
+      env.ADMIN_ORIGIN = ADMIN;
+      return session;
+    };
+
+    const refreshFrom = async (origin: string | null) => {
+      const { token } = await loginUnchecked();
+      return post(REFRESH, token, { ...idem(), ...(origin === null ? {} : { origin }) });
+    };
+
+    it('the web origin is refused 403 ORIGIN_NOT_ALLOWED and gets no token', async () => {
+      const res = await refreshFrom(WEB);
+      expect(res.status).toBe(403);
+      expect(envelope(res).error?.code).toBe('ORIGIN_NOT_ALLOWED');
+      expect(JSON.stringify(res.body)).not.toContain('accessToken');
+      expect(setCookies(res)).toHaveLength(0);
+    });
+
+    it('a request with no Origin is refused once ADMIN_ORIGIN is set', async () => {
+      const res = await refreshFrom(null);
+      expect(res.status).toBe(403);
+      expect(envelope(res).error?.code).toBe('ORIGIN_NOT_ALLOWED');
+    });
+
+    it('the admin origin is served', async () => {
+      const res = await refreshFrom(ADMIN);
+      expect(res.status).toBe(200);
+      expect(setCookies(res)).toHaveLength(1);
+    });
+
+    it('session and logout are behind the same check', async () => {
+      const { token } = await loginUnchecked();
+      const session = await http.request({
+        method: 'POST',
+        url: SESSION,
+        payload: { idToken: 'stubbed' },
+        headers: { ...idem(), origin: WEB },
+      });
+      expect(session.status).toBe(403);
+      expect((await post(LOGOUT, token, { ...idem(), origin: WEB })).status).toBe(403);
+    });
   });
 
   it('an idempotent replay is bound to the cookie: same cookie replays, another or none is 422', async () => {

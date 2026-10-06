@@ -1,65 +1,89 @@
 import { z } from 'zod';
 
-const envSchema = z.object({
-  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-  PORT: z.coerce.number().int().positive().default(3000),
-  APP_VERSION: z.string().min(1).default('0.0.0-dev'),
+export const envSchema = z
+  .object({
+    NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+    PORT: z.coerce.number().int().positive().default(3000),
+    APP_VERSION: z.string().min(1).default('0.0.0-dev'),
 
-  DATABASE_URL: z.string().url().startsWith('postgres'),
-  REDIS_URL: z.string().url().startsWith('redis'),
+    DATABASE_URL: z.string().url().startsWith('postgres'),
+    REDIS_URL: z.string().url().startsWith('redis'),
 
-  JWT_SECRET: z.string().min(32, 'must be at least 32 characters'),
-  JWT_ACCESS_TTL: z.string().default('15m'),
-  JWT_REFRESH_TTL: z.string().default('7d'),
+    JWT_SECRET: z.string().min(32, 'must be at least 32 characters'),
+    JWT_ACCESS_TTL: z.string().default('15m'),
+    JWT_REFRESH_TTL: z.string().default('7d'),
 
-  /**
-   * Signs the booking QR reference. Its own secret, deliberately not JWT_SECRET:
-   * a leaked QR secret must buy an attacker forged check-in references and
-   * nothing else, never the ability to mint a session.
-   */
-  BOOKING_QR_SECRET: z.string().min(32, 'must be at least 32 characters'),
+    /**
+     * Signs the booking QR reference. Its own secret, deliberately not JWT_SECRET:
+     * a leaked QR secret must buy an attacker forged check-in references and
+     * nothing else, never the ability to mint a session.
+     */
+    BOOKING_QR_SECRET: z.string().min(32, 'must be at least 32 characters'),
 
-  FIREBASE_PROJECT_ID: z.string().min(1),
-  FIREBASE_CLIENT_EMAIL: z.string().email(),
-  FIREBASE_PRIVATE_KEY: z.string().min(1),
+    FIREBASE_PROJECT_ID: z.string().min(1),
+    FIREBASE_CLIENT_EMAIL: z.string().email(),
+    FIREBASE_PRIVATE_KEY: z.string().min(1),
 
-  RAZORPAY_KEY_ID: z.string().min(1),
-  RAZORPAY_KEY_SECRET: z.string().min(1),
-  RAZORPAY_WEBHOOK_SECRET: z.string().min(1),
+    RAZORPAY_KEY_ID: z.string().min(1),
+    RAZORPAY_KEY_SECRET: z.string().min(1),
+    RAZORPAY_WEBHOOK_SECRET: z.string().min(1),
 
-  CLOUDINARY_CLOUD_NAME: z.string().min(1),
-  CLOUDINARY_API_KEY: z.string().min(1),
-  CLOUDINARY_API_SECRET: z.string().min(1),
+    CLOUDINARY_CLOUD_NAME: z.string().min(1),
+    CLOUDINARY_API_KEY: z.string().min(1),
+    CLOUDINARY_API_SECRET: z.string().min(1),
 
-  // Hex, strictly: `Buffer.from(x, 'hex')` silently stops at the first non-hex
-  // character, which would leave a shorter key that still "works".
-  ENCRYPTION_KEY: z.string().regex(/^[0-9a-fA-F]{64}$/, 'must be 32 bytes as 64 hex characters'),
+    // Hex, strictly: `Buffer.from(x, 'hex')` silently stops at the first non-hex
+    // character, which would leave a shorter key that still "works".
+    ENCRYPTION_KEY: z.string().regex(/^[0-9a-fA-F]{64}$/, 'must be 32 bytes as 64 hex characters'),
 
-  CORS_ALLOWED_ORIGINS: z.string().transform((value) =>
-    value
-      .split(',')
-      .map((origin) => origin.trim())
-      .filter(Boolean),
-  ),
+    CORS_ALLOWED_ORIGINS: z.string().transform((value) =>
+      value
+        .split(',')
+        .map((origin) => origin.trim())
+        .filter(Boolean),
+    ),
 
-  /**
-   * §11.9. Valet ships without in-app calling if no telephony provider is ready,
-   * and the behaviour in that case is defined rather than improvised: the
-   * [Call Valet] control is hidden rather than rendered disabled, and its place
-   * is taken by a support thread carrying the job id.
-   *
-   * Defaults to false, so calling is off unless somebody turns it on. Flipping
-   * it with the no-op provider still bound changes nothing — ContactChannelService
-   * requires both the flag and a provider that reports itself enabled.
-   */
-  MASKED_CALLING_ENABLED: z
-    .string()
-    .optional()
-    .transform((value) => value === 'true'),
+    /**
+     * The admin panel's origin (SEC-M2, task 18a review). CORS above lets credentialed requests in
+     * from every listed origin, the marketing site included, and SameSite=Strict does not separate
+     * same-site subdomains, so the refresh cookie needs its own check: every `/auth/admin/*` route
+     * answers only this exact Origin. Reduced to `URL.origin` so a trailing slash in config cannot
+     * make it match nothing. Required in production (the refine below); unset elsewhere means no
+     * origin check, so local tools and tests that send no Origin keep working.
+     */
+    ADMIN_ORIGIN: z
+      .string()
+      .url()
+      .transform((value) => new URL(value).origin)
+      .optional(),
 
-  OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
-  SENTRY_DSN: z.string().url().optional(),
-});
+    /**
+     * §11.9. Valet ships without in-app calling if no telephony provider is ready,
+     * and the behaviour in that case is defined rather than improvised: the
+     * [Call Valet] control is hidden rather than rendered disabled, and its place
+     * is taken by a support thread carrying the job id.
+     *
+     * Defaults to false, so calling is off unless somebody turns it on. Flipping
+     * it with the no-op provider still bound changes nothing — ContactChannelService
+     * requires both the flag and a provider that reports itself enabled.
+     */
+    MASKED_CALLING_ENABLED: z
+      .string()
+      .optional()
+      .transform((value) => value === 'true'),
+
+    OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
+    SENTRY_DSN: z.string().url().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.NODE_ENV === 'production' && value.ADMIN_ORIGIN === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['ADMIN_ORIGIN'],
+        message: 'required in production: the admin refresh cookie must be bound to one origin',
+      });
+    }
+  });
 
 export type Env = z.infer<typeof envSchema>;
 
