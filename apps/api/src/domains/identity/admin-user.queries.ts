@@ -7,8 +7,30 @@ import { and, asc, desc, eq, exists, ilike, inArray, or, sql } from 'drizzle-orm
 
 import { DB, type Database } from '../../platform/db/db.module.js';
 
-/** `\`, `%` and `_` mean something to LIKE; an admin typing `100%` is looking for those characters. */
+/**
+ * A full Indian mobile as the admin typed it (`98765 43210`, `9876543210`, `+91 98765 43210`),
+ * as the E.164 string stored in `users.phone`; anything else is not a phone and returns null.
+ *
+ * Phone search is equality on the whole number and nothing less. The list masks the middle three
+ * digits, and a substring or suffix search would hand them back: type the visible prefix plus one
+ * guessed digit and the row either appears or does not.
+ */
+export function fullPhoneOf(text: string): string | null {
+  const compact = text.replace(/\s+/g, '');
+  if (/^\+91\d{10}$/.test(compact)) return compact;
+  if (/^\d{10}$/.test(compact)) return `+91${compact}`;
+  return null;
+}
+
+/** Backslash, `%` and `_` mean something to LIKE; an admin typing `100%` is looking for those characters. */
 const likePattern = (text: string): string => `%${text.replace(/[\\%_]/g, '\\$&')}%`;
+
+/** Name by substring; phone only by the whole number (see `fullPhoneOf`). */
+function searchBy(text: string) {
+  const phone = fullPhoneOf(text);
+  const byName = ilike(users.name, likePattern(text));
+  return phone === null ? byName : or(byName, eq(users.phone, phone));
+}
 
 interface UserRow {
   readonly id: string;
@@ -36,9 +58,7 @@ export class AdminUserQueries {
 
   async list(q: AdminUsersQuery): Promise<{ items: AdminUser[]; total: number }> {
     const where = and(
-      q.q === undefined || q.q === ''
-        ? undefined
-        : or(ilike(users.name, likePattern(q.q)), ilike(users.phone, likePattern(q.q))),
+      q.q === undefined || q.q === '' ? undefined : searchBy(q.q),
       q.status === undefined ? undefined : eq(users.status, q.status),
       // Any status: an admin hunting for a suspended owner to reinstate must be able to find one.
       q.role === undefined

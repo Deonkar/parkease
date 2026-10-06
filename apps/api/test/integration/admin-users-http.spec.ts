@@ -159,18 +159,37 @@ describe('admin users HTTP', () => {
   });
 
   describe('list and detail', () => {
-    it('finds a user by the last four digits of their phone, with the phone masked', async () => {
+    it('finds a user by their full phone in any common format, with the phone masked', async () => {
       const id = await person('Lakshmi Narayanan', '+919876547391');
       await person('Somebody Else', '+919876541234');
 
-      const res = await read(`${BASE}?q=7391`);
+      for (const typed of ['9876547391', '98765 47391', '+919876547391', '+91 98765 47391']) {
+        const res = await read(`${BASE}?q=${encodeURIComponent(typed)}`);
 
-      expect(res.status).toBe(200);
-      const found = usersOf(res);
-      expect(found.map((u) => u.id)).toEqual([id]);
-      expect(found[0]?.phone).toBe('+91 98765***91');
-      expect(JSON.stringify(res.body)).not.toContain('9876547391');
-      expect(envelope(res).meta).toEqual({ page: 1, pageSize: 20, total: 1 });
+        expect(res.status, typed).toBe(200);
+        const found = usersOf(res);
+        expect(
+          found.map((u) => u.id),
+          typed,
+        ).toEqual([id]);
+        expect(found[0]?.phone).toBe('+91 98765***91');
+        expect(JSON.stringify(res.body)).not.toContain('9876547391');
+        expect(envelope(res).meta, typed).toEqual({ page: 1, pageSize: 20, total: 1 });
+      }
+    });
+
+    it('does not search part of a phone: a fragment, or the visible prefix plus a guess, finds nothing', async () => {
+      await person('Fragment Frank', '+919876547392');
+
+      // The last four, the first six, and what an enumeration would send: the masked
+      // number's visible prefix plus one guessed digit. None of them may match.
+      for (const typed of ['7392', '987654', '98765 4', '+91987654', '98765473', '987654739']) {
+        const res = await read(`${BASE}?q=${encodeURIComponent(typed)}`);
+
+        expect(res.status, typed).toBe(200);
+        expect(usersOf(res), typed).toEqual([]);
+        expect(envelope(res).meta?.total, typed).toBe(0);
+      }
     });
 
     it('finds a user by name, ignoring case', async () => {
@@ -360,6 +379,18 @@ describe('admin users HTTP', () => {
       expect(await auditRows('user.role.revoke', adminId)).toHaveLength(0);
     });
 
+    it('is not fooled by your own id in capitals: the guard compares the canonical id', async () => {
+      const shouting = adminId.toUpperCase();
+      expect(shouting).not.toBe(adminId);
+
+      const res = await revoke(shouting, 'admin');
+
+      expect(res.status).toBe(409);
+      expect(errorCode(res)).toBe('SELF_DEMOTION');
+      expect((await roleRow(adminId, 'admin'))?.status).toBe('active');
+      expect(await auditRows('user.role.revoke', adminId)).toHaveLength(0);
+    });
+
     it("suspends another user's role; their next rotate omits it, but an earlier access token lives on", async () => {
       const id = await person('Revoked Owner', '+919876540020');
       await h.sql`INSERT INTO user_roles (user_id, role) VALUES (${id}, 'driver'), (${id}, 'owner')`;
@@ -471,6 +502,25 @@ describe('admin users HTTP', () => {
         { status: string }[]
       >`SELECT status FROM users WHERE id = ${adminId}`;
       expect(status[0]?.status).toBe('active');
+    });
+
+    it('refuses to block yourself in capitals too: 409 SELF_DEMOTION, status and tokens untouched', async () => {
+      const shouting = adminId.toUpperCase();
+      expect(shouting).not.toBe(adminId);
+      await mint(adminId, ['admin']);
+
+      const res = await block(shouting);
+
+      expect(res.status).toBe(409);
+      expect(errorCode(res)).toBe('SELF_DEMOTION');
+      const rows = await h.sql<
+        { status: string }[]
+      >`SELECT status FROM users WHERE id = ${adminId}`;
+      expect(rows[0]?.status).toBe('active');
+      const live = await h.sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM refresh_tokens WHERE user_id = ${adminId} AND revoked_at IS NULL`;
+      expect(live[0]?.n).toBeGreaterThan(0);
+      expect(await auditRows('user.block', adminId)).toHaveLength(0);
     });
 
     it('refuses a transition that changes nothing, and one out of deleted: 409, no audit row', async () => {

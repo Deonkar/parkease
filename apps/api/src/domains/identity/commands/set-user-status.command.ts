@@ -30,7 +30,6 @@ export class SetUserStatusCommand {
   ) {}
 
   block(input: SetUserStatusInput, actor: AdminActor): Promise<void> {
-    if (input.userId === actor.userId) return Promise.reject(new SelfDemotionError());
     return this.transition(input, actor, UserStatus.ACTIVE, UserStatus.BLOCKED, 'user.block');
   }
 
@@ -47,24 +46,31 @@ export class SetUserStatusCommand {
   ): Promise<void> {
     return withTransaction(this.db, async (tx) => {
       const [user] = await tx
-        .select({ status: users.status })
+        .select({ id: users.id, status: users.status })
         .from(users)
         .where(eq(users.id, userId))
         .for('update');
       if (user === undefined) throw new NotFoundException('User not found.');
+
+      // Compared on the id the database returned, not the one in the URL: Postgres matches a uuid
+      // case-insensitively, so `userId` may be the caller's own id in capitals and still be them.
+      if (to === UserStatus.BLOCKED && user.id === actor.userId) throw new SelfDemotionError();
       if (user.status !== from) throw new IllegalUserStatusTransitionError();
 
-      await tx.update(users).set({ status: to, updatedAt: new Date() }).where(eq(users.id, userId));
+      await tx
+        .update(users)
+        .set({ status: to, updatedAt: new Date() })
+        .where(eq(users.id, user.id));
 
       if (to === UserStatus.BLOCKED)
-        await this.tokens.revokeAllForUser(tx, userId, BLOCKED_REVOKE_REASON);
+        await this.tokens.revokeAllForUser(tx, user.id, BLOCKED_REVOKE_REASON);
 
       await this.audit.record(tx, {
         actorUserId: actor.userId,
         actorRole: 'admin',
         action,
         targetType: 'user',
-        targetId: userId,
+        targetId: user.id,
         before: { status: user.status },
         after: { status: to, reason },
         ipAddress: actor.ipAddress,

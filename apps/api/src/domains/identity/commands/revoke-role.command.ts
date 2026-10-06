@@ -31,9 +31,6 @@ export class RevokeRoleCommand {
 
   execute(input: RevokeRoleInput, actor: AdminActor): Promise<void> {
     const { userId, role, reason } = input;
-    if (role === Role.ADMIN && userId === actor.userId) {
-      return Promise.reject(new SelfDemotionError());
-    }
 
     return withTransaction(this.db, async (tx) => {
       const [user] = await tx
@@ -43,12 +40,16 @@ export class RevokeRoleCommand {
         .for('update');
       if (user === undefined) throw new NotFoundException('User not found.');
 
+      // Compared on the id the database returned, not the one in the URL: Postgres matches a uuid
+      // case-insensitively, so `userId` may be the caller's own id in capitals and still be them.
+      if (role === Role.ADMIN && user.id === actor.userId) throw new SelfDemotionError();
+
       const [held] = await tx
         .select({ id: userRoles.id, status: userRoles.status })
         .from(userRoles)
         .where(
           and(
-            eq(userRoles.userId, userId),
+            eq(userRoles.userId, user.id),
             eq(userRoles.role, role),
             inArray(userRoles.status, [RoleStatus.ACTIVE, RoleStatus.PENDING]),
           ),
@@ -65,7 +66,7 @@ export class RevokeRoleCommand {
         actorRole: 'admin',
         action: 'user.role.revoke',
         targetType: 'user',
-        targetId: userId,
+        targetId: user.id,
         before: { status: held.status },
         after: { role, status: RoleStatus.SUSPENDED, reason },
         ipAddress: actor.ipAddress,
