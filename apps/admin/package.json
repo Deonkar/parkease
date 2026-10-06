@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --port 5173",
+    "dev:fixtures": "vite --port 5174 --mode fixtures",
     "build": "tsc --build && vite build",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/",
@@ -12,10 +13,17 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@ant-design/icons": "5.6.1",
     "@parkease/contracts": "workspace:*",
     "@parkease/tokens": "workspace:*",
+    "@tanstack/react-query": "5.102.8",
+    "@tanstack/react-router": "1.170.41",
+    "antd": "5.29.3",
+    "dayjs": "1.11.23",
+    "firebase": "12.17.1",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "zod": "3.24.1"
   },
   "devDependencies": {
     "@parkease/config": "workspace:*",
