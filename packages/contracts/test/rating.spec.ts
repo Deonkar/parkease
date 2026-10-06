@@ -73,7 +73,8 @@ describe('weightedAverageBp', () => {
       expect(bp).toBeGreaterThanOrEqual(MIN_RATING_BP);
       expect(bp).toBeLessThanOrEqual(MAX_RATING_BP);
     }
-  });
+    // 300k assertions: fine alone, past vitest 3's 5s default when every package tests at once.
+  }, 30_000);
 });
 
 describe('divRoundHalfUp', () => {
@@ -84,7 +85,7 @@ describe('divRoundHalfUp', () => {
       const d = 1 + Math.floor(rand() * 10_000);
       expect(divRoundHalfUp(n, d)).toBe(Math.round(n / d));
     }
-  });
+  }, 30_000);
 
   it('rounds exactly .5 up', () => {
     expect(divRoundHalfUp(5, 2)).toBe(3);
