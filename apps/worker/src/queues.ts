@@ -67,6 +67,9 @@ export const UNSUBSCRIBED_EVENTS = [
   'space.approved',
   'space.rejected',
   'space.changes-requested',
+  // Task 18a: the partner hears about a verification decision in task 19.
+  'partner.verified',
+  'partner.rejected',
   'identity.session-created',
   'valet.offer-withdrawn',
   'carwash.offer-withdrawn',

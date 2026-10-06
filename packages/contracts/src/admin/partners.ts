@@ -32,9 +32,13 @@ export type AdminPartner = z.infer<typeof adminPartnerSchema>;
 
 export const partnerDocumentSchema = z.object({
   kind: z.enum(['driving_licence', 'id_proof', 'business_photo']),
-  /** A short-lived signed URL; documents are never served from a public path. */
+  /**
+   * An ID document or licence is a short-lived signed URL: documents are never served from a public
+   * path. A business photo is a public image (it is shown to drivers) and has an ordinary URL.
+   */
   url: z.string().url(),
-  expiresAt: z.string().datetime(),
+  /** When the link stops working; `null` for a public business photo, whose link does not expire. */
+  expiresAt: z.string().datetime().nullable(),
 });
 
 export type PartnerDocument = z.infer<typeof partnerDocumentSchema>;

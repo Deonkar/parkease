@@ -36,6 +36,20 @@ export class SelfDemotionError extends IdentityDomainError {
 }
 
 /**
+ * Verify and reject decide a profile that is waiting on a decision. One that was already decided
+ * (by another admin a moment ago) or never submitted its documents is not.
+ */
+export class IllegalVerificationTransitionError extends IdentityDomainError {
+  constructor() {
+    super(
+      'ILLEGAL_VERIFICATION_TRANSITION',
+      "This partner isn't waiting on a verification decision.",
+      HttpStatus.CONFLICT,
+    );
+  }
+}
+
+/**
  * Block needs an active user and unblock needs a blocked one. A deleted user is neither: letting
  * unblock through would bring a deleted account back to life.
  */

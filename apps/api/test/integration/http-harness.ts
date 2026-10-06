@@ -15,9 +15,11 @@ import { CarwashModule } from '../../src/domains/carwash/carwash.module.js';
 import { AdminUserQueries } from '../../src/domains/identity/admin-user.queries.js';
 import { CreateSessionCommand } from '../../src/domains/identity/commands/create-session.command.js';
 import { GrantRoleCommand } from '../../src/domains/identity/commands/grant-role.command.js';
+import { ReviewPartnerCommand } from '../../src/domains/identity/commands/review-partner.command.js';
 import { RevokeRoleCommand } from '../../src/domains/identity/commands/revoke-role.command.js';
 import { SetUserStatusCommand } from '../../src/domains/identity/commands/set-user-status.command.js';
 import { SwitchRoleCommand } from '../../src/domains/identity/commands/switch-role.command.js';
+import { PartnerQueries } from '../../src/domains/identity/partner.queries.js';
 import { RoleRepository } from '../../src/domains/identity/repositories/role.repository.js';
 import { UserRepository } from '../../src/domains/identity/repositories/user.repository.js';
 import { LedgerModule } from '../../src/domains/ledger/ledger.module.js';
@@ -51,6 +53,7 @@ import { REDIS, RedisModule } from '../../src/platform/redis/redis.module.js';
 import { StorageModule } from '../../src/platform/storage/storage.module.js';
 import { TelephonyModule } from '../../src/platform/telephony/telephony.module.js';
 import { AdminModerationController } from '../../src/roles/admin/moderation.controller.js';
+import { AdminPartnersController } from '../../src/roles/admin/partners.controller.js';
 import { AdminSpacesController } from '../../src/roles/admin/spaces.controller.js';
 import { AdminSurgeController } from '../../src/roles/admin/surge.controller.js';
 import { AdminUsersController } from '../../src/roles/admin/users.controller.js';
@@ -189,6 +192,7 @@ class StubAuthGuard implements CanActivate {
     AdminModerationController,
     AdminSpacesController,
     AdminUsersController,
+    AdminPartnersController,
     OwnerSpacesController,
     DriverReviewsController,
     OwnerReviewsController,
@@ -234,6 +238,8 @@ class StubAuthGuard implements CanActivate {
     GrantRoleCommand,
     RevokeRoleCommand,
     SetUserStatusCommand,
+    PartnerQueries,
+    ReviewPartnerCommand,
     { provide: FirebaseVerifierService, useClass: StubFirebaseVerifier },
     // Registered exactly as AppModule does, and in its order. This is the whole
     // point of these tests: the interceptor and guard stack a real request

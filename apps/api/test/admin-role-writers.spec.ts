@@ -34,6 +34,12 @@ const ALLOWED_WRITERS: ReadonlyArray<{
     expectWrite: true,
   },
   {
+    file: 'apps/api/src/domains/identity/commands/review-partner.command.ts',
+    reason:
+      'Partner verification: opens a valet or washer role (typed PartnerKind, never admin) once an admin has verified its pending profile; audited.',
+    expectWrite: true,
+  },
+  {
     file: 'apps/api/src/domains/identity/repositories/role.repository.ts',
     reason: 'The role repository; reads today, and the sanctioned home for any future role write.',
     expectWrite: false,
