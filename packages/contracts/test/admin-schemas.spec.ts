@@ -11,6 +11,7 @@ import {
   dateRangeSchema,
   grantRoleSchema,
   ledgerQuerySchema,
+  moderationQueueItemSchema,
   spaceDecisionNotesSchema,
 } from '../src/admin/index.js';
 import { maskPhone, offsetPageOf } from '../src/primitives/index.js';
@@ -144,5 +145,26 @@ describe('maskPhone and the admin views', () => {
     expect(
       schema.safeParse({ items: ['a'], meta: { page: 0, pageSize: 20, total: 1 } }).success,
     ).toBe(false);
+  });
+});
+
+describe('moderationQueueItemSchema impact', () => {
+  const item = {
+    id: '0199b3a0-0000-7000-8000-000000000001',
+    targetType: 'space',
+    targetId: '0199b3a0-0000-7000-8000-000000000002',
+    rating: 1,
+    comment: null,
+    createdAt: '2026-10-01T00:00:00.000Z',
+    reports: [],
+  };
+
+  it('parses an item without impact', () => {
+    expect(moderationQueueItemSchema.safeParse(item).success).toBe(true);
+  });
+
+  it('parses an item with impact', () => {
+    const impact = { currentAvgBp: 350, avgBpIfRemoved: 420, countIfRemoved: 4 };
+    expect(moderationQueueItemSchema.safeParse({ ...item, impact }).success).toBe(true);
   });
 });
