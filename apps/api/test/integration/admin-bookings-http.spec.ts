@@ -1,6 +1,8 @@
 import { HttpException } from '@nestjs/common';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { AdminBookingQueries } from '../../src/domains/booking/admin-booking.queries.js';
+
 import { type BookingStack, buildBookingStack, windowFromNow, zoneOf } from './booking-harness.js';
 import {
   type Harness,
@@ -241,6 +243,24 @@ describe('admin bookings HTTP', () => {
   });
 
   describe('refund', () => {
+    it('a failed re-read after the refund commits is not a 500, and a retry does not refund again', async () => {
+      const booking = await paidBooking();
+      const queries = http.app.get(AdminBookingQueries);
+      const detail = vi.spyOn(queries, 'detail').mockRejectedValueOnce(new Error('read failed'));
+      const key = crypto.randomUUID();
+
+      const first = await refund(booking.id, { option: 'half', reason: 'flooded' }, key);
+      expect(first.status).toBe(200);
+      detail.mockRestore();
+
+      const retry = await refund(booking.id, { option: 'half', reason: 'flooded' }, key);
+      expect(retry.status).toBe(200);
+      const [row] = await h.sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM refunds r JOIN payments p ON p.id = r.payment_id
+        WHERE p.booking_id = ${booking.id}`;
+      expect(row?.n).toBe(1);
+    });
+
     it('posts full_minus_fee ledger-first, then refuses 1001 and takes the last 1000', async () => {
       const booking = await paidBooking();
 

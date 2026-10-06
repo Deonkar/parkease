@@ -330,3 +330,46 @@ describe('IdempotencyInterceptor — /auth/admin/* is not cached', () => {
     },
   );
 });
+
+/**
+ * Pentest F2 (task 18a review). `endpoint` is the route PATTERN, so the hash was all that told
+ * `/admin/users/A/block` from `/admin/users/B/block`, and it covered only the body. One key reused
+ * on B replayed A's 200 and B was never touched. The concrete target is now part of the hash.
+ */
+describe('IdempotencyInterceptor — the target is part of the request hash', () => {
+  const A = '0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5c';
+  const B = '0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5d';
+
+  const hashFor = async (params: Record<string, string>): Promise<string> => {
+    const claim = vi.fn().mockResolvedValue({ outcome: 'proceed' });
+    const interceptor = new IdempotencyInterceptor({
+      claim,
+      store: vi.fn().mockResolvedValue(true),
+      release: vi.fn().mockResolvedValue(true),
+    } as unknown as IdempotencyService);
+    const context = {
+      switchToHttp: () => ({
+        getRequest: () => ({
+          method: 'POST',
+          url: `/api/v1/admin/users/${params['id'] ?? ''}/block`,
+          headers: { 'idempotency-key': KEY },
+          body: { reason: 'same reason' },
+          params,
+          user: { id: A },
+          routeOptions: { url: '/api/v1/admin/users/:id/block' },
+        }),
+      }),
+    } as unknown as ExecutionContext;
+    await firstValueFrom(await interceptor.intercept(context, { handle: () => of({}) }));
+    await settle();
+    return (claim.mock.calls[0]?.[0] as { requestHash: string }).requestHash;
+  };
+
+  it('the same body on a different target is a different request', async () => {
+    expect(await hashFor({ id: A })).not.toBe(await hashFor({ id: B }));
+  });
+
+  it('the same target spelled in capitals is the same request', async () => {
+    expect(await hashFor({ id: A.toUpperCase() })).toBe(await hashFor({ id: A }));
+  });
+});

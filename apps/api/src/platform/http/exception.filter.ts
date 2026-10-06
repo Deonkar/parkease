@@ -34,6 +34,19 @@ const PG_ERROR_MAP: Readonly<Record<string, MappedError>> = {
     code: 'REFERENCE_MISSING',
     message: 'This item is no longer available.',
   },
+  // Postgres refuses a NUL byte in text (invalid byte sequence for UTF8). It is the client's
+  // input, so a 400 — not the 500 it was (pentest F5, task 18a review).
+  '22021': {
+    status: HttpStatus.BAD_REQUEST,
+    code: 'INVALID_TEXT',
+    message: 'That text contains a character we cannot store.',
+  },
+  // The same NUL inside a jsonb value (an audit row's after.reason) is 22P05.
+  '22P05': {
+    status: HttpStatus.BAD_REQUEST,
+    code: 'INVALID_TEXT',
+    message: 'That text contains a character we cannot store.',
+  },
   '40001': {
     status: HttpStatus.CONFLICT,
     code: 'CONFLICT_RETRY',

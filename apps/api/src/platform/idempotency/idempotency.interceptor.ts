@@ -19,7 +19,7 @@ import type { AuthUser } from '../auth/current-user.decorator.js';
 import { routePattern } from '../http/route-pattern.js';
 import { logger } from '../observability/logger.js';
 
-import { IdempotencyService, hashCanonicalBody } from './idempotency.service.js';
+import { IdempotencyService, hashRequest } from './idempotency.service.js';
 
 const uuidSchema = z.string().uuid();
 
@@ -89,8 +89,8 @@ export class IdempotencyInterceptor implements NestInterceptor {
     // key-reused-with-a-different-request 422.
     const requestHash =
       request.user === undefined
-        ? credentialBoundHash(hashCanonicalBody(request.body), request.headers.cookie)
-        : hashCanonicalBody(request.body);
+        ? credentialBoundHash(hashRequest(request.params, request.body), request.headers.cookie)
+        : hashRequest(request.params, request.body);
     const endpoint = `${request.method} ${route}`;
     // This attempt's claim token: `store` and `release` carry it back, so a
     // write from an attempt a newer retry has taken over lands on nothing.

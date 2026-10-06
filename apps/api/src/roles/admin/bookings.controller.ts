@@ -28,6 +28,7 @@ import { AdminRefundCommand } from '../../domains/payment/commands/admin-refund.
 import { type AuthUser, CurrentUser } from '../../platform/auth/current-user.decorator.js';
 import { parseOutgoing } from '../../platform/http/outgoing-contract.js';
 import type { AdminActor } from '../../platform/observability/audit.service.js';
+import { logger } from '../../platform/observability/logger.js';
 import { Roles } from '../../platform/rbac/roles.decorator.js';
 
 const bookingsPageSchema = offsetPageOf(adminBookingListItemSchema);
@@ -88,8 +89,13 @@ export class AdminBookingsController {
     @Req() request: FastifyRequest,
   ) {
     const input = adminRefundSchema.parse(body);
-    await this.adminRefund.execute(id, input, actorOf(user, request));
-    return this.view(id);
+    const result = await this.adminRefund.execute(id, input, actorOf(user, request));
+    // The refund has committed. A failed re-read must not answer 500: the idempotency interceptor
+    // would release the key and a retry would refund again (task 18a review, SF-1).
+    return this.view(id).catch((err: unknown) => {
+      logger.error({ err, bookingId: id }, 'admin refund committed; detail re-read failed');
+      return result;
+    });
   }
 
   private async view(id: string) {
