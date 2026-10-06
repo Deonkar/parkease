@@ -12,6 +12,7 @@ import type { FastifyRequest } from 'fastify';
 
 import { BookingModule } from '../../src/domains/booking/booking.module.js';
 import { CarwashModule } from '../../src/domains/carwash/carwash.module.js';
+import { CreateSessionCommand } from '../../src/domains/identity/commands/create-session.command.js';
 import { SwitchRoleCommand } from '../../src/domains/identity/commands/switch-role.command.js';
 import { RoleRepository } from '../../src/domains/identity/repositories/role.repository.js';
 import { UserRepository } from '../../src/domains/identity/repositories/user.repository.js';
@@ -27,6 +28,10 @@ import { SpaceModule } from '../../src/domains/space/space.module.js';
 import { SurgeModule } from '../../src/domains/surge/surge.module.js';
 import { ValetModule } from '../../src/domains/valet/valet.module.js';
 import type { AuthUser } from '../../src/platform/auth/current-user.decorator.js';
+import {
+  FirebaseVerifierService,
+  type VerifiedPhone,
+} from '../../src/platform/auth/firebase-verifier.service.js';
 import { IS_PUBLIC_KEY } from '../../src/platform/auth/public.decorator.js';
 import { TokenService } from '../../src/platform/auth/token.service.js';
 import { DB, DbModule } from '../../src/platform/db/db.module.js';
@@ -54,6 +59,7 @@ import { OwnerBookingsController } from '../../src/roles/owner/bookings.controll
 import { OwnerDashboardController } from '../../src/roles/owner/dashboard.controller.js';
 import { OwnerEarningsController } from '../../src/roles/owner/earnings.controller.js';
 import { OwnerReviewsController } from '../../src/roles/owner/reviews.controller.js';
+import { AdminAuthController } from '../../src/roles/public/admin-auth.controller.js';
 import { RazorpayWebhookController } from '../../src/roles/public/webhooks/razorpay.controller.js';
 import { MeController } from '../../src/roles/shared/me.controller.js';
 import { MePayoutsController } from '../../src/roles/shared/payouts.controller.js';
@@ -76,6 +82,27 @@ import type { Harness } from './harness.js';
  * the *rest* of the request pipeline.
  */
 export const actingAs = { user: null as AuthUser | null };
+
+/**
+ * What the stubbed Firebase verifier says the next ID token proves. Set per test,
+ * like `actingAs`. `null` makes `verify` refuse, the way a bad token does.
+ */
+export const firebaseStub = { verified: null as VerifiedPhone | null };
+
+/**
+ * Stands in for FirebaseVerifierService, which initialises firebase-admin in its
+ * constructor and throws on fake credentials. Provided under that class as the
+ * token, so the real constructor never runs and `CreateSessionCommand` — real —
+ * receives it exactly where it would receive the verifier.
+ */
+class StubFirebaseVerifier {
+  verify(): Promise<VerifiedPhone> {
+    if (firebaseStub.verified === null) {
+      return Promise.reject(new UnauthorizedException('We could not verify that code.'));
+    }
+    return Promise.resolve(firebaseStub.verified);
+  }
+}
 
 /**
  * Stands in for JwtAuthGuard only.
@@ -148,6 +175,9 @@ class StubAuthGuard implements CanActivate {
     ReviewModule,
   ],
   controllers: [
+    // The admin panel's session. Public, so it goes through the real interceptor
+    // stack with no user — the path `idempotency-scope.spec.ts` could not reach.
+    AdminAuthController,
     AdminSurgeController,
     AdminModerationController,
     DriverReviewsController,
@@ -187,6 +217,8 @@ class StubAuthGuard implements CanActivate {
     RoleRepository,
     UserRepository,
     SwitchRoleCommand,
+    CreateSessionCommand,
+    { provide: FirebaseVerifierService, useClass: StubFirebaseVerifier },
     // Registered exactly as AppModule does, and in its order. This is the whole
     // point of these tests: the interceptor and guard stack a real request
     // actually passes through. Only RateLimitModule's guard is absent —
@@ -219,7 +251,12 @@ export interface HttpApp {
      * made v1's bug invisible to its own tests.
      */
     rawPayload?: string;
-  }): Promise<{ status: number; body: unknown }>;
+  }): Promise<{
+    status: number;
+    body: unknown;
+    /** Response headers as Fastify reports them; `set-cookie` is a string or an array. */
+    headers: Record<string, string | string[] | number | undefined>;
+  }>;
 }
 
 export async function startHttpApp(
@@ -282,12 +319,13 @@ export async function startHttpApp(
         // rather than swallowing it into null.
         body = response.body;
       }
-      return { status: response.statusCode, body };
+      return { status: response.statusCode, body, headers: response.headers };
     },
   };
 }
 
 export async function stopHttpApp(http: HttpApp): Promise<void> {
   actingAs.user = null;
+  firebaseStub.verified = null;
   await http.app.close();
 }

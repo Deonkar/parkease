@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import {
   BadRequestException,
   type CallHandler,
@@ -26,6 +28,12 @@ const uuidSchema = z.string().uuid();
  * drift apart into a route that is exempt here but rejected by the database.
  */
 const WEBHOOK_PATH_PREFIX = '/api/v1/webhooks/';
+
+const sha256 = (value: string): string => createHash('sha256').update(value).digest('hex');
+
+function credentialBoundHash(bodyHash: string, cookie: string | undefined): string {
+  return sha256(`${bodyHash}:${sha256(cookie ?? '')}`);
+}
 
 @Injectable()
 export class IdempotencyInterceptor implements NestInterceptor {
@@ -57,7 +65,17 @@ export class IdempotencyInterceptor implements NestInterceptor {
     // rule 9 exists to protect. The database now decides which endpoints may go
     // without an owner (`idempotency_keys_user_or_public_check`).
     const userId = request.user?.id ?? null;
-    const requestHash = hashCanonicalBody(request.body);
+    // With no authenticated user the key is not tied to anyone, so on its own it
+    // would replay a cached response to whoever presents it — and keys are
+    // logged and pass through proxies. On a route whose credential is a cookie
+    // (the admin refresh has an empty body) that replay would hand out a live
+    // access token. Folding the cookie into the hash makes the replay answer
+    // only the caller who holds the same credential; anyone else gets the
+    // key-reused-with-a-different-request 422.
+    const requestHash =
+      request.user === undefined
+        ? credentialBoundHash(hashCanonicalBody(request.body), request.headers.cookie)
+        : hashCanonicalBody(request.body);
     const routeUrl = (request.routeOptions as { url?: string } | undefined)?.url ?? request.url;
     const endpoint = `${request.method} ${routeUrl}`;
     // This attempt's claim token: `store` and `release` carry it back, so a

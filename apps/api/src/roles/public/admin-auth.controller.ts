@@ -71,6 +71,11 @@ export class AdminAuthController {
     return parseOutgoing(adminSessionBodySchema, result, 'admin session');
   }
 
+  /**
+   * A replay of this request (same Idempotency-Key and cookie) is answered from
+   * the idempotency store: the cached body, and NO Set-Cookie. A client that lost
+   * the first response must treat it as a re-login, not retry with the old key.
+   */
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   async refresh(@Req() request: FastifyRequest, @Res({ passthrough: true }) reply: FastifyReply) {

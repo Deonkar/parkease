@@ -200,3 +200,101 @@ describe('IdempotencyInterceptor — the store and release writes are observed',
     );
   });
 });
+
+/**
+ * An unauthenticated request's key is bound to its cookie. The admin refresh
+ * sends an empty body and authenticates by cookie, so without this a replayed
+ * key returned a live access token to someone holding no credential at all.
+ */
+describe('IdempotencyInterceptor — public routes bind the key to the cookie', () => {
+  const publicContext = (cookie: string | undefined, user?: { id: string }): ExecutionContext =>
+    ({
+      switchToHttp: () => ({
+        getRequest: () => ({
+          method: 'POST',
+          url: '/api/v1/auth/admin/refresh',
+          headers: { 'idempotency-key': KEY, ...(cookie === undefined ? {} : { cookie }) },
+          body: {},
+          ...(user === undefined ? {} : { user }),
+          routeOptions: { url: '/api/v1/auth/admin/refresh' },
+        }),
+      }),
+    }) as unknown as ExecutionContext;
+
+  /** The claim rule of IdempotencyService: same key + same hash replays, a different hash conflicts. */
+  const fakeStore = () => {
+    const seen = new Map<string, { hash: string; response: unknown }>();
+    const service = {
+      claim: vi.fn((input: { key: string; requestHash: string }) => {
+        const existing = seen.get(input.key);
+        if (!existing) {
+          seen.set(input.key, { hash: input.requestHash, response: undefined });
+          return Promise.resolve({ outcome: 'proceed' });
+        }
+        return Promise.resolve(
+          existing.hash === input.requestHash
+            ? { outcome: 'replay', response: existing.response }
+            : { outcome: 'conflict' },
+        );
+      }),
+      store: vi.fn((key: string, _status: number, payload: unknown) => {
+        const existing = seen.get(key);
+        if (existing) existing.response = payload;
+        return Promise.resolve(true);
+      }),
+      release: vi.fn().mockResolvedValue(true),
+    };
+    return { service, typed: service as unknown as IdempotencyService };
+  };
+
+  const send = async (interceptor: IdempotencyInterceptor, context: ExecutionContext) => {
+    const answer = await interceptor.intercept(context, {
+      handle: () => of({ accessToken: 'live' }),
+    });
+    const result = await firstValueFrom(answer);
+    await settle();
+    return result;
+  };
+
+  it('replays for the same key and the same cookie', async () => {
+    const { typed } = fakeStore();
+    const interceptor = new IdempotencyInterceptor(typed);
+
+    await send(interceptor, publicContext('pe_admin_rt=aaaa'));
+
+    await expect(send(interceptor, publicContext('pe_admin_rt=aaaa'))).resolves.toEqual({
+      accessToken: 'live',
+    });
+  });
+
+  it('refuses (422) the same key with a different cookie', async () => {
+    const { typed } = fakeStore();
+    const interceptor = new IdempotencyInterceptor(typed);
+    await send(interceptor, publicContext('pe_admin_rt=aaaa'));
+
+    await expect(send(interceptor, publicContext('pe_admin_rt=bbbb'))).rejects.toMatchObject({
+      status: 422,
+    });
+  });
+
+  it('refuses (422) the same key with no cookie at all', async () => {
+    const { typed } = fakeStore();
+    const interceptor = new IdempotencyInterceptor(typed);
+    await send(interceptor, publicContext('pe_admin_rt=aaaa'));
+
+    await expect(send(interceptor, publicContext(undefined))).rejects.toMatchObject({
+      status: 422,
+    });
+  });
+
+  it('does not fold the cookie in when a user is authenticated', async () => {
+    const user = { id: '0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5c' };
+    const hashFor = async (cookie: string): Promise<string> => {
+      const { service, typed } = fakeStore();
+      await send(new IdempotencyInterceptor(typed), publicContext(cookie, user));
+      return (service.claim.mock.calls[0]?.[0] as { requestHash: string }).requestHash;
+    };
+
+    expect(await hashFor('a=1')).toBe(await hashFor('a=2'));
+  });
+});

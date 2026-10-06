@@ -40,6 +40,9 @@ export interface AccessTokenPayload extends JWTPayload {
   readonly active_role: string | null;
 }
 
+/** Refusals that must commit their writes before the error is thrown. */
+type RotateRefusal = 'reuse_detected' | 'user_not_active' | 'role_revoked';
+
 @Injectable()
 export class TokenService {
   constructor(
@@ -76,10 +79,12 @@ export class TokenService {
   /**
    * `opts.requireRole` is the admin panel's gate: the session it refreshes must
    * still hold that role, and the new access token is minted with it active.
-   * A user whose role was withdrawn mid-session has that refresh token revoked.
-   * That revocation has to COMMIT, so the transaction returns a discriminant and
-   * the 403 is thrown after it — a throw inside the callback would roll the
-   * revocation back and leave the token usable.
+   *
+   * Every refusal that writes something — the role revocation, the family
+   * revocation and audit row on reuse, the revocation of a blocked user's
+   * tokens — has to COMMIT. So the transaction returns a discriminant and the
+   * error is thrown after it: a throw inside the callback rolls the writes back
+   * and leaves the very tokens it meant to kill usable.
    */
   async rotate(
     presented: string,
@@ -90,7 +95,7 @@ export class TokenService {
     const requireRole = opts?.requireRole;
 
     const outcome = await this.db.transaction(
-      async (rawTx: Transaction): Promise<SessionTokens | 'role_revoked'> => {
+      async (rawTx: Transaction): Promise<SessionTokens | RotateRefusal> => {
         const tx = rawTx as unknown as TxHandle;
 
         const rows = await tx
@@ -114,7 +119,7 @@ export class TokenService {
             targetId: row.userId,
             ipAddress: null,
           });
-          throw new UnauthorizedException('Your session has expired. Please log in again.');
+          return 'reuse_detected';
         }
 
         if (row.expiresAt <= new Date()) {
@@ -129,7 +134,7 @@ export class TokenService {
         const user = userRows[0];
         if (user?.status !== UserStatus.ACTIVE) {
           await this.revokeAllForUser(tx, row.userId, 'user_not_active');
-          throw new ForbiddenException('This account has been suspended. Contact support.');
+          return 'user_not_active';
         }
 
         const roles = await tx
@@ -163,13 +168,19 @@ export class TokenService {
       },
     );
 
-    if (outcome === 'role_revoked') {
-      throw new ForbiddenException({
-        error: 'ADMIN_ROLE_REQUIRED',
-        message: 'This account no longer has access to the admin panel.',
-      });
+    switch (outcome) {
+      case 'reuse_detected':
+        throw new UnauthorizedException('Your session has expired. Please log in again.');
+      case 'user_not_active':
+        throw new ForbiddenException('This account has been suspended. Contact support.');
+      case 'role_revoked':
+        throw new ForbiddenException({
+          error: 'ADMIN_ROLE_REQUIRED',
+          message: 'This account no longer has access to the admin panel.',
+        });
+      default:
+        return outcome;
     }
-    return outcome;
   }
 
   async revoke(tokenHash: string): Promise<void> {
