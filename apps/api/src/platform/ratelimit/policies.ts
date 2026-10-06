@@ -14,6 +14,27 @@ export const RATE_LIMIT_POLICIES: Readonly<Record<string, RateLimitPolicy>> = {
   },
   'POST /api/v1/auth/session:ip': { limit: 30, windowSeconds: 3600, keyBy: 'ip', failClosed: true },
   'POST /api/v1/auth/refresh': { limit: 30, windowSeconds: 3600, keyBy: 'user', failClosed: true },
+  // Task 18a admin sign-in. Public routes, so `keyBy: 'user'` resolves to the caller's IP
+  // (bucketKey), and all three fail closed like the mobile auth routes they copy. Without
+  // these entries they would fall to the strictest default and share nothing with auth.
+  'POST /api/v1/auth/admin/session': {
+    limit: 30,
+    windowSeconds: 3600,
+    keyBy: 'ip',
+    failClosed: true,
+  },
+  'POST /api/v1/auth/admin/refresh': {
+    limit: 30,
+    windowSeconds: 3600,
+    keyBy: 'user',
+    failClosed: true,
+  },
+  'POST /api/v1/auth/admin/logout': {
+    limit: 30,
+    windowSeconds: 3600,
+    keyBy: 'user',
+    failClosed: true,
+  },
   'GET /api/v1/driver/spaces': { limit: 60, windowSeconds: 60, keyBy: 'user' },
   'GET /api/v1/driver/spaces/:id': { limit: 60, windowSeconds: 60, keyBy: 'user' },
   'GET /api/v1/driver/spaces/:id/reviews': { limit: 60, windowSeconds: 60, keyBy: 'user' },

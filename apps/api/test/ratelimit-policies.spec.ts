@@ -17,6 +17,22 @@ describe('rate limit policies', () => {
     expect(refreshPolicy?.failClosed).toBe(true);
   });
 
+  it('the admin auth routes resolve to their own fail-closed policies, never the default (task 18a)', () => {
+    const session = resolvePolicy('POST', '/api/v1/auth/admin/session');
+    const refresh = resolvePolicy('POST', '/api/v1/auth/admin/refresh');
+    const logout = resolvePolicy('POST', '/api/v1/auth/admin/logout');
+
+    expect(session).toMatchObject({
+      limit: 30,
+      windowSeconds: 3600,
+      keyBy: 'ip',
+      failClosed: true,
+    });
+    expect(refresh).toMatchObject({ limit: 30, windowSeconds: 3600, failClosed: true });
+    expect(logout).toMatchObject({ limit: 30, windowSeconds: 3600, failClosed: true });
+    for (const policy of [session, refresh, logout]) expect(policy).not.toBe(DEFAULT_POLICY);
+  });
+
   it('the /me payout routes resolve to their own policies, never the default (task 16a)', () => {
     const put = resolvePolicy('PUT', '/api/v1/me/bank-details');
     expect(put).toMatchObject({ limit: 5, windowSeconds: 60, keyBy: 'user' });

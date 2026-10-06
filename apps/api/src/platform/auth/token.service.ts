@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 
 import { ForbiddenException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
-import { UserStatus } from '@parkease/contracts/enums';
+import { UserStatus, type Role } from '@parkease/contracts/enums';
 import { uuidv7, type Transaction } from '@parkease/db';
 import { refreshTokens, userRoles, users } from '@parkease/db/schema';
 import { and, eq, isNull } from 'drizzle-orm';
@@ -73,73 +73,103 @@ export class TokenService {
     return { accessToken, refreshToken, expiresIn: ACCESS_TTL_SECONDS };
   }
 
-  async rotate(presented: string, userAgent?: string): Promise<SessionTokens> {
+  /**
+   * `opts.requireRole` is the admin panel's gate: the session it refreshes must
+   * still hold that role, and the new access token is minted with it active.
+   * A user whose role was withdrawn mid-session has that refresh token revoked.
+   * That revocation has to COMMIT, so the transaction returns a discriminant and
+   * the 403 is thrown after it — a throw inside the callback would roll the
+   * revocation back and leave the token usable.
+   */
+  async rotate(
+    presented: string,
+    userAgent?: string,
+    opts?: { readonly requireRole?: Role },
+  ): Promise<SessionTokens> {
     const presentedHash = sha256(presented);
+    const requireRole = opts?.requireRole;
 
-    return this.db.transaction(async (rawTx: Transaction) => {
-      const tx = rawTx as unknown as TxHandle;
+    const outcome = await this.db.transaction(
+      async (rawTx: Transaction): Promise<SessionTokens | 'role_revoked'> => {
+        const tx = rawTx as unknown as TxHandle;
 
-      const rows = await tx
-        .select()
-        .from(refreshTokens)
-        .where(eq(refreshTokens.tokenHash, presentedHash))
-        .for('update');
+        const rows = await tx
+          .select()
+          .from(refreshTokens)
+          .where(eq(refreshTokens.tokenHash, presentedHash))
+          .for('update');
 
-      const row = rows[0];
-      if (!row) {
-        throw new UnauthorizedException('Your session has expired. Please log in again.');
-      }
+        const row = rows[0];
+        if (!row) {
+          throw new UnauthorizedException('Your session has expired. Please log in again.');
+        }
 
-      if (row.rotatedAt || row.revokedAt) {
-        await this.revokeAllForUser(tx, row.userId, 'refresh_reuse_detected');
-        await this.audit.record(tx, {
-          actorUserId: row.userId,
-          actorRole: null,
-          action: 'auth.refresh-reuse-detected',
-          targetType: 'user',
-          targetId: row.userId,
-          ipAddress: null,
+        if (row.rotatedAt || row.revokedAt) {
+          await this.revokeAllForUser(tx, row.userId, 'refresh_reuse_detected');
+          await this.audit.record(tx, {
+            actorUserId: row.userId,
+            actorRole: null,
+            action: 'auth.refresh-reuse-detected',
+            targetType: 'user',
+            targetId: row.userId,
+            ipAddress: null,
+          });
+          throw new UnauthorizedException('Your session has expired. Please log in again.');
+        }
+
+        if (row.expiresAt <= new Date()) {
+          throw new UnauthorizedException('Your session has expired. Please log in again.');
+        }
+
+        const userRows = await tx
+          .select({ status: users.status })
+          .from(users)
+          .where(eq(users.id, row.userId));
+
+        const user = userRows[0];
+        if (user?.status !== UserStatus.ACTIVE) {
+          await this.revokeAllForUser(tx, row.userId, 'user_not_active');
+          throw new ForbiddenException('This account has been suspended. Contact support.');
+        }
+
+        const roles = await tx
+          .select({ role: userRoles.role })
+          .from(userRoles)
+          .where(and(eq(userRoles.userId, row.userId), eq(userRoles.status, 'active')));
+
+        const roleList = roles.map((r: { role: string }) => r.role);
+
+        if (requireRole !== undefined && !roleList.includes(requireRole)) {
+          const now = new Date();
+          await tx
+            .update(refreshTokens)
+            .set({ revokedAt: now, revokedReason: 'role_revoked', updatedAt: now })
+            .where(eq(refreshTokens.id, row.id));
+          return 'role_revoked';
+        }
+
+        await tx
+          .update(refreshTokens)
+          .set({ rotatedAt: new Date(), updatedAt: new Date() })
+          .where(eq(refreshTokens.id, row.id));
+
+        return this.issue(tx, {
+          userId: row.userId,
+          roles: roleList,
+          activeRole: requireRole ?? roleList[0] ?? null,
+          familyId: row.familyId,
+          userAgent,
         });
-        throw new UnauthorizedException('Your session has expired. Please log in again.');
-      }
+      },
+    );
 
-      if (row.expiresAt <= new Date()) {
-        throw new UnauthorizedException('Your session has expired. Please log in again.');
-      }
-
-      const userRows = await tx
-        .select({ status: users.status })
-        .from(users)
-        .where(eq(users.id, row.userId));
-
-      const user = userRows[0];
-      if (user?.status !== UserStatus.ACTIVE) {
-        await this.revokeAllForUser(tx, row.userId, 'user_not_active');
-        throw new ForbiddenException('This account has been suspended. Contact support.');
-      }
-
-      await tx
-        .update(refreshTokens)
-        .set({ rotatedAt: new Date(), updatedAt: new Date() })
-        .where(eq(refreshTokens.id, row.id));
-
-      const roles = await tx
-        .select({ role: userRoles.role })
-        .from(userRoles)
-        .where(and(eq(userRoles.userId, row.userId), eq(userRoles.status, 'active')));
-
-      const roleList = roles.map((r: { role: string }) => r.role);
-      const first = roleList[0];
-      const activeRole = first ?? null;
-
-      return this.issue(tx, {
-        userId: row.userId,
-        roles: roleList,
-        activeRole,
-        familyId: row.familyId,
-        userAgent,
+    if (outcome === 'role_revoked') {
+      throw new ForbiddenException({
+        error: 'ADMIN_ROLE_REQUIRED',
+        message: 'This account no longer has access to the admin panel.',
       });
-    });
+    }
+    return outcome;
   }
 
   async revoke(tokenHash: string): Promise<void> {
