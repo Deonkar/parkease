@@ -65,6 +65,14 @@ export const colors = {
   infoLight: '#EFF6FF',
 
   /** Surge. Warning-toned, never the availability green. */
+  /**
+   * Star glyphs (task 17b, direction "Five stars"). A non-text graphic always paired with its
+   * number, so 3:1 is the bar: #D97706 clears it, the usual #F59E0B does not. Never text.
+   */
+  rating: '#D97706',
+  /** An empty star. Decorative contrast only: the number beside it carries the value. */
+  ratingOff: '#CBD5E1',
+
   surge: '#9A3412',
   surgeSoft: '#FFEDD5',
 

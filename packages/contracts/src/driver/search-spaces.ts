@@ -74,9 +74,8 @@ export const spaceSearchItemSchema = z.object({
   location: geoPointSchema,
   distanceM: z.number().int(),
   thumbnail: z.string().url().nullable(),
-  /** null means never reviewed — the client renders "New", never a zero score. */
-  rating: z.number().min(1).max(5).nullable(),
   reviewCount: z.number().int().nonnegative(),
+  /** New / Mixed reviews / rated, with the display stars. The client never derives a rating. */
   badge: ratingBadgeSchema,
   amenities: z.array(amenitySchema),
   availableSlots: z.object({

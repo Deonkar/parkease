@@ -63,20 +63,20 @@ describe('toSpaceResultView', () => {
     expect(item.isOpenNow).toBe(true);
   });
 
-  it('converts basis points to stars', () => {
-    expect(toSpaceResultView(result()).rating).toBe(4.2);
-    expect(
-      toSpaceResultView(result({ candidate: { ...candidate, ratingAvgBp: 50_000 } })).rating,
-    ).toBe(5);
+  it('sends the display stars from basis points, never a float', () => {
+    expect(toSpaceResultView(result()).badge).toEqual({
+      kind: 'rated',
+      stars: '4.2',
+      reviewCount: 18,
+    });
+    expect(toSpaceResultView(result())).not.toHaveProperty('rating');
   });
 
-  it('reports an unreviewed space as null, never zero', () => {
-    // The client renders "New" for null. A 0 would render as a zero-star space.
+  it('reports an unreviewed space as "New", never zero', () => {
     const item = toSpaceResultView(
       result({ candidate: { ...candidate, ratingAvgBp: null, ratingCount: 0 } }),
     );
 
-    expect(item.rating).toBeNull();
     expect(item.reviewCount).toBe(0);
     expect(item.badge).toEqual({ kind: 'new', label: 'New' });
   });

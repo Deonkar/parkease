@@ -89,8 +89,6 @@ export const spaceDetailSchema = z.object({
   surgeMultiplier: z.number(),
   /** The tier, or null when the zone is not surging. Drives the §2.6 banner. */
   surgeBadge: surgeBadgeSchema.nullable(),
-  /** null means never reviewed — the client renders "New", never a zero score. */
-  rating: z.number().nullable(),
   reviewCount: z.number().int().nonnegative(),
   badge: ratingBadgeSchema,
   reviewSummary: reviewSummarySchema,

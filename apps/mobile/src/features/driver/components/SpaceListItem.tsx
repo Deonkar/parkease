@@ -30,10 +30,10 @@ import {
   AMENITY_LABELS,
   durationSuffix,
   formatDistance,
-  formatRatingLabel,
   spaceAccessibilityLabel,
 } from '../space-display';
 
+import { RatingMeta } from './RatingMeta';
 import { SlotPill } from './SlotPill';
 
 const MAX_AMENITY_CHIPS = 2;
@@ -97,18 +97,7 @@ function SpaceListItemBase({ item, duration, index, onPress }: SpaceListItemProp
           </Text>
 
           <View style={styles.metaRow}>
-            {item.rating === null ? (
-              <View style={styles.newBadge}>
-                <Text style={styles.newBadgeText}>New</Text>
-              </View>
-            ) : (
-              <View style={styles.inlineMeta}>
-                <MaterialCommunityIcons name="star" size={14} color={colors.warning} />
-                <Text style={styles.metaText}>
-                  {formatRatingLabel(item.rating, item.reviewCount)}
-                </Text>
-              </View>
-            )}
+            <RatingMeta badge={item.badge} />
 
             {item.amenities.slice(0, MAX_AMENITY_CHIPS).map((amenity) => (
               <View key={amenity} style={styles.inlineMeta}>

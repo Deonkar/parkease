@@ -7,6 +7,7 @@ import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'rea
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { APPROVAL_STATUS_DISPLAY } from '@/features/owner/approval-status';
+import { OwnerReviewsSection } from '@/features/owner/components/OwnerReviewsSection';
 import { useSpaceBookings } from '@/features/owner/hooks/useOwnerQueries';
 import { useSpaceDetail } from '@/features/owner/hooks/useSpaceDetail';
 import { useToggleSpace } from '@/features/owner/hooks/useToggleSpace';
@@ -126,6 +127,10 @@ export default function ListingDetailScreen() {
           <Section title="Bookings">
             <BookingGroup title="Active" query={active} />
             <BookingGroup title="Upcoming" query={upcoming} />
+          </Section>
+
+          <Section title="Reviews">
+            <OwnerReviewsSection spaceId={space.id} />
           </Section>
 
           <Section title="Pricing">

@@ -354,6 +354,40 @@ describe('reviews HTTP', () => {
     });
   });
 
+  describe('the public list of a space', () => {
+    it('pages every visible review newest first, without the report flag, and 404s an unknown space', async () => {
+      const ids: string[] = [];
+      for (const rating of [5, 4, 3]) {
+        const reviewer = await seedUser(h, 'driver');
+        const [row] = await h.sql<{ id: string }[]>`
+          INSERT INTO reviews (booking_id, reviewer_user_id, reviewer_role, target_type, target_id,
+                               rating, is_reported)
+          VALUES (${bookingId}, ${reviewer}, 'driver', 'space', ${spaceId}, ${rating}, true)
+          RETURNING id`;
+        ids.push(row!.id);
+      }
+      const removed = ids[1]!;
+      await h.sql`UPDATE reviews SET moderation_status = 'removed', deleted_at = now()
+                  WHERE id = ${removed}`;
+
+      const seen: Record<string, unknown>[] = [];
+      let url = `/api/v1/driver/spaces/${spaceId}/reviews?limit=1`;
+      for (let page = 0; page < 10; page++) {
+        const response = await get(url);
+        expect(response.status).toBe(200);
+        seen.push(...data<Record<string, unknown>[]>(response));
+        const next = env(response).meta?.nextCursor;
+        if (next == null) break;
+        url = `/api/v1/driver/spaces/${spaceId}/reviews?limit=1&cursor=${next}`;
+      }
+
+      expect(seen.map((r) => r['id'])).toEqual([ids[2], ids[0]]);
+      for (const review of seen) expect(review).not.toHaveProperty('isReported');
+
+      expect((await get(`/api/v1/driver/spaces/${crypto.randomUUID()}/reviews`)).status).toBe(404);
+    });
+  });
+
   describe('reporting', () => {
     let reviewId: string;
 

@@ -117,3 +117,18 @@ describe('the vivid tones are documented as text-unsafe', () => {
     expect(contrast(colors.textInverse, fill)).toBeLessThan(AA_NORMAL);
   });
 });
+
+describe('contrast — rating stars (task 17b)', () => {
+  // A filled star is a non-text graphic. It always sits beside the number it stands for, so 3:1 is
+  // the bar, not 4.5:1 — and #F59E0B, the usual "star yellow", fails even that at 2.15:1.
+  it.each([
+    ['surface', colors.surface],
+    ['surfaceSecondary', colors.surfaceSecondary],
+  ])('rating clears AA for non-text on %s', (_label, bg) => {
+    expect(contrast(colors.rating, bg)).toBeGreaterThanOrEqual(AA_NON_TEXT);
+  });
+
+  it('an empty star is visibly lighter than a filled one', () => {
+    expect(contrast(colors.rating, colors.ratingOff)).toBeGreaterThan(1.5);
+  });
+});
