@@ -2330,3 +2330,68 @@ test (ordering, chips, respond) but was not looked at on a screen.
 - **Why deferred:** blocked by S-107 on this branch.
 - **Done means:** after fix/web-map merges, create a listing in the web preview, open its Reviews section at
   375 and 1280 wide, and check respond / report / show more.
+
+### S-138 — The ledger has no index on (occurred_at, id): the explorer and the export sort the range
+
+- **Status:** `open`
+- **Found in:** task 18a Task 8 (admin finance), 2026-10-06
+- **Surface:** api/db — `ledger_entries`, `domains/ledger/queries/ledger-explorer.ts`, `ledger-export.ts`
+
+Both read `ORDER BY occurred_at [DESC], id [DESC]`. The only time-ordered index is `(account, occurred_at)`, so an
+unfiltered explorer page or a whole-range export sorts every row in range before the first one is returned (measured:
+~0.5 s to the first row on 250 000 rows; it grows with the table). A filter by account is already served.
+
+- **Why deferred:** a migration (reviewed with `postgres-migration-reviewer`) is outside the finance read task, and the
+  range is capped at 366 days.
+- **Done means:** `CREATE INDEX CONCURRENTLY ledger_entries_occurred_at_id_idx ON ledger_entries (occurred_at, id)` in a
+  migration, and the 250 000-row streaming test shows the first row arriving before the sort.
+
+### S-139 — JSON endpoints accept form-encoded and text/plain bodies
+
+- **Status:** `open`
+- **Found in:** task 18a pentest (F3), 2026-10-06
+- **Surface:** api · platform/http
+
+A role grant executed from an `application/x-www-form-urlencoded` body. Not a CSRF today — every admin mutation needs a Bearer header a cross-site form cannot send — so it is defence in depth.
+
+- **Done means:** non-GET requests whose content-type is not `application/json` answer 415 (webhooks excepted), implemented once in platform/http, and the skipped case in `admin-pentest.spec.ts` runs.
+
+### S-140 — Admin dashboard p95 is 9.76 s at 200 concurrent over a 250k-row ledger
+
+- **Status:** `open`
+- **Found in:** task 18a stress run, 2026-10-06
+- **Surface:** api · `domains/ledger/queries/dashboard.ts`
+
+A single dashboard is ~152 ms; `imbalancedTxnIds` is ~80% of it (full txn_id index scan, ~128k buffers), and the dashboard fires 8 queries at once against a pool of 10. Plans are in the 18a stress report.
+
+- **Done means:** counts collapsed into one statement, the imbalance check memoised or index-backed, S-138's index in place, and the skipped case in `admin-stress.spec.ts` passes (or its target is restated with the measured number and the pool-size reason).
+
+### S-141 — Ledger export can hold pooled connections while a client stalls, and is not audited
+
+- **Status:** `open`
+- **Found in:** task 18a review (security M1, database H1, silent-failure 5), 2026-10-06
+- **Surface:** api · `ledger-export.ts`, `finance.controller.ts`
+
+Each export pins one of the pool's 10 connections for as long as the client reads; 5/min/user caps starts, not concurrency. No `ledger.export` audit row is written.
+
+- **Done means:** at most 2 concurrent exports (429 otherwise), an overall deadline that destroys the stream, abort on client close, statement_timeout on the cursor, and a `ledger.export` audit row — each with a test.
+
+### S-142 — Remaining 18a review findings (data integrity and hardening)
+
+- **Status:** `open`
+- **Found in:** task 18a review lenses, 2026-10-06 (lens files in the 18a SDD workspace)
+- **Surface:** api · db · contracts
+
+Deferred, each small: DB-row `.parse()` answers 400 on drift instead of 500 (add `parseRow`); refunds have no DB trigger capping their sum at the capture (rule 5); migration 0042 should follow 0040/0041 (`SET LOCAL`, FK NOT VALID + VALIDATE file); cancel should re-assert "no orphan refund" after taking the payment lock; booking detail and the lock query order payments differently (`NULLS LAST, id`); `page` has no upper bound (OFFSET 1e300 → 500); dashboard reported-review count omits `deleted_at IS NULL`; partner detail should flag `documentsIncomplete`; verify announces `partner.verified` when the role stayed suspended; space decisions need a response contract; `presetAmount`/`lockProfile` need exhaustive switches; `'orphan_capture'` belongs in contracts; space approval has no version precondition (admin may approve content changed since viewing); mobile switch-role can enter `admin` (needs an ADR); block can race an in-flight rotate (bounded by one access token); booking list `to` is inclusive while every other admin range is exclusive; no last-admin guard; ParkEase Fee card is gross credits, not net of refunds (product decision).
+
+- **Done means:** each item fixed with a test or ruled out in this row.
+
+### S-143 — Admin panel (18b) client contract notes from 18a
+
+- **Status:** `open`
+- **Found in:** task 18a, 2026-10-06
+- **Surface:** admin (18b)
+
+POST `/auth/admin/refresh` and `/logout` with `{}` (Fastify answers 400 to an empty JSON body); set `ADMIN_ORIGIN` and `TRUST_PROXY_HOPS` in prod env; verify Cloudinary `image/download` signed URLs against a real authenticated upload (no `format`, SHA-256) — untested live; a phone search must send the full number URL-encoded.
+
+- **Done means:** 18b's session client and partner document viewer are built and checked against these.

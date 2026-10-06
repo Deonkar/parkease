@@ -2,7 +2,11 @@ import { createHash } from 'node:crypto';
 
 import { describe, it, expect } from 'vitest';
 
-import { CloudinaryService } from '../src/platform/storage/cloudinary.service.js';
+import {
+  CloudinaryService,
+  DOCUMENT_URL_TTL_SECONDS,
+  InvalidUploadIdError,
+} from '../src/platform/storage/cloudinary.service.js';
 
 describe('CloudinaryService', () => {
   const service = new CloudinaryService();
@@ -20,10 +24,15 @@ describe('CloudinaryService', () => {
     expect(Object.keys(result.fields)).not.toContain('api_secret');
   });
 
-  it('uses private delivery type for documents', () => {
+  /**
+   * S-59. A `private` asset hides only its original: transformed (derived) versions
+   * stay publicly deliverable. `authenticated` requires a signature for the original
+   * and every derived version, which is what an ID document needs.
+   */
+  it('uploads documents as authenticated, never private', () => {
     const result = service.createSignedUpload('documents', 'image/jpeg');
-    expect(result.publicUrl).toContain('/private/');
-    expect(result.fields['type']).toBe('private');
+    expect(result.publicUrl).toContain('/authenticated/');
+    expect(result.fields['type']).toBe('authenticated');
   });
 
   it('uses upload delivery type for non-document folders', () => {
@@ -91,5 +100,130 @@ describe('CloudinaryService — a signed upload cannot replace an existing image
     const { fields, expiresAt } = service.createSignedUpload('proofs', 'image/jpeg');
 
     expect(new Date(expiresAt).getTime()).toBe((Number(fields['timestamp']) + 3600) * 1000);
+  });
+});
+
+/**
+ * Admin partner review (task 18a, S-59). Identity documents are `authenticated`, so the only way
+ * to look at one is a download URL signed for a few minutes. The parameter set mirrors the
+ * official SDK's `private_download_url` (cloudinary_npm `lib/utils`): it signs `timestamp`,
+ * `public_id`, `type` and `expires_at` (`format` and `attachment` are blank and dropped).
+ */
+describe('CloudinaryService.privateDownloadUrl', () => {
+  const service = new CloudinaryService();
+  const now = new Date('2026-10-06T10:00:00.000Z');
+  const nowSeconds = Math.floor(now.getTime() / 1000);
+  const cloud = String(process.env['CLOUDINARY_CLOUD_NAME']);
+  const secret = String(process.env['CLOUDINARY_API_SECRET']);
+
+  const paramsOf = (url: string): URLSearchParams => new URL(url).searchParams;
+
+  it('is a five-minute window', () => {
+    expect(DOCUMENT_URL_TTL_SECONDS).toBe(300);
+  });
+
+  it('points at the Cloudinary download API for the account', () => {
+    const { url } = service.privateDownloadUrl('parkease/documents/x', {
+      expiresInSeconds: 300,
+      now,
+    });
+    const parsed = new URL(url);
+
+    expect(parsed.origin).toBe('https://api.cloudinary.com');
+    expect(parsed.pathname).toBe(`/v1_1/${cloud}/image/download`);
+  });
+
+  it('signs expires_at, public_id, timestamp and type=authenticated', () => {
+    const { url, expiresAt } = service.privateDownloadUrl('parkease/documents/x', {
+      expiresInSeconds: 300,
+      now,
+    });
+    const params = paramsOf(url);
+
+    expect(params.get('expires_at')).toBe(String(nowSeconds + 300));
+    expect(params.get('timestamp')).toBe(String(nowSeconds));
+    expect(params.get('type')).toBe('authenticated');
+    expect(params.get('public_id')).toBe('parkease/documents/x');
+    expect(params.get('api_key')).toBe(process.env['CLOUDINARY_API_KEY']);
+    expect(new Date(expiresAt).getTime()).toBe((nowSeconds + 300) * 1000);
+  });
+
+  it('carries a signature equal to sha256 over the sorted signed set plus the secret', () => {
+    const { url } = service.privateDownloadUrl('parkease/documents/x', {
+      expiresInSeconds: 300,
+      now,
+    });
+
+    const signed = [
+      `expires_at=${String(nowSeconds + 300)}`,
+      'public_id=parkease/documents/x',
+      `timestamp=${String(nowSeconds)}`,
+      'type=authenticated',
+    ].join('&');
+    const expected = createHash('sha256')
+      .update(signed + secret)
+      .digest('hex');
+
+    expect(paramsOf(url).get('signature')).toBe(expected);
+  });
+
+  it('never puts the API secret in the URL', () => {
+    const { url } = service.privateDownloadUrl('parkease/documents/x', {
+      expiresInSeconds: 300,
+      now,
+    });
+
+    expect(url).not.toContain(secret);
+    expect(paramsOf(url).has('api_secret')).toBe(false);
+  });
+
+  it('signs the id as stored: a documents public_id from the upload response', () => {
+    const { url } = service.privateDownloadUrl('parkease/documents/0190abcd-1234_x', {
+      expiresInSeconds: 300,
+      now,
+    });
+
+    expect(paramsOf(url).get('public_id')).toBe('parkease/documents/0190abcd-1234_x');
+  });
+
+  /**
+   * The signature is the admin's key to an ID image, so it is only given for an id shaped like one
+   * we minted (`uploadIdIn('documents')`): the documents folder, and no `.` or `:` to climb out of it.
+   */
+  it.each([
+    ['a path that climbs out of documents', 'parkease/documents/../proofs/x'],
+    ['an id in another folder', 'parkease/spaces/x'],
+    ['an id in another folder, named proofs', 'parkease/proofs/abc'],
+    ['a bare id with no folder', 'x'],
+    ['a dev fixture id', 'dev-mock-licence'],
+    ['a URL', 'https://evil.example/parkease/documents/x'],
+    ['a prefix collision', 'parkease/documents-old/x'],
+    ['an empty folder segment', 'parkease/documents/'],
+    ['an empty id', ''],
+  ])('refuses %s', (_label, id) => {
+    expect(() => service.privateDownloadUrl(id, { expiresInSeconds: 300, now })).toThrow(
+      InvalidUploadIdError,
+    );
+  });
+});
+
+describe('CloudinaryService.publicImageUrl', () => {
+  const service = new CloudinaryService();
+  const cloud = String(process.env['CLOUDINARY_CLOUD_NAME']);
+
+  it('is the normal upload delivery URL for a stored spaces id', () => {
+    expect(service.publicImageUrl('parkease/spaces/abc')).toBe(
+      `https://res.cloudinary.com/${cloud}/image/upload/parkease/spaces/abc`,
+    );
+  });
+
+  it.each([
+    ['a path that climbs out of spaces', 'parkease/spaces/../documents/x'],
+    ['an id in the documents folder', 'parkease/documents/x'],
+    ['a bare id', 'abc'],
+    ['a query or fragment', 'parkease/spaces/a?b#c'],
+    ['a dev fixture id', 'dev-mock-photo'],
+  ])('refuses %s', (_label, id) => {
+    expect(() => service.publicImageUrl(id)).toThrow(InvalidUploadIdError);
   });
 });

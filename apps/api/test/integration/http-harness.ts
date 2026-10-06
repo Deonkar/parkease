@@ -12,7 +12,14 @@ import type { FastifyRequest } from 'fastify';
 
 import { BookingModule } from '../../src/domains/booking/booking.module.js';
 import { CarwashModule } from '../../src/domains/carwash/carwash.module.js';
+import { AdminUserQueries } from '../../src/domains/identity/admin-user.queries.js';
+import { CreateSessionCommand } from '../../src/domains/identity/commands/create-session.command.js';
+import { GrantRoleCommand } from '../../src/domains/identity/commands/grant-role.command.js';
+import { ReviewPartnerCommand } from '../../src/domains/identity/commands/review-partner.command.js';
+import { RevokeRoleCommand } from '../../src/domains/identity/commands/revoke-role.command.js';
+import { SetUserStatusCommand } from '../../src/domains/identity/commands/set-user-status.command.js';
 import { SwitchRoleCommand } from '../../src/domains/identity/commands/switch-role.command.js';
+import { PartnerQueries } from '../../src/domains/identity/partner.queries.js';
 import { RoleRepository } from '../../src/domains/identity/repositories/role.repository.js';
 import { UserRepository } from '../../src/domains/identity/repositories/user.repository.js';
 import { LedgerModule } from '../../src/domains/ledger/ledger.module.js';
@@ -27,6 +34,10 @@ import { SpaceModule } from '../../src/domains/space/space.module.js';
 import { SurgeModule } from '../../src/domains/surge/surge.module.js';
 import { ValetModule } from '../../src/domains/valet/valet.module.js';
 import type { AuthUser } from '../../src/platform/auth/current-user.decorator.js';
+import {
+  FirebaseVerifierService,
+  type VerifiedPhone,
+} from '../../src/platform/auth/firebase-verifier.service.js';
 import { IS_PUBLIC_KEY } from '../../src/platform/auth/public.decorator.js';
 import { TokenService } from '../../src/platform/auth/token.service.js';
 import { DB, DbModule } from '../../src/platform/db/db.module.js';
@@ -41,8 +52,15 @@ import { RolesGuard } from '../../src/platform/rbac/roles.guard.js';
 import { REDIS, RedisModule } from '../../src/platform/redis/redis.module.js';
 import { StorageModule } from '../../src/platform/storage/storage.module.js';
 import { TelephonyModule } from '../../src/platform/telephony/telephony.module.js';
+import { AdminAuditController } from '../../src/roles/admin/audit.controller.js';
+import { AdminBookingsController } from '../../src/roles/admin/bookings.controller.js';
+import { AdminDashboardController } from '../../src/roles/admin/dashboard.controller.js';
+import { AdminFinanceController } from '../../src/roles/admin/finance.controller.js';
 import { AdminModerationController } from '../../src/roles/admin/moderation.controller.js';
+import { AdminPartnersController } from '../../src/roles/admin/partners.controller.js';
+import { AdminSpacesController } from '../../src/roles/admin/spaces.controller.js';
 import { AdminSurgeController } from '../../src/roles/admin/surge.controller.js';
+import { AdminUsersController } from '../../src/roles/admin/users.controller.js';
 import { DriverBookingsController } from '../../src/roles/driver/bookings.controller.js';
 import { DriverCarwashController } from '../../src/roles/driver/carwash.controller.js';
 import { DriverPaymentsController } from '../../src/roles/driver/payments.controller.js';
@@ -54,6 +72,8 @@ import { OwnerBookingsController } from '../../src/roles/owner/bookings.controll
 import { OwnerDashboardController } from '../../src/roles/owner/dashboard.controller.js';
 import { OwnerEarningsController } from '../../src/roles/owner/earnings.controller.js';
 import { OwnerReviewsController } from '../../src/roles/owner/reviews.controller.js';
+import { OwnerSpacesController } from '../../src/roles/owner/spaces.controller.js';
+import { AdminAuthController } from '../../src/roles/public/admin-auth.controller.js';
 import { RazorpayWebhookController } from '../../src/roles/public/webhooks/razorpay.controller.js';
 import { MeController } from '../../src/roles/shared/me.controller.js';
 import { MePayoutsController } from '../../src/roles/shared/payouts.controller.js';
@@ -76,6 +96,27 @@ import type { Harness } from './harness.js';
  * the *rest* of the request pipeline.
  */
 export const actingAs = { user: null as AuthUser | null };
+
+/**
+ * What the stubbed Firebase verifier says the next ID token proves. Set per test,
+ * like `actingAs`. `null` makes `verify` refuse, the way a bad token does.
+ */
+export const firebaseStub = { verified: null as VerifiedPhone | null };
+
+/**
+ * Stands in for FirebaseVerifierService, which initialises firebase-admin in its
+ * constructor and throws on fake credentials. Provided under that class as the
+ * token, so the real constructor never runs and `CreateSessionCommand` — real —
+ * receives it exactly where it would receive the verifier.
+ */
+class StubFirebaseVerifier {
+  verify(): Promise<VerifiedPhone> {
+    if (firebaseStub.verified === null) {
+      return Promise.reject(new UnauthorizedException('We could not verify that code.'));
+    }
+    return Promise.resolve(firebaseStub.verified);
+  }
+}
 
 /**
  * Stands in for JwtAuthGuard only.
@@ -148,8 +189,19 @@ class StubAuthGuard implements CanActivate {
     ReviewModule,
   ],
   controllers: [
+    // The admin panel's session. Public, so it goes through the real interceptor
+    // stack with no user — the path `idempotency-scope.spec.ts` could not reach.
+    AdminAuthController,
     AdminSurgeController,
     AdminModerationController,
+    AdminSpacesController,
+    AdminUsersController,
+    AdminPartnersController,
+    AdminBookingsController,
+    AdminDashboardController,
+    AdminFinanceController,
+    AdminAuditController,
+    OwnerSpacesController,
     DriverReviewsController,
     OwnerReviewsController,
     DriverBookingsController,
@@ -187,6 +239,16 @@ class StubAuthGuard implements CanActivate {
     RoleRepository,
     UserRepository,
     SwitchRoleCommand,
+    CreateSessionCommand,
+    // The admin user commands and queries are provided directly, like SwitchRoleCommand above:
+    // none of them needs the verifier, so IdentityModule stays out of this test module.
+    AdminUserQueries,
+    GrantRoleCommand,
+    RevokeRoleCommand,
+    SetUserStatusCommand,
+    PartnerQueries,
+    ReviewPartnerCommand,
+    { provide: FirebaseVerifierService, useClass: StubFirebaseVerifier },
     // Registered exactly as AppModule does, and in its order. This is the whole
     // point of these tests: the interceptor and guard stack a real request
     // actually passes through. Only RateLimitModule's guard is absent —
@@ -200,7 +262,7 @@ class StubAuthGuard implements CanActivate {
   ],
 })
 // eslint-disable-next-line @typescript-eslint/no-extraneous-class
-class HttpTestModule {}
+export class HttpTestModule {}
 
 export interface HttpApp {
   readonly app: NestFastifyApplication;
@@ -219,7 +281,12 @@ export interface HttpApp {
      * made v1's bug invisible to its own tests.
      */
     rawPayload?: string;
-  }): Promise<{ status: number; body: unknown }>;
+  }): Promise<{
+    status: number;
+    body: unknown;
+    /** Response headers as Fastify reports them; `set-cookie` is a string or an array. */
+    headers: Record<string, string | string[] | number | undefined>;
+  }>;
 }
 
 export async function startHttpApp(
@@ -227,6 +294,12 @@ export async function startHttpApp(
   razorpay?: unknown,
   razorpayx?: unknown,
   route?: unknown,
+  /**
+   * Called once per route Fastify registers, so a spec can enumerate the real route table
+   * instead of keeping its own list. The hook goes on before `app.init()` because Fastify's
+   * `onRoute` only sees routes added after it — Nest registers every controller during init.
+   */
+  onRoute?: (route: { readonly method: string; readonly url: string }) => void,
 ): Promise<HttpApp> {
   const moduleRef = await Test.createTestingModule({ imports: [HttpTestModule] })
     .overrideProvider(DB)
@@ -250,6 +323,16 @@ export async function startHttpApp(
     rawBody: true,
   });
   app.setGlobalPrefix('api/v1');
+
+  if (onRoute !== undefined) {
+    app
+      .getHttpAdapter()
+      .getInstance()
+      .addHook('onRoute', (opts) => {
+        const methods = Array.isArray(opts.method) ? opts.method : [opts.method];
+        for (const method of methods) onRoute({ method, url: opts.url });
+      });
+  }
 
   await app.init();
   await app.getHttpAdapter().getInstance().ready();
@@ -282,12 +365,13 @@ export async function startHttpApp(
         // rather than swallowing it into null.
         body = response.body;
       }
-      return { status: response.statusCode, body };
+      return { status: response.statusCode, body, headers: response.headers };
     },
   };
 }
 
 export async function stopHttpApp(http: HttpApp): Promise<void> {
   actingAs.user = null;
+  firebaseStub.verified = null;
   await http.app.close();
 }

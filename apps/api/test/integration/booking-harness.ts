@@ -11,6 +11,7 @@ import { CommissionWaiverService } from '../../src/domains/pricing/commission-wa
 import { PricingQuoteService } from '../../src/domains/pricing/quote.service.js';
 import { SpaceService } from '../../src/domains/space/space.service.js';
 import { SurgeService } from '../../src/domains/surge/surge.service.js';
+import { AuditService } from '../../src/platform/observability/audit.service.js';
 import { OutboxService } from '../../src/platform/outbox/outbox.service.js';
 
 import type { Harness } from './harness.js';
@@ -63,7 +64,15 @@ export function buildBookingStack(h: Harness): BookingStack {
     create: new CreateBookingCommand(h.db, spaces, quotes, availability, bookings, ledger, outbox),
     payments,
     refunds,
-    cancel: new CancelBookingCommand(h.db, bookings, availability, payments, refunds, outbox),
+    cancel: new CancelBookingCommand(
+      h.db,
+      bookings,
+      availability,
+      payments,
+      refunds,
+      outbox,
+      new AuditService(h.db),
+    ),
     extend: new ExtendBookingCommand(h.db, bookings, spaces, quotes, availability, ledger, outbox),
     checkIn: new CheckInCommand(h.db, bookings, availability, outbox),
   };

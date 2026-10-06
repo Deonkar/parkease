@@ -6,6 +6,7 @@ import { PaymentCoreModule } from '../payment/payment-core.module.js';
 import { PricingModule } from '../pricing/pricing.module.js';
 import { SpaceModule } from '../space/space.module.js';
 
+import { AdminBookingQueries } from './admin-booking.queries.js';
 import { AvailabilityService } from './availability.service.js';
 import { BookingService } from './booking.service.js';
 import { CancelBookingCommand } from './commands/cancel-booking.command.js';
@@ -22,6 +23,7 @@ import { ExtendBookingCommand } from './commands/extend-booking.command.js';
     CancelBookingCommand,
     ExtendBookingCommand,
     CheckInCommand,
+    AdminBookingQueries,
   ],
   exports: [
     AvailabilityService,
@@ -30,6 +32,7 @@ import { ExtendBookingCommand } from './commands/extend-booking.command.js';
     CancelBookingCommand,
     ExtendBookingCommand,
     CheckInCommand,
+    AdminBookingQueries,
   ],
 })
 // eslint-disable-next-line @typescript-eslint/no-extraneous-class

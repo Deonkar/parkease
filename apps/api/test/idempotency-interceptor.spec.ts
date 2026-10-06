@@ -200,3 +200,176 @@ describe('IdempotencyInterceptor — the store and release writes are observed',
     );
   });
 });
+
+/**
+ * An unauthenticated request's key is bound to its cookie, so a replayed key never answers someone
+ * holding no credential at all. The admin refresh, the route this was written for, is no longer
+ * cached at all (SEC-L3 / SF-4, below); the fold still guards every other public mutation.
+ */
+describe('IdempotencyInterceptor — public routes bind the key to the cookie', () => {
+  const publicContext = (cookie: string | undefined, user?: { id: string }): ExecutionContext =>
+    ({
+      switchToHttp: () => ({
+        getRequest: () => ({
+          method: 'POST',
+          url: '/api/v1/auth/refresh',
+          headers: { 'idempotency-key': KEY, ...(cookie === undefined ? {} : { cookie }) },
+          body: {},
+          ...(user === undefined ? {} : { user }),
+          routeOptions: { url: '/api/v1/auth/refresh' },
+        }),
+      }),
+    }) as unknown as ExecutionContext;
+
+  /** The claim rule of IdempotencyService: same key + same hash replays, a different hash conflicts. */
+  const fakeStore = () => {
+    const seen = new Map<string, { hash: string; response: unknown }>();
+    const service = {
+      claim: vi.fn((input: { key: string; requestHash: string }) => {
+        const existing = seen.get(input.key);
+        if (!existing) {
+          seen.set(input.key, { hash: input.requestHash, response: undefined });
+          return Promise.resolve({ outcome: 'proceed' });
+        }
+        return Promise.resolve(
+          existing.hash === input.requestHash
+            ? { outcome: 'replay', response: existing.response }
+            : { outcome: 'conflict' },
+        );
+      }),
+      store: vi.fn((key: string, _status: number, payload: unknown) => {
+        const existing = seen.get(key);
+        if (existing) existing.response = payload;
+        return Promise.resolve(true);
+      }),
+      release: vi.fn().mockResolvedValue(true),
+    };
+    return { service, typed: service as unknown as IdempotencyService };
+  };
+
+  const send = async (interceptor: IdempotencyInterceptor, context: ExecutionContext) => {
+    const answer = await interceptor.intercept(context, {
+      handle: () => of({ accessToken: 'live' }),
+    });
+    const result = await firstValueFrom(answer);
+    await settle();
+    return result;
+  };
+
+  it('replays for the same key and the same cookie', async () => {
+    const { typed } = fakeStore();
+    const interceptor = new IdempotencyInterceptor(typed);
+
+    await send(interceptor, publicContext('pe_admin_rt=aaaa'));
+
+    await expect(send(interceptor, publicContext('pe_admin_rt=aaaa'))).resolves.toEqual({
+      accessToken: 'live',
+    });
+  });
+
+  it('refuses (422) the same key with a different cookie', async () => {
+    const { typed } = fakeStore();
+    const interceptor = new IdempotencyInterceptor(typed);
+    await send(interceptor, publicContext('pe_admin_rt=aaaa'));
+
+    await expect(send(interceptor, publicContext('pe_admin_rt=bbbb'))).rejects.toMatchObject({
+      status: 422,
+    });
+  });
+
+  it('refuses (422) the same key with no cookie at all', async () => {
+    const { typed } = fakeStore();
+    const interceptor = new IdempotencyInterceptor(typed);
+    await send(interceptor, publicContext('pe_admin_rt=aaaa'));
+
+    await expect(send(interceptor, publicContext(undefined))).rejects.toMatchObject({
+      status: 422,
+    });
+  });
+
+  it('does not fold the cookie in when a user is authenticated', async () => {
+    const user = { id: '0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5c' };
+    const hashFor = async (cookie: string): Promise<string> => {
+      const { service, typed } = fakeStore();
+      await send(new IdempotencyInterceptor(typed), publicContext(cookie, user));
+      return (service.claim.mock.calls[0]?.[0] as { requestHash: string }).requestHash;
+    };
+
+    expect(await hashFor('a=1')).toBe(await hashFor('a=2'));
+  });
+});
+
+/**
+ * SEC-L3 / SF-4 (task 18a review). The admin session routes are not cached. A cached refresh held
+ * a live access token at rest, and its replay answered without a Set-Cookie, so the browser kept a
+ * cookie the server had already rotated and the next refresh read as theft. Rotation is the
+ * protection there: a retry rotates again, or trips reuse detection.
+ */
+describe('IdempotencyInterceptor — /auth/admin/* is not cached', () => {
+  it.each(['session', 'refresh', 'logout'])(
+    'passes POST /auth/admin/%s straight through, key or no key',
+    async (route) => {
+      const claim = vi.fn();
+      const interceptor = new IdempotencyInterceptor({ claim } as unknown as IdempotencyService);
+      const context = {
+        switchToHttp: () => ({
+          getRequest: () => ({
+            method: 'POST',
+            url: `/api/v1/auth/admin/${route}`,
+            headers: {},
+            body: {},
+            routeOptions: { url: `/api/v1/auth/admin/${route}` },
+          }),
+        }),
+      } as unknown as ExecutionContext;
+
+      const answer = await interceptor.intercept(context, { handle: () => of({ ok: true }) });
+
+      await expect(firstValueFrom(answer)).resolves.toEqual({ ok: true });
+      expect(claim).not.toHaveBeenCalled();
+    },
+  );
+});
+
+/**
+ * Pentest F2 (task 18a review). `endpoint` is the route PATTERN, so the hash was all that told
+ * `/admin/users/A/block` from `/admin/users/B/block`, and it covered only the body. One key reused
+ * on B replayed A's 200 and B was never touched. The concrete target is now part of the hash.
+ */
+describe('IdempotencyInterceptor — the target is part of the request hash', () => {
+  const A = '0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5c';
+  const B = '0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5d';
+
+  const hashFor = async (params: Record<string, string>): Promise<string> => {
+    const claim = vi.fn().mockResolvedValue({ outcome: 'proceed' });
+    const interceptor = new IdempotencyInterceptor({
+      claim,
+      store: vi.fn().mockResolvedValue(true),
+      release: vi.fn().mockResolvedValue(true),
+    } as unknown as IdempotencyService);
+    const context = {
+      switchToHttp: () => ({
+        getRequest: () => ({
+          method: 'POST',
+          url: `/api/v1/admin/users/${params['id'] ?? ''}/block`,
+          headers: { 'idempotency-key': KEY },
+          body: { reason: 'same reason' },
+          params,
+          user: { id: A },
+          routeOptions: { url: '/api/v1/admin/users/:id/block' },
+        }),
+      }),
+    } as unknown as ExecutionContext;
+    await firstValueFrom(await interceptor.intercept(context, { handle: () => of({}) }));
+    await settle();
+    return (claim.mock.calls[0]?.[0] as { requestHash: string }).requestHash;
+  };
+
+  it('the same body on a different target is a different request', async () => {
+    expect(await hashFor({ id: A })).not.toBe(await hashFor({ id: B }));
+  });
+
+  it('the same target spelled in capitals is the same request', async () => {
+    expect(await hashFor({ id: A.toUpperCase() })).toBe(await hashFor({ id: A }));
+  });
+});

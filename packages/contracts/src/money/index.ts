@@ -33,6 +33,7 @@ export {
   DiscountExceedsTotalError,
   type LedgerEntryDraft,
   promoBookingEntries,
+  proportionalRefundEntries,
   type ReceivableTotals,
   receivableTotalsOf,
   refundEntries,

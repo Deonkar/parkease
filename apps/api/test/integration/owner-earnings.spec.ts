@@ -130,7 +130,11 @@ describe('owner earnings reads', () => {
               ${`pay_${booking.id.slice(0, 12)}`}, ${booking.totalPaise}, ${booking.totalPaise},
               'captured', now())
     `;
-    await stack.cancel.execute({ bookingId: booking.id, driverId: h.driverId, reason: null });
+    await stack.cancel.execute({
+      bookingId: booking.id,
+      reason: null,
+      by: { kind: 'driver', driverId: h.driverId },
+    });
 
     const [line] = (await earnings.statementPage(h.ownerId, { period: 'month', limit: 10 })).items;
     expect(line?.reversedPaise).toBeGreaterThan(0);

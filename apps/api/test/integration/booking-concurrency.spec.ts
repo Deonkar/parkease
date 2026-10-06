@@ -251,8 +251,8 @@ describe('booking concurrency', () => {
     await markConfirmed(h, first.booking.id);
     await stack.cancel.execute({
       bookingId: first.booking.id,
-      driverId: h.driverId,
       reason: 'changed my mind',
+      by: { kind: 'driver', driverId: h.driverId },
     });
 
     const second = await book(spaceId, driverB, window);

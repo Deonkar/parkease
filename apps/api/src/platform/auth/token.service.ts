@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 
 import { ForbiddenException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
-import { UserStatus } from '@parkease/contracts/enums';
+import { UserStatus, type Role } from '@parkease/contracts/enums';
 import { uuidv7, type Transaction } from '@parkease/db';
 import { refreshTokens, userRoles, users } from '@parkease/db/schema';
 import { and, eq, isNull } from 'drizzle-orm';
@@ -40,6 +40,29 @@ export interface AccessTokenPayload extends JWTPayload {
   readonly active_role: string | null;
 }
 
+/**
+ * Why a token was revoked because of the ACCOUNT, not because the token was misused. Presenting
+ * one later is a refusal about the account, never evidence of theft.
+ */
+export const BLOCKED_REVOKE_REASON = 'blocked';
+const ACCOUNT_STATE_REVOCATIONS: ReadonlySet<string | null> = new Set([
+  BLOCKED_REVOKE_REASON,
+  'user_not_active',
+]);
+
+/**
+ * Revocations of ONE token for a reason that is not misuse (SF-3, task 18a review): the admin
+ * refresh that found the role withdrawn, and a logout. Each revokes only the presented token, so
+ * presenting it again (a second tab, a retry, logout in one tab then refresh in another) is an
+ * expected client race. Treated as theft it revoked every session the person has, mobile included,
+ * and wrote an `auth.refresh-reuse-detected` row that read like an attack. Answered as a plain
+ * expiry instead. A ROTATED token is still reuse, whatever its revocation reason.
+ */
+const BENIGN_SINGLE_REVOCATIONS: ReadonlySet<string | null> = new Set(['role_revoked', 'logout']);
+
+/** Refusals that must commit their writes before the error is thrown. */
+type RotateRefusal = 'reuse_detected' | 'user_not_active' | 'role_revoked';
+
 @Injectable()
 export class TokenService {
   constructor(
@@ -73,73 +96,128 @@ export class TokenService {
     return { accessToken, refreshToken, expiresIn: ACCESS_TTL_SECONDS };
   }
 
-  async rotate(presented: string, userAgent?: string): Promise<SessionTokens> {
+  /**
+   * `opts.requireRole` is the admin panel's gate: the session it refreshes must
+   * still hold that role, and the new access token is minted with it active.
+   *
+   * Every refusal that writes something — the role revocation, the family
+   * revocation and audit row on reuse, the revocation of a blocked user's
+   * tokens — has to COMMIT. So the transaction returns a discriminant and the
+   * error is thrown after it: a throw inside the callback rolls the writes back
+   * and leaves the very tokens it meant to kill usable.
+   */
+  async rotate(
+    presented: string,
+    userAgent?: string,
+    opts?: { readonly requireRole?: Role },
+  ): Promise<SessionTokens> {
     const presentedHash = sha256(presented);
+    const requireRole = opts?.requireRole;
 
-    return this.db.transaction(async (rawTx: Transaction) => {
-      const tx = rawTx as unknown as TxHandle;
+    const outcome = await this.db.transaction(
+      async (rawTx: Transaction): Promise<SessionTokens | RotateRefusal> => {
+        const tx = rawTx as unknown as TxHandle;
 
-      const rows = await tx
-        .select()
-        .from(refreshTokens)
-        .where(eq(refreshTokens.tokenHash, presentedHash))
-        .for('update');
+        const rows = await tx
+          .select()
+          .from(refreshTokens)
+          .where(eq(refreshTokens.tokenHash, presentedHash))
+          .for('update');
 
-      const row = rows[0];
-      if (!row) {
-        throw new UnauthorizedException('Your session has expired. Please log in again.');
-      }
+        const row = rows[0];
+        if (!row) {
+          throw new UnauthorizedException('Your session has expired. Please log in again.');
+        }
 
-      if (row.rotatedAt || row.revokedAt) {
-        await this.revokeAllForUser(tx, row.userId, 'refresh_reuse_detected');
-        await this.audit.record(tx, {
-          actorUserId: row.userId,
-          actorRole: null,
-          action: 'auth.refresh-reuse-detected',
-          targetType: 'user',
-          targetId: row.userId,
-          ipAddress: null,
+        // A block (or any non-active status) revokes every token up front, so a legitimate client's
+        // next refresh arrives with a revoked row. That is not reuse: answer for the account, and
+        // do not write a theft alarm. If the account has since been restored, it is a plain expiry.
+        if (!row.rotatedAt && row.revokedAt && ACCOUNT_STATE_REVOCATIONS.has(row.revokedReason)) {
+          const [owner] = await tx
+            .select({ status: users.status })
+            .from(users)
+            .where(eq(users.id, row.userId));
+          if (owner !== undefined && owner.status !== UserStatus.ACTIVE) return 'user_not_active';
+          throw new UnauthorizedException('Your session has expired. Please log in again.');
+        }
+
+        // Nothing is written on this path, so throwing inside the transaction loses nothing.
+        if (!row.rotatedAt && row.revokedAt && BENIGN_SINGLE_REVOCATIONS.has(row.revokedReason)) {
+          throw new UnauthorizedException('Your session has expired. Please log in again.');
+        }
+
+        if (row.rotatedAt || row.revokedAt) {
+          await this.revokeAllForUser(tx, row.userId, 'refresh_reuse_detected');
+          await this.audit.record(tx, {
+            actorUserId: row.userId,
+            actorRole: null,
+            action: 'auth.refresh-reuse-detected',
+            targetType: 'user',
+            targetId: row.userId,
+            ipAddress: null,
+          });
+          return 'reuse_detected';
+        }
+
+        if (row.expiresAt <= new Date()) {
+          throw new UnauthorizedException('Your session has expired. Please log in again.');
+        }
+
+        const userRows = await tx
+          .select({ status: users.status })
+          .from(users)
+          .where(eq(users.id, row.userId));
+
+        const user = userRows[0];
+        if (user?.status !== UserStatus.ACTIVE) {
+          await this.revokeAllForUser(tx, row.userId, 'user_not_active');
+          return 'user_not_active';
+        }
+
+        const roles = await tx
+          .select({ role: userRoles.role })
+          .from(userRoles)
+          .where(and(eq(userRoles.userId, row.userId), eq(userRoles.status, 'active')));
+
+        const roleList = roles.map((r: { role: string }) => r.role);
+
+        if (requireRole !== undefined && !roleList.includes(requireRole)) {
+          const now = new Date();
+          await tx
+            .update(refreshTokens)
+            .set({ revokedAt: now, revokedReason: 'role_revoked', updatedAt: now })
+            .where(eq(refreshTokens.id, row.id));
+          return 'role_revoked';
+        }
+
+        await tx
+          .update(refreshTokens)
+          .set({ rotatedAt: new Date(), updatedAt: new Date() })
+          .where(eq(refreshTokens.id, row.id));
+
+        return this.issue(tx, {
+          userId: row.userId,
+          roles: roleList,
+          activeRole: requireRole ?? roleList[0] ?? null,
+          familyId: row.familyId,
+          userAgent,
         });
+      },
+    );
+
+    switch (outcome) {
+      case 'reuse_detected':
         throw new UnauthorizedException('Your session has expired. Please log in again.');
-      }
-
-      if (row.expiresAt <= new Date()) {
-        throw new UnauthorizedException('Your session has expired. Please log in again.');
-      }
-
-      const userRows = await tx
-        .select({ status: users.status })
-        .from(users)
-        .where(eq(users.id, row.userId));
-
-      const user = userRows[0];
-      if (user?.status !== UserStatus.ACTIVE) {
-        await this.revokeAllForUser(tx, row.userId, 'user_not_active');
+      case 'user_not_active':
         throw new ForbiddenException('This account has been suspended. Contact support.');
-      }
-
-      await tx
-        .update(refreshTokens)
-        .set({ rotatedAt: new Date(), updatedAt: new Date() })
-        .where(eq(refreshTokens.id, row.id));
-
-      const roles = await tx
-        .select({ role: userRoles.role })
-        .from(userRoles)
-        .where(and(eq(userRoles.userId, row.userId), eq(userRoles.status, 'active')));
-
-      const roleList = roles.map((r: { role: string }) => r.role);
-      const first = roleList[0];
-      const activeRole = first ?? null;
-
-      return this.issue(tx, {
-        userId: row.userId,
-        roles: roleList,
-        activeRole,
-        familyId: row.familyId,
-        userAgent,
-      });
-    });
+      case 'role_revoked':
+        throw new ForbiddenException({
+          error: 'ADMIN_ROLE_REQUIRED',
+          message: 'This account no longer has access to the admin panel.',
+        });
+      default:
+        return outcome;
+    }
   }
 
   async revoke(tokenHash: string): Promise<void> {

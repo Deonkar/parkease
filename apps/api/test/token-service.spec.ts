@@ -141,4 +141,127 @@ describe('TokenService', () => {
       await expect(service.verifyAccessToken(token)).rejects.toThrow('Invalid or expired token.');
     });
   });
+
+  describe('rotate with requireRole (task 18a)', () => {
+    const PRESENTED = 'presented-refresh-token-value-0123456789abcdef';
+
+    interface Fixture {
+      readonly service: TokenService;
+      readonly sets: Record<string, unknown>[];
+      readonly inserts: unknown[];
+      readonly state: { rolledBack: boolean };
+    }
+
+    /**
+     * A transaction double that answers select() in the order rotate() asks:
+     * token row, user, active roles. `rolledBack` models Postgres: a throw out
+     * of the callback undoes everything the callback wrote, so the revocation
+     * is only durable if rotate() returns normally and throws afterwards.
+     */
+    function fixture(activeRoles: string[]): Fixture {
+      const sets: Record<string, unknown>[] = [];
+      const inserts: unknown[] = [];
+      const state = { rolledBack: false };
+
+      const tokenRow = {
+        id: 'row-1',
+        userId: 'user-1',
+        familyId: 'family-1',
+        rotatedAt: null,
+        revokedAt: null,
+        expiresAt: new Date(Date.now() + 60_000),
+      };
+
+      const answers: unknown[][] = [
+        [tokenRow],
+        [{ status: 'active' }],
+        activeRoles.map((role) => ({ role })),
+      ];
+      let call = 0;
+
+      const next = (): Promise<unknown[]> => Promise.resolve(answers[call++] ?? []);
+      const tx = {
+        select: () => ({
+          from: () => ({
+            where: () => {
+              const result = next();
+              return Object.assign(result, { for: () => result });
+            },
+          }),
+        }),
+        update: () => ({
+          set: (values: Record<string, unknown>) => {
+            sets.push(values);
+            return { where: () => Promise.resolve(undefined) };
+          },
+        }),
+        insert: () => ({
+          values: (values: unknown) => {
+            inserts.push(values);
+            return Promise.resolve(undefined);
+          },
+        }),
+      };
+
+      const db = {
+        transaction: async (cb: (t: unknown) => Promise<unknown>) => {
+          try {
+            return await cb(tx);
+          } catch (err) {
+            state.rolledBack = true;
+            throw err;
+          }
+        },
+      };
+
+      return { service: new TokenService(db as never, audit), sets, inserts, state };
+    }
+
+    it('revokes the row, issues nothing, and commits when the admin role is gone', async () => {
+      const { service, sets, inserts, state } = fixture(['driver']);
+
+      await expect(
+        service.rotate(PRESENTED, undefined, { requireRole: 'admin' }),
+      ).rejects.toMatchObject({ status: 403 });
+
+      expect(sets).toHaveLength(1);
+      expect(sets[0]).toMatchObject({ revokedReason: 'role_revoked' });
+      expect(sets[0]?.['revokedAt']).toBeInstanceOf(Date);
+      expect(sets[0]).not.toHaveProperty('rotatedAt');
+      expect(inserts).toHaveLength(0);
+      // The revocation is durable only if the transaction callback did not throw.
+      expect(state.rolledBack).toBe(false);
+    });
+
+    it('answers with the ADMIN_ROLE_REQUIRED code', async () => {
+      const { service } = fixture([]);
+      const err: unknown = await service
+        .rotate(PRESENTED, undefined, { requireRole: 'admin' })
+        .catch((e: unknown) => e);
+      expect(err).toMatchObject({ response: { error: 'ADMIN_ROLE_REQUIRED' } });
+    });
+
+    it('makes admin the active role when held, even if driver sorts first', async () => {
+      const { service } = fixture(['driver', 'admin']);
+
+      const tokens = await service.rotate(PRESENTED, undefined, { requireRole: 'admin' });
+      const { payload } = await jwtVerify(tokens.accessToken, JWT_SECRET, {
+        algorithms: ['HS256'],
+      });
+
+      expect(payload['active_role']).toBe('admin');
+      expect(payload['roles']).toEqual(['driver', 'admin']);
+    });
+
+    it('without requireRole keeps the first role as before', async () => {
+      const { service } = fixture(['driver', 'admin']);
+
+      const tokens = await service.rotate(PRESENTED);
+      const { payload } = await jwtVerify(tokens.accessToken, JWT_SECRET, {
+        algorithms: ['HS256'],
+      });
+
+      expect(payload['active_role']).toBe('driver');
+    });
+  });
 });

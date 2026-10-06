@@ -6,13 +6,19 @@ import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fa
 import { AppModule } from './app.module.js';
 import { env } from './platform/config/env.schema.js';
 import { correlationIdMiddleware } from './platform/http/correlation-id.middleware.js';
+import { trustProxyHops } from './platform/http/trust-proxy.js';
 import { logger } from './platform/observability/logger.js';
 import { RedisIoAdapter } from './platform/realtime/redis-io.adapter.js';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter({ bodyLimit: 1_048_576, trustProxy: true }),
+    // A hop count, not `true`: `true` makes request.ip the client-written left-most
+    // X-Forwarded-For entry (SEC-M3). See TRUST_PROXY_HOPS and trust-proxy.ts.
+    new FastifyAdapter({
+      bodyLimit: 1_048_576,
+      trustProxy: trustProxyHops(env.TRUST_PROXY_HOPS),
+    }),
     // Keeps the bytes a request arrived as, so the Razorpay webhook can verify
     // its HMAC over them rather than over a re-serialisation. See
     // platform/http/raw-body.ts for why this flag and not our own parser.

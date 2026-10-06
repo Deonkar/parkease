@@ -17,6 +17,22 @@ describe('rate limit policies', () => {
     expect(refreshPolicy?.failClosed).toBe(true);
   });
 
+  it('the admin auth routes resolve to their own fail-closed policies, never the default (task 18a)', () => {
+    const session = resolvePolicy('POST', '/api/v1/auth/admin/session');
+    const refresh = resolvePolicy('POST', '/api/v1/auth/admin/refresh');
+    const logout = resolvePolicy('POST', '/api/v1/auth/admin/logout');
+
+    expect(session).toMatchObject({
+      limit: 30,
+      windowSeconds: 3600,
+      keyBy: 'ip',
+      failClosed: true,
+    });
+    expect(refresh).toMatchObject({ limit: 30, windowSeconds: 3600, failClosed: true });
+    expect(logout).toMatchObject({ limit: 30, windowSeconds: 3600, failClosed: true });
+    for (const policy of [session, refresh, logout]) expect(policy).not.toBe(DEFAULT_POLICY);
+  });
+
   it('the /me payout routes resolve to their own policies, never the default (task 16a)', () => {
     const put = resolvePolicy('PUT', '/api/v1/me/bank-details');
     expect(put).toMatchObject({ limit: 5, windowSeconds: 60, keyBy: 'user' });
@@ -27,6 +43,19 @@ describe('rate limit policies', () => {
       ['GET', '/api/v1/me/payouts/0192f1c0-0000-7000-8000-000000000001'],
     ] as const) {
       expect(resolvePolicy(method, url)).not.toBe(DEFAULT_POLICY);
+    }
+  });
+
+  it('the ledger export is 5 a minute per user, the other finance reads take ADMIN:* (task 18a)', () => {
+    expect(
+      resolvePolicy('GET', '/api/v1/admin/ledger/export?from=2026-10-01&to=2026-10-02'),
+    ).toEqual({
+      limit: 5,
+      windowSeconds: 60,
+      keyBy: 'user',
+    });
+    for (const url of ['/api/v1/admin/ledger', '/api/v1/admin/finance/balances']) {
+      expect(resolvePolicy('GET', url)).toBe(RATE_LIMIT_POLICIES['ADMIN:*']);
     }
   });
 

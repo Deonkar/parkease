@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
+import { routePattern } from '../http/route-pattern.js';
 import { logger } from '../observability/logger.js';
 import { REDIS, type RedisClient } from '../redis/redis.module.js';
 
@@ -23,20 +24,24 @@ interface AuthUser {
   readonly id: string;
 }
 
-function bucketKey(policy: RateLimitPolicy, request: FastifyRequest): string {
-  const pathOnly = request.url.split('?')[0] ?? request.url;
+/**
+ * Keyed on the matched route (`GET /api/v1/admin/partners/:id`), never the raw URL: a bucket per
+ * spelling, or per concrete id, is no limit at all (SEC-H1). The method is part of the key, so a
+ * GET and a PUT on one path no longer share a bucket sized by whichever of their policies ran.
+ */
+function bucketKey(policy: RateLimitPolicy, request: FastifyRequest, route: string): string {
   switch (policy.keyBy) {
     case 'user': {
       const user = (request as FastifyRequest & { user?: AuthUser }).user;
-      return `rl:${user?.id ?? request.ip}:${pathOnly}`;
+      return `rl:${user?.id ?? request.ip}:${route}`;
     }
     case 'ip':
-      return `rl:ip:${request.ip}:${pathOnly}`;
+      return `rl:ip:${request.ip}:${route}`;
     case 'phone': {
       const body = request.body as Record<string, unknown> | undefined;
       const raw = body?.['phone'];
       const phone = typeof raw === 'string' ? raw : request.ip;
-      return `rl:phone:${phone}:${pathOnly}`;
+      return `rl:phone:${phone}:${route}`;
     }
   }
 }
@@ -49,8 +54,9 @@ export class RateLimitGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<FastifyRequest>();
     const reply = context.switchToHttp().getResponse<FastifyReply>();
 
-    const policy = resolvePolicy(request.method, request.url);
-    const key = bucketKey(policy, request);
+    const pattern = routePattern(request);
+    const policy = resolvePolicy(request.method, pattern);
+    const key = bucketKey(policy, request, `${request.method} ${pattern}`);
 
     try {
       const result = (await this.redis.eval(

@@ -6,6 +6,7 @@ import { BookingModule } from '../booking/booking.module.js';
 import { LedgerModule } from '../ledger/ledger.module.js';
 import { PayoutModule } from '../payout/payout.module.js';
 
+import { AdminRefundCommand } from './commands/admin-refund.command.js';
 import { ConfirmPaymentCommand } from './commands/confirm-payment.command.js';
 import { CreateOrderCommand } from './commands/create-order.command.js';
 import { FailPaymentCommand } from './commands/fail-payment.command.js';
@@ -39,6 +40,7 @@ import { WebhookService } from './webhook.service.js';
     ConfirmPaymentCommand,
     FailPaymentCommand,
     ProcessRefundCommand,
+    AdminRefundCommand,
   ],
   exports: [
     PaymentCoreModule,
@@ -52,6 +54,7 @@ import { WebhookService } from './webhook.service.js';
     ConfirmPaymentCommand,
     FailPaymentCommand,
     ProcessRefundCommand,
+    AdminRefundCommand,
   ],
 })
 // eslint-disable-next-line @typescript-eslint/no-extraneous-class

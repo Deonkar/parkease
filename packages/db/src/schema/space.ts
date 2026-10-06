@@ -45,6 +45,9 @@ export const spaces = pgTable(
     submittedAt: timestamp('submitted_at', { withTimezone: true }),
     approvedAt: timestamp('approved_at', { withTimezone: true }),
     approvedByUserId: uuid('approved_by_user_id').references(() => users.id),
+    reviewNotes: text('review_notes'),
+    reviewedByUserId: uuid('reviewed_by_user_id').references(() => users.id),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
     ratingAvgBp: integer('rating_avg_bp'),
     ratingCount: integer('rating_count').notNull().default(0),
     ...timestamps,
@@ -53,6 +56,7 @@ export const spaces = pgTable(
   (t) => [
     index('spaces_owner_id_idx').on(t.ownerId),
     index('spaces_approved_by_user_id_idx').on(t.approvedByUserId),
+    index('spaces_reviewed_by_user_id_idx').on(t.reviewedByUserId),
     index('spaces_zone_id_idx').on(t.zoneId),
     index('spaces_approval_status_idx').on(t.approvalStatus),
     check(

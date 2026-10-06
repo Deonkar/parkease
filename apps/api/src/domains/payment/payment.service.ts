@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { PaymentStatus } from '@parkease/contracts/enums';
 import { bookings, linkedAccounts, payments, refunds, spaces, washJobs } from '@parkease/db/schema';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, notExists } from 'drizzle-orm';
 
 import { DB, type Database } from '../../platform/db/db.module.js';
 import type { TxHandle } from '../../platform/db/transaction.js';
@@ -17,6 +17,25 @@ export interface InsertPaymentInput {
   /** The Route transfer attached to the order; null when it carried none. */
   readonly routeTransferPaise: number | null;
 }
+
+/**
+ * A payment whose money reached us, whatever has been refunded since. The admin refund lock and
+ * the booking detail's refundable balance must pick the same payment, so they share this.
+ */
+export const CAPTURED_PAYMENT_STATUSES: PaymentStatus[] = [
+  'captured',
+  'partially_refunded',
+  'refunded',
+];
+
+/**
+ * The `refunds.reason` the worker's `reconcile-orphan.job.ts` writes when it refunds, in full, a
+ * capture that landed with no live booking behind it (a late capture on a failed order, or the
+ * loser of two concurrent create-order calls). That payment is marked `refunded` with a fresh
+ * `captured_at`, so it is the newest capture on the booking — and it is not the booking's money.
+ * The worker cannot import from `apps/api`, so the literal lives in both places; change together.
+ */
+export const ORPHAN_CAPTURE_REFUND_REASON = 'orphan_capture';
 
 /**
  * Every read and write against `payments`, `refunds` and `linked_accounts`.
@@ -202,20 +221,65 @@ export class PaymentService {
   }
 
   /**
-   * The captured payment for a booking, if the driver ever actually paid.
+   * The booking's captured parking payment, row-locked (`FOR UPDATE`) — the first statement of an
+   * admin refund's transaction and of every cancellation's (driver or admin). It is the only
+   * way a booking's payment is looked up for a refund, so the purpose filter below cannot be
+   * forgotten by a second, unfiltered query.
    *
-   * A booking may carry several rows — failed attempts then a success — and only
-   * a captured one has money at the gateway to send back. Returning the newest
-   * matters when a driver paid, was refunded, and paid again.
+   * The lock is what makes "what is left to refund" safe to read: two admins refunding the same
+   * booking queue here, and the second reads the refund total only after the first has committed,
+   * so neither can spend a balance the other already spent (task 18a). It is taken before anything
+   * else in the transaction so every writer to this payment acquires the same lock first.
+   *
+   * "Captured" means money reached us at some point: a partly or fully refunded payment still
+   * matches, so a second partial refund finds it and a fully refunded one answers with a zero
+   * balance rather than "never paid". Scoped to `purpose = 'booking'`: a car wash order hangs off
+   * the same booking, and its money is not the parking's to refund. A payment the orphan job
+   * refunded (`ORPHAN_CAPTURE_REFUND_REASON`) is excluded too: it is newer than the real capture
+   * and already gone back in full, so picking it would refund nothing or the wrong gateway payment.
    */
-  async findLatestCapturedForBooking(bookingId: string) {
-    const [row] = await this.db
+  async lockCapturedForBooking(tx: TxHandle, bookingId: string) {
+    const [row] = await tx
       .select()
       .from(payments)
-      .where(and(eq(payments.bookingId, bookingId), eq(payments.status, 'captured')))
+      .where(
+        and(
+          eq(payments.bookingId, bookingId),
+          eq(payments.purpose, 'booking'),
+          inArray(payments.status, CAPTURED_PAYMENT_STATUSES),
+          isNotNull(payments.razorpayPaymentId),
+          isNotNull(payments.capturedPaise),
+          notExists(
+            tx
+              .select({ id: refunds.id })
+              .from(refunds)
+              .where(
+                and(
+                  eq(refunds.paymentId, payments.id),
+                  eq(refunds.reason, ORPHAN_CAPTURE_REFUND_REASON),
+                ),
+              ),
+          ),
+        ),
+      )
       .orderBy(desc(payments.capturedAt))
-      .limit(1);
+      .limit(1)
+      .for('update', { of: payments });
     return row;
+  }
+
+  /**
+   * Every refund issued against a payment, whatever its gateway status: its ledger posting
+   * committed when it was created. Read inside the caller's transaction, after
+   * `lockCapturedForBooking`, so it includes everything committed before the lock was granted.
+   * The reason travels with the amount because a full-reversal tier zeroes what is left
+   * (`refundableOf`).
+   */
+  async refundsFor(tx: TxHandle, paymentId: string) {
+    return tx
+      .select({ amountPaise: refunds.amountPaise, reason: refunds.reason })
+      .from(refunds)
+      .where(eq(refunds.paymentId, paymentId));
   }
 
   async markCaptured(

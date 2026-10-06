@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
-import { UserStatus } from '@parkease/contracts/enums';
+import { UserStatus, type Role } from '@parkease/contracts/enums';
 
 import { FirebaseVerifierService } from '../../../platform/auth/firebase-verifier.service.js';
 import type { SessionTokens } from '../../../platform/auth/token.service.js';
@@ -14,6 +14,11 @@ import { UserRepository } from '../repositories/user.repository.js';
 export interface CreateSessionInput {
   readonly idToken: string;
   readonly userAgent?: string | undefined;
+  /**
+   * The admin panel's gate. When set, the user must hold this as an ACTIVE role
+   * or the session is refused, and it becomes the session's active role.
+   */
+  readonly requireRole?: Role | undefined;
 }
 
 export interface CreateSessionResult extends SessionTokens {
@@ -54,7 +59,17 @@ export class CreateSessionCommand {
       }
 
       const roles = await this.roleRepo.listActive(tx, user.id);
-      const activeRole = pickActiveRole(roles);
+
+      // Thrown inside the transaction on purpose: the rollback means no
+      // refresh-token row commits for a session that was refused.
+      if (input.requireRole !== undefined && !roles.some((r) => r.role === input.requireRole)) {
+        throw new ForbiddenException({
+          error: 'ADMIN_ROLE_REQUIRED',
+          message: 'This account does not have access to the admin panel.',
+        });
+      }
+
+      const activeRole = pickActiveRole(roles, input.requireRole);
 
       const session = await this.tokenService.issue(tx, {
         userId: user.id,

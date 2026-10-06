@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { Inject, Injectable } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { idempotencyKeys } from '@parkease/db/schema';
 import { and, eq, isNull, lt, or, sql } from 'drizzle-orm';
 
@@ -223,17 +223,55 @@ function heldBy(key: string, claimedAt: Date | undefined) {
     : eq(idempotencyKeys.key, key);
 }
 
+const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The request a key stands for: the body AND the concrete target (pentest F2, task 18a review).
+ *
+ * `endpoint` is the route pattern (`POST /api/v1/admin/users/:id/block`), so the hash was the only
+ * thing that could tell `/users/A/block` from `/users/B/block`, and it covered the body alone. One
+ * key reused on B replayed A's 200 and B was never acted on. With the path params folded in, that
+ * reuse is a conflict (422) instead.
+ *
+ * Params are Fastify's, already decoded. A uuid-shaped value is lowercased, because Postgres reads
+ * `A` and `a` as the same id: the same target in capitals is the same request, and replays. A
+ * route with no params hashes exactly as before, so keys stored before this change still match.
+ */
+export function hashRequest(params: unknown, body: unknown): string {
+  if (typeof params !== 'object' || params === null || Object.keys(params).length === 0) {
+    return hashCanonicalBody(body);
+  }
+  const target: Record<string, unknown> = {};
+  for (const [name, value] of Object.entries(params)) {
+    target[name] =
+      typeof value === 'string' && UUID_SHAPE.test(value) ? value.toLowerCase() : value;
+  }
+  return hashCanonicalBody({ params: target, body });
+}
+
 export function hashCanonicalBody(body: unknown): string {
   const canonical = JSON.stringify(sortKeys(body));
   return createHash('sha256').update(canonical).digest('hex');
 }
 
-function sortKeys(obj: unknown): unknown {
+/**
+ * Deeper than any request body this API accepts. Without a cap, a 1 MB body of nested brackets
+ * overflowed the stack here and answered 500 (pentest F4, task 18a review).
+ */
+const MAX_BODY_DEPTH = 64;
+
+function sortKeys(obj: unknown, depth = 0): unknown {
   if (obj === null || typeof obj !== 'object') return obj;
-  if (Array.isArray(obj)) return obj.map(sortKeys);
+  if (depth >= MAX_BODY_DEPTH) {
+    throw new BadRequestException({
+      error: 'PAYLOAD_TOO_DEEP',
+      message: 'The request body is nested too deeply.',
+    });
+  }
+  if (Array.isArray(obj)) return obj.map((item) => sortKeys(item, depth + 1));
   const sorted: Record<string, unknown> = {};
   for (const key of Object.keys(obj as Record<string, unknown>).sort()) {
-    sorted[key] = sortKeys((obj as Record<string, unknown>)[key]);
+    sorted[key] = sortKeys((obj as Record<string, unknown>)[key], depth + 1);
   }
   return sorted;
 }

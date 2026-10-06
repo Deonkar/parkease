@@ -4,7 +4,7 @@ import {
   type RatingBp,
   weightedAverageBp,
 } from '@parkease/contracts/primitives';
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, type SQL, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
 import type { Database, Transaction } from '../client.js';
@@ -19,6 +19,13 @@ const READ_MODELS = {
   valet: { table: valetProfiles, key: valetProfiles.userId },
   washer: { table: washerProfiles, key: washerProfiles.userId },
 } as const;
+
+/**
+ * The rows a rating is made of: not removed by a moderator, not deleted. The one definition, used
+ * by the recompute below and by the moderation queue's impact preview, so the number an admin is
+ * shown before removing a review cannot disagree with the number that results.
+ */
+export const COUNTS_TOWARD_RATING: SQL = sql`(${reviews.moderationStatus} = 'visible' AND ${reviews.deletedAt} IS NULL)`;
 
 export interface RatingAggregate {
   readonly ratingAvgBp: RatingBp | null;
@@ -64,12 +71,7 @@ export async function recomputeRatingAggregate(
     .select({ rating: reviews.rating, createdAt: reviews.createdAt })
     .from(reviews)
     .where(
-      and(
-        eq(reviews.targetType, targetType),
-        eq(reviews.targetId, targetId),
-        eq(reviews.moderationStatus, 'visible'),
-        isNull(reviews.deletedAt),
-      ),
+      and(eq(reviews.targetType, targetType), eq(reviews.targetId, targetId), COUNTS_TOWARD_RATING),
     );
 
   const aggregate = { ratingAvgBp: weightedAverageBp(rows, now), ratingCount: rows.length };

@@ -6,6 +6,7 @@ import {
   DiscountExceedsTotalError,
   type LedgerEntryDraft,
   promoBookingEntries,
+  proportionalRefundEntries,
   refundEntries,
   refundSettledEntries,
 } from '../src/money/ledger-entries.js';
@@ -480,5 +481,66 @@ describe('grace refunds of surged and partly waived bookings, to the paisa (task
     expect(() => {
       assertEntriesBalance(promoBookingEntries(waived, 1000));
     }).not.toThrow();
+  });
+});
+
+describe('proportionalRefundEntries', () => {
+  const DESCRIPTION = 'refund: admin';
+  const NO_WAIVER = {
+    driverTotalPaise: 9702,
+    ownerEarningsPaise: 5100,
+    parkeaseFeePaise: 3900,
+    gstPaise: 702,
+    commissionWaiverPaise: 0,
+  };
+  const WITH_WAIVER = { ...NO_WAIVER, commissionWaiverPaise: 765 };
+  const CASES = [
+    ['no waiver', NO_WAIVER],
+    ['a 765 paise waiver', WITH_WAIVER],
+  ] as const;
+
+  const legOf = (
+    entries: readonly LedgerEntryDraft[],
+    account: string,
+    direction: 'debit' | 'credit',
+  ): number =>
+    entries
+      .filter((entry) => entry.account === account && entry.direction === direction)
+      .reduce((total, entry) => total + entry.amountPaise, 0);
+
+  const sumOf = (entries: readonly LedgerEntryDraft[], direction: 'debit' | 'credit'): number =>
+    entries
+      .filter((entry) => entry.direction === direction)
+      .reduce((total, entry) => total + entry.amountPaise, 0);
+
+  it.each(CASES)('balances and never exceeds an original leg (%s)', (_label, totals) => {
+    const entries = proportionalRefundEntries(totals, toPaise(8702), DESCRIPTION);
+
+    expect(sumOf(entries, 'debit')).toBe(sumOf(entries, 'credit'));
+    expect(legOf(entries, 'refunds_payable', 'credit')).toBe(8702);
+    expect(legOf(entries, 'owner_payable', 'debit')).toBeLessThanOrEqual(totals.ownerEarningsPaise);
+    expect(legOf(entries, 'platform_revenue', 'debit')).toBeLessThanOrEqual(
+      totals.parkeaseFeePaise,
+    );
+    expect(legOf(entries, 'gst_payable', 'debit')).toBeLessThanOrEqual(totals.gstPaise);
+    expect(legOf(entries, 'promo_expense', 'credit')).toBeLessThanOrEqual(
+      totals.commissionWaiverPaise,
+    );
+    expect(() => {
+      assertEntriesBalance(entries);
+    }).not.toThrow();
+  });
+
+  it.each(CASES)('is exactly what refundEntries posts for ACTIVE_GRACE (%s)', (_label, totals) => {
+    const outcome = {
+      tier: RefundTier.ACTIVE_GRACE,
+      refundPaise: toPaise(8702),
+      retainedPaise: toPaise(1000),
+      goodwillPaise: toPaise(0),
+    };
+
+    expect(refundEntries(totals, outcome, DESCRIPTION)).toEqual(
+      proportionalRefundEntries(totals, outcome.refundPaise, DESCRIPTION),
+    );
   });
 });

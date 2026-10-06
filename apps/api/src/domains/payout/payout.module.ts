@@ -4,6 +4,7 @@ import { OutboxModule } from '../../platform/outbox/outbox.module.js';
 import { LedgerModule } from '../ledger/ledger.module.js';
 import { PricingModule } from '../pricing/pricing.module.js';
 
+import { AdminPayoutQueries } from './admin-payout.queries.js';
 import { ApplyRouteStatusCommand } from './commands/apply-route-status.command.js';
 import { SubmitRouteOnboardingCommand } from './commands/submit-route-onboarding.command.js';
 import { UpsertBankDetailsCommand } from './commands/upsert-bank-details.command.js';
@@ -19,6 +20,7 @@ import { ROUTE, RouteHttpClient } from './route.client.js';
   imports: [LedgerModule, OutboxModule, PricingModule],
   providers: [
     PayoutService,
+    AdminPayoutQueries,
     UpsertBankDetailsCommand,
     SubmitRouteOnboardingCommand,
     ApplyRouteStatusCommand,
@@ -27,6 +29,7 @@ import { ROUTE, RouteHttpClient } from './route.client.js';
   ],
   exports: [
     PayoutService,
+    AdminPayoutQueries,
     UpsertBankDetailsCommand,
     SubmitRouteOnboardingCommand,
     ApplyRouteStatusCommand,

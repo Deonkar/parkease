@@ -65,6 +65,8 @@ export {
   formatStars,
 } from './rating.js';
 
+export { maskPhone } from './phone-mask.js';
+
 export {
   paginationQuerySchema,
   type PaginationQuery,
@@ -75,6 +77,9 @@ export {
   single,
   page,
   cursorPageOf,
+  offsetPageMetaSchema,
+  type OffsetPageMeta,
+  offsetPageOf,
   errorEnvelopeSchema,
   type ErrorEnvelope,
 } from './pagination.js';

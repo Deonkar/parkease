@@ -1,5 +1,6 @@
 import { Body, Controller, Get, NotFoundException, Post } from '@nestjs/common';
 import { Role } from '@parkease/contracts/enums';
+import { uploadIdIn } from '@parkease/contracts/shared';
 import { type ValetProfileView } from '@parkease/contracts/valet';
 import { z } from 'zod';
 
@@ -16,7 +17,8 @@ import { Roles } from '../../platform/rbac/roles.decorator.js';
  * step, and `verification_status` stays `pending` until somebody looks.
  */
 const submitDocumentsSchema = z.object({
-  licenceDocumentId: z.string().min(1).max(255),
+  /** An upload signed into `documents`, as the washer's ID document is: an admin's signed link is built from it. */
+  licenceDocumentId: uploadIdIn('documents'),
   licenceExpiresAt: z.string().datetime(),
   vehicleMake: z.string().min(1).max(64).optional(),
   vehicleNumber: z.string().min(1).max(32).optional(),

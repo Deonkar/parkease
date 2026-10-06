@@ -14,6 +14,27 @@ export const RATE_LIMIT_POLICIES: Readonly<Record<string, RateLimitPolicy>> = {
   },
   'POST /api/v1/auth/session:ip': { limit: 30, windowSeconds: 3600, keyBy: 'ip', failClosed: true },
   'POST /api/v1/auth/refresh': { limit: 30, windowSeconds: 3600, keyBy: 'user', failClosed: true },
+  // Task 18a admin sign-in. Public routes, so `keyBy: 'user'` resolves to the caller's IP
+  // (bucketKey), and all three fail closed like the mobile auth routes they copy. Without
+  // these entries they would fall to the strictest default and share nothing with auth.
+  'POST /api/v1/auth/admin/session': {
+    limit: 30,
+    windowSeconds: 3600,
+    keyBy: 'ip',
+    failClosed: true,
+  },
+  'POST /api/v1/auth/admin/refresh': {
+    limit: 30,
+    windowSeconds: 3600,
+    keyBy: 'user',
+    failClosed: true,
+  },
+  'POST /api/v1/auth/admin/logout': {
+    limit: 30,
+    windowSeconds: 3600,
+    keyBy: 'user',
+    failClosed: true,
+  },
   'GET /api/v1/driver/spaces': { limit: 60, windowSeconds: 60, keyBy: 'user' },
   'GET /api/v1/driver/spaces/:id': { limit: 60, windowSeconds: 60, keyBy: 'user' },
   'GET /api/v1/driver/spaces/:id/reviews': { limit: 60, windowSeconds: 60, keyBy: 'user' },
@@ -152,6 +173,11 @@ export const RATE_LIMIT_POLICIES: Readonly<Record<string, RateLimitPolicy>> = {
   'POST /api/v1/owner/reviews/:id/respond': { limit: 10, windowSeconds: 60, keyBy: 'user' },
   'POST /api/v1/owner/reviews/:id/report': { limit: 10, windowSeconds: 60, keyBy: 'user' },
 
+  // The ledger export streams the whole table slice for a range, holding a pooled connection for
+  // as long as the client reads. Five a minute is a finance person pulling a month; more than that
+  // is a script, and a script should not be able to hold the pool.
+  'GET /api/v1/admin/ledger/export': { limit: 5, windowSeconds: 60, keyBy: 'user' },
+
   'ADMIN:*': { limit: 100, windowSeconds: 60, keyBy: 'user' },
   'WEBHOOK:*': { limit: 300, windowSeconds: 60, keyBy: 'ip' },
   'UNAUTHENTICATED:*': { limit: 30, windowSeconds: 60, keyBy: 'ip' },
@@ -182,6 +208,11 @@ function matches(pattern: string, routeKey: string): boolean {
   return patternParts.every((part, i) => isParam(part) || part === routeParts[i]);
 }
 
+/**
+ * `url` is the route the router matched (`routePattern`), not the raw request URL: the guard
+ * passes the pattern so a percent-encoded spelling of a route resolves to that route's policy
+ * (SEC-H1). A concrete path still resolves the same way, which is what the unit tests feed it.
+ */
 export function resolvePolicy(method: string, url: string): RateLimitPolicy {
   const pathOnly = url.split('?')[0] ?? url;
   const routeKey = `${method} ${pathOnly}`;
