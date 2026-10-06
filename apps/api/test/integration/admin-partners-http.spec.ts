@@ -338,17 +338,37 @@ describe('admin partners HTTP', () => {
       expect(JSON.stringify(res.body)).not.toContain(phone);
     });
 
-    it('does not crash on a dev-mock document id, and omits a document never uploaded', async () => {
+    it('does not crash on a dev-mock id: it is left out, and a document never uploaded is too', async () => {
       const dev = await seedValet({ licence: 'dev-mock-licence' });
       const empty = await seedValet({ licence: null, name: 'No Licence Yet' });
 
       const devRes = await read(`${BASE}/${dev.id}?kind=valet`);
       expect(devRes.status).toBe(200);
-      expect(detailOf(devRes).documents).toHaveLength(1);
+      expect(detailOf(devRes).documents).toEqual([]);
 
       const emptyRes = await read(`${BASE}/${empty.id}?kind=valet`);
       expect(emptyRes.status).toBe(200);
       expect(detailOf(emptyRes).documents).toEqual([]);
+    });
+
+    it('signs nothing for a stored id that is not an upload id, and still shows the good ones', async () => {
+      const { id } = await seedWasher({
+        idDocument: 'parkease/documents/../proofs/x',
+        photos: [
+          'parkease/spaces/0190bbbb-front',
+          'parkease/documents/0190cccc-id',
+          'dev-mock-photo',
+        ],
+      });
+
+      const res = await read(`${BASE}/${id}?kind=washer`);
+
+      expect(res.status).toBe(200);
+      const documents = detailOf(res).documents;
+      // The climbing id signs nothing; of the photos only the one in spaces survives.
+      expect(documents.map((d) => d.kind)).toEqual(['business_photo']);
+      expect(documents[0]?.url).toContain('/parkease/spaces/0190bbbb-front');
+      expect(JSON.stringify(res.body)).not.toContain('signature=');
     });
 
     it('is 404 for a user who is not that kind of partner, and for one who does not exist', async () => {
@@ -475,11 +495,17 @@ describe('admin partners HTTP', () => {
       expect(await profileStatus('valet', id)).toBe('verified');
     });
 
-    it('grants the role when the profile exists but no role row was ever written', async () => {
+    it('never creates a role: a profile with no role row is refused and nothing is written', async () => {
       const { id } = await seedValet({ roleStatus: null });
 
-      expect((await verify(id, 'valet')).status).toBe(200);
-      expect((await roleRow(id, 'valet'))?.status).toBe('active');
+      const res = await verify(id, 'valet');
+
+      expect(res.status).toBe(404);
+      expect(errorCode(res)).toBe('ROLE_NOT_HELD');
+      expect(await roleRow(id, 'valet')).toBeUndefined();
+      expect(await profileStatus('valet', id)).toBe('pending');
+      expect(await auditCount()).toBe(0);
+      expect(await outboxCount()).toBe(0);
     });
 
     it('does not lift a suspension: verification is not a reinstatement', async () => {

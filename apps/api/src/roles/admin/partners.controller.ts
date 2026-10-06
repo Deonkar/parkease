@@ -99,7 +99,10 @@ export class AdminPartnersController {
     const { documentIds, ...partner } = found;
     return parseOutgoing(
       adminPartnerDetailSchema,
-      { ...partner, documents: partnerDocumentsOf(this.storage, documentIds) },
+      {
+        ...partner,
+        documents: partnerDocumentsOf(this.storage, documentIds, { userId: found.userId, kind }),
+      },
       'admin partner detail',
     );
   }

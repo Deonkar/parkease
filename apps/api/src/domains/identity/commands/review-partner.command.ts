@@ -8,7 +8,7 @@ import { DB, type Database } from '../../../platform/db/db.module.js';
 import { type TxHandle, withTransaction } from '../../../platform/db/transaction.js';
 import { type AdminActor, AuditService } from '../../../platform/observability/audit.service.js';
 import { OutboxService } from '../../../platform/outbox/outbox.service.js';
-import { IllegalVerificationTransitionError } from '../errors.js';
+import { IllegalVerificationTransitionError, RoleNotHeldError } from '../errors.js';
 
 export interface ReviewPartnerInput {
   readonly userId: string;
@@ -68,7 +68,7 @@ export class ReviewPartnerCommand {
       const now = new Date();
 
       await this.setProfileStatus(tx, kind, id, to, now);
-      const role = await this.settleRole(tx, kind, id, approving, actor, now);
+      const role = await this.settleRole(tx, kind, id, approving, now);
 
       await this.audit.record(tx, {
         actorUserId: actor.userId,
@@ -138,9 +138,10 @@ export class ReviewPartnerCommand {
   /**
    * The partner role follows the decision, but only where it is the decision's to move:
    *
-   * - **Verify** opens a role that is waiting (`pending`), was closed by an earlier rejection
-   *   (`rejected`, then the partner re-submitted), or was never written. An `active` role needs
-   *   nothing and a `suspended` one stays suspended: verifying documents is not a reinstatement.
+   * - **Verify** opens a role that is waiting (`pending`) or was closed by an earlier rejection
+   *   (`rejected`, then the partner re-submitted). An `active` role needs nothing and a `suspended`
+   *   one stays suspended: verifying documents is not a reinstatement. A role that does not exist
+   *   is refused (`ROLE_NOT_HELD`); this command never creates one.
    * - **Reject** closes a role that is still `pending`. An `active` one (a verified partner whose
    *   re-submitted documents were refused) is left, because the profile status is what gates jobs.
    */
@@ -149,7 +150,6 @@ export class ReviewPartnerCommand {
     kind: PartnerKind,
     userId: string,
     approving: boolean,
-    actor: AdminActor,
     now: Date,
   ): Promise<{ before: string | null; after: string | null }> {
     const [role] = await tx
@@ -160,16 +160,10 @@ export class ReviewPartnerCommand {
     const before = role?.status ?? null;
 
     if (approving) {
-      if (role === undefined) {
-        await tx.insert(userRoles).values({
-          userId,
-          role: kind,
-          status: RoleStatus.ACTIVE,
-          grantedByUserId: actor.userId,
-          verifiedAt: now,
-        });
-        return { before, after: RoleStatus.ACTIVE };
-      }
+      // A profile only exists for someone who already holds the role, so a missing row is a state
+      // no flow produces. It is refused rather than repaired: this command moves a role's status,
+      // and the admin grant is the one place a role is created, with a reason.
+      if (role === undefined) throw new RoleNotHeldError();
       if (role.status === RoleStatus.PENDING || role.status === RoleStatus.REJECTED) {
         await tx
           .update(userRoles)

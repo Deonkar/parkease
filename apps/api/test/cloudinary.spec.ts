@@ -5,6 +5,7 @@ import { describe, it, expect } from 'vitest';
 import {
   CloudinaryService,
   DOCUMENT_URL_TTL_SECONDS,
+  InvalidUploadIdError,
 } from '../src/platform/storage/cloudinary.service.js';
 
 describe('CloudinaryService', () => {
@@ -122,7 +123,10 @@ describe('CloudinaryService.privateDownloadUrl', () => {
   });
 
   it('points at the Cloudinary download API for the account', () => {
-    const { url } = service.privateDownloadUrl('x', { expiresInSeconds: 300, now });
+    const { url } = service.privateDownloadUrl('parkease/documents/x', {
+      expiresInSeconds: 300,
+      now,
+    });
     const parsed = new URL(url);
 
     expect(parsed.origin).toBe('https://api.cloudinary.com');
@@ -130,7 +134,10 @@ describe('CloudinaryService.privateDownloadUrl', () => {
   });
 
   it('signs expires_at, public_id, timestamp and type=authenticated', () => {
-    const { url, expiresAt } = service.privateDownloadUrl('x', { expiresInSeconds: 300, now });
+    const { url, expiresAt } = service.privateDownloadUrl('parkease/documents/x', {
+      expiresInSeconds: 300,
+      now,
+    });
     const params = paramsOf(url);
 
     expect(params.get('expires_at')).toBe(String(nowSeconds + 300));
@@ -142,7 +149,10 @@ describe('CloudinaryService.privateDownloadUrl', () => {
   });
 
   it('carries a signature equal to sha256 over the sorted signed set plus the secret', () => {
-    const { url } = service.privateDownloadUrl('x', { expiresInSeconds: 300, now });
+    const { url } = service.privateDownloadUrl('parkease/documents/x', {
+      expiresInSeconds: 300,
+      now,
+    });
 
     const signed = [
       `expires_at=${String(nowSeconds + 300)}`,
@@ -158,34 +168,42 @@ describe('CloudinaryService.privateDownloadUrl', () => {
   });
 
   it('never puts the API secret in the URL', () => {
-    const { url } = service.privateDownloadUrl('x', { expiresInSeconds: 300, now });
+    const { url } = service.privateDownloadUrl('parkease/documents/x', {
+      expiresInSeconds: 300,
+      now,
+    });
 
     expect(url).not.toContain(secret);
     expect(paramsOf(url).has('api_secret')).toBe(false);
   });
 
-  it('takes the id as stored: a full documents public_id is not prefixed twice', () => {
-    const { url } = service.privateDownloadUrl('parkease/documents/abc-123', {
+  it('signs the id as stored: a documents public_id from the upload response', () => {
+    const { url } = service.privateDownloadUrl('parkease/documents/0190abcd-1234_x', {
       expiresInSeconds: 300,
       now,
     });
 
-    expect(paramsOf(url).get('public_id')).toBe('parkease/documents/abc-123');
+    expect(paramsOf(url).get('public_id')).toBe('parkease/documents/0190abcd-1234_x');
   });
 
-  it('cannot be pointed at another folder through the id', () => {
-    const { url } = service.privateDownloadUrl('parkease/proofs/abc', {
-      expiresInSeconds: 300,
-      now,
-    });
-
-    expect(paramsOf(url).get('public_id')).toBe('parkease/documents/parkease/proofs/abc');
-  });
-
-  it('does not throw on a dev-mock id', () => {
-    expect(() =>
-      service.privateDownloadUrl('dev-mock-licence', { expiresInSeconds: 300, now }),
-    ).not.toThrow();
+  /**
+   * The signature is the admin's key to an ID image, so it is only given for an id shaped like one
+   * we minted (`uploadIdIn('documents')`): the documents folder, and no `.` or `:` to climb out of it.
+   */
+  it.each([
+    ['a path that climbs out of documents', 'parkease/documents/../proofs/x'],
+    ['an id in another folder', 'parkease/spaces/x'],
+    ['an id in another folder, named proofs', 'parkease/proofs/abc'],
+    ['a bare id with no folder', 'x'],
+    ['a dev fixture id', 'dev-mock-licence'],
+    ['a URL', 'https://evil.example/parkease/documents/x'],
+    ['a prefix collision', 'parkease/documents-old/x'],
+    ['an empty folder segment', 'parkease/documents/'],
+    ['an empty id', ''],
+  ])('refuses %s', (_label, id) => {
+    expect(() => service.privateDownloadUrl(id, { expiresInSeconds: 300, now })).toThrow(
+      InvalidUploadIdError,
+    );
   });
 });
 
@@ -199,13 +217,13 @@ describe('CloudinaryService.publicImageUrl', () => {
     );
   });
 
-  it('puts a bare id into the spaces folder', () => {
-    expect(service.publicImageUrl('abc')).toContain('/image/upload/parkease/spaces/abc');
-  });
-
-  it('percent-encodes each segment so an id cannot break out of the path', () => {
-    expect(service.publicImageUrl('parkease/spaces/a b?c#d')).toContain(
-      '/parkease/spaces/a%20b%3Fc%23d',
-    );
+  it.each([
+    ['a path that climbs out of spaces', 'parkease/spaces/../documents/x'],
+    ['an id in the documents folder', 'parkease/documents/x'],
+    ['a bare id', 'abc'],
+    ['a query or fragment', 'parkease/spaces/a?b#c'],
+    ['a dev fixture id', 'dev-mock-photo'],
+  ])('refuses %s', (_label, id) => {
+    expect(() => service.publicImageUrl(id)).toThrow(InvalidUploadIdError);
   });
 });

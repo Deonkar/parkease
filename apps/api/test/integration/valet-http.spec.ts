@@ -1045,7 +1045,7 @@ describe('the valet-side reads, positively', () => {
       url: '/api/v1/valet/profile/documents',
       headers: key(),
       payload: {
-        licenceDocumentId: 'doc_123',
+        licenceDocumentId: 'parkease/documents/0190aaaa-licence',
         licenceExpiresAt: new Date(Date.now() + 86_400_000).toISOString(),
         vehicleMake: 'Maruti Swift',
       },
@@ -1055,6 +1055,34 @@ describe('the valet-side reads, positively', () => {
     const profile = dataOf<{ verificationStatus: string; isOnline: boolean }>(res.body);
     expect(profile.verificationStatus).toBe('pending');
     expect(profile.isOnline).toBe(false);
+  });
+
+  /**
+   * The licence id is what an admin's signed download link is built from, so it has to be an
+   * upload id in the documents folder, exactly as the washer contract requires.
+   */
+  it('refuses a licence document id that is not an upload in the documents folder', async () => {
+    const valetId = await seedValet();
+    asUser(valetId, ['valet']);
+
+    for (const licenceDocumentId of [
+      'doc_123',
+      'parkease/proofs/0190aaaa-x',
+      'parkease/documents/../proofs/x',
+      'https://evil.example/licence.jpg',
+    ]) {
+      const res = await http.request({
+        method: 'POST',
+        url: '/api/v1/valet/profile/documents',
+        headers: key(),
+        payload: {
+          licenceDocumentId,
+          licenceExpiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+        },
+      });
+
+      expect(res.status, licenceDocumentId).toBe(400);
+    }
   });
 
   it('attaches a proof photo without moving the job', async () => {

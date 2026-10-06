@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import { Injectable } from '@nestjs/common';
-import type { UploadFolder } from '@parkease/contracts/shared';
+import { type UploadFolder, uploadIdIn } from '@parkease/contracts/shared';
 import { uuidv7 } from '@parkease/db';
 
 import { env } from '../config/env.schema.js';
@@ -32,8 +32,22 @@ const SIGNATURE_VALIDITY_SECONDS = 60 * 60;
 const PRIVATE_FOLDERS = new Set<string>(['documents']);
 const PRIVATE_DELIVERY_TYPE = 'authenticated';
 
-const DOCUMENTS_PREFIX = 'parkease/documents/';
-const SPACES_PREFIX = 'parkease/spaces/';
+/**
+ * The shape of an id we minted, one schema per folder: `uploadIdIn` in the contracts, the same one
+ * the washer's submit contract applies. A stored id that fails it is not ours (a dev fixture, a
+ * value written before the contract tightened) and is never turned into a URL.
+ */
+const DOCUMENT_ID = uploadIdIn('documents');
+const SPACE_PHOTO_ID = uploadIdIn('spaces');
+
+/** A stored upload id that is not shaped like one we minted for the folder it should be in. */
+export class InvalidUploadIdError extends Error {
+  constructor(folder: UploadFolder) {
+    // The id itself stays out of the message: it is stored data and may be anything.
+    super(`not an upload id in ${folder}`);
+    this.name = 'InvalidUploadIdError';
+  }
+}
 
 /**
  * How long an admin's document link works. Long enough to open and read an image, short enough that
@@ -101,22 +115,23 @@ export class CloudinaryService {
    * blank in the SDK's call and dropped before signing, so they are absent here.
    *
    * `documentId` is what the profile stores, which is Cloudinary's own `public_id` from the upload
-   * response — `parkease/documents/<uuid>`. A bare id is placed in the documents folder, and an id
-   * naming any other folder is nested under it rather than followed, so a stored value can never
-   * make an admin's signature unlock something outside `parkease/documents`.
+   * response — `parkease/documents/<uuid>`. The signature is the admin's key to that image, so it
+   * is only given for an id that passes `uploadIdIn('documents')`: the documents folder, and no
+   * `.` or `:` to climb out of it or name a URL. Anything else throws `InvalidUploadIdError`
+   * before anything is signed.
    */
   privateDownloadUrl(
     documentId: string,
     opts: { readonly expiresInSeconds: number; readonly now?: Date },
   ): PrivateDownload {
+    if (!DOCUMENT_ID.safeParse(documentId).success) throw new InvalidUploadIdError('documents');
+
     const timestamp = Math.floor((opts.now ?? new Date()).getTime() / 1000);
     const expiresAtSeconds = timestamp + opts.expiresInSeconds;
 
     const signParams: Record<string, string> = {
       expires_at: String(expiresAtSeconds),
-      public_id: documentId.startsWith(DOCUMENTS_PREFIX)
-        ? documentId
-        : `${DOCUMENTS_PREFIX}${documentId}`,
+      public_id: documentId,
       timestamp: String(timestamp),
       type: PRIVATE_DELIVERY_TYPE,
     };
@@ -135,13 +150,13 @@ export class CloudinaryService {
 
   /**
    * The normal delivery URL for a public image (a business photo, uploaded to `spaces`). It does not
-   * expire: unlike a document it was never private. Each path segment is encoded, so a stored id
-   * cannot add a query or fragment to the URL.
+   * expire: unlike a document it was never private. The id must pass `uploadIdIn('spaces')`, the
+   * shape the washer contract already enforces on write, so a stored value cannot climb out of the
+   * folder or add a query or fragment; anything else throws `InvalidUploadIdError`.
    */
   publicImageUrl(uploadId: string): string {
-    const publicId = uploadId.startsWith('parkease/') ? uploadId : `${SPACES_PREFIX}${uploadId}`;
-    const path = publicId.split('/').map(encodeURIComponent).join('/');
-    return `https://res.cloudinary.com/${env.CLOUDINARY_CLOUD_NAME}/image/upload/${path}`;
+    if (!SPACE_PHOTO_ID.safeParse(uploadId).success) throw new InvalidUploadIdError('spaces');
+    return `https://res.cloudinary.com/${env.CLOUDINARY_CLOUD_NAME}/image/upload/${uploadId}`;
   }
 
   private sign(params: Record<string, string>): string {

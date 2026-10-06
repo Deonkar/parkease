@@ -36,7 +36,7 @@ const ALLOWED_WRITERS: ReadonlyArray<{
   {
     file: 'apps/api/src/domains/identity/commands/review-partner.command.ts',
     reason:
-      'Partner verification: opens a valet or washer role (typed PartnerKind, never admin) once an admin has verified its pending profile; audited.',
+      'Partner verification: status transitions on an existing valet or washer role; audited.',
     expectWrite: true,
   },
   {
