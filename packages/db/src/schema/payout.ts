@@ -152,3 +152,20 @@ export const reconciliationMismatches = pgTable(
     ),
   ],
 );
+
+/**
+ * One Route onboarding submit per user at a time (S-112): taken before the first Razorpay call
+ * and released after, so two submits cannot each create a Linked Account.
+ */
+export const routeOnboardingClaims = pgTable(
+  'route_onboarding_claims',
+  {
+    id: primaryId(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    claimedAt: timestamp('claimed_at', { withTimezone: true }).notNull().defaultNow(),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex('route_onboarding_claims_user_id_key').on(t.userId)],
+);

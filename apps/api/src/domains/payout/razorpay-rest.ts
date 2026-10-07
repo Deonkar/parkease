@@ -13,6 +13,12 @@ export class RazorpayApiError extends Error {
   constructor(
     readonly status: number | null,
     message: string,
+    /**
+     * The Linked Account a refused create says already exists (S-112): Razorpay answers a second
+     * create for the same merchant with "Merchant email already exists for account - <id>". Only
+     * that id is kept from the body, never the rest of it, which can echo what we sent.
+     */
+    readonly existingAccountId: string | null = null,
   ) {
     super(message);
     this.name = 'RazorpayApiError';
@@ -52,6 +58,7 @@ export async function razorpayRequest<T>(
     throw new RazorpayApiError(
       response.status,
       `Razorpay ${method} ${path} answered ${String(response.status)}`,
+      await existingAccountIn(response),
     );
   }
   try {
@@ -61,5 +68,20 @@ export async function razorpayRequest<T>(
       response.status,
       `Razorpay ${method} ${path} answered unreadably: ${String(error)}`,
     );
+  }
+}
+
+const EXISTING_ACCOUNT = /already exists for account\s*-\s*(?:acc_)?([A-Za-z0-9]{14})\b/;
+
+/** The account id in a duplicate-create refusal, and nothing else from the body. */
+async function existingAccountIn(response: Response): Promise<string | null> {
+  try {
+    const body = (await response.json()) as { error?: { description?: unknown } };
+    const description = body.error?.description;
+    if (typeof description !== 'string') return null;
+    const match = EXISTING_ACCOUNT.exec(description);
+    return match?.[1] === undefined ? null : `acc_${match[1]}`;
+  } catch {
+    return null;
   }
 }

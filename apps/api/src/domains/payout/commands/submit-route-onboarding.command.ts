@@ -1,6 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { Role } from '@parkease/contracts/enums';
 import type { SubmitRouteOnboarding } from '@parkease/contracts/shared';
+import { routeOnboardingClaims } from '@parkease/db/schema';
+import { and, eq, sql } from 'drizzle-orm';
 
 import { DB, type Database } from '../../../platform/db/db.module.js';
 import { withTransaction } from '../../../platform/db/transaction.js';
@@ -9,6 +11,7 @@ import { CommissionWaiverService } from '../../pricing/commission-waiver.service
 import {
   PayoutProviderUnavailableError,
   RouteDetailsRejectedError,
+  RouteOnboardingInProgressError,
   RouteOnboardingLockedError,
 } from '../errors.js';
 import { type LinkedAccountRow, PayoutService } from '../payout.service.js';
@@ -43,6 +46,12 @@ export interface SubmitRouteOnboardingInput {
  * webhooks' ordered write and yields to any webhook newer than the settlement call, so an
  * `activated` that lands first is never undone by this response.
  */
+/**
+ * How long a submit's claim holds before another may take it over: four Razorpay calls at
+ * `GATEWAY_TIMEOUT_MS` each, with room to spare. Only a crashed submit is ever that old.
+ */
+export const ROUTE_ONBOARDING_CLAIM_TTL_MS = 2 * 60_000;
+
 @Injectable()
 export class SubmitRouteOnboardingCommand {
   constructor(
@@ -53,6 +62,40 @@ export class SubmitRouteOnboardingCommand {
   ) {}
 
   async execute(input: SubmitRouteOnboardingInput): Promise<LinkedAccountRow> {
+    // One submit per user talks to Razorpay at a time (S-112): two that both found no linked
+    // account would each create one, and the second would orphan the first.
+    const claimedAt = await this.claim(input.userId);
+    try {
+      return await this.submit(input);
+    } finally {
+      await this.db
+        .delete(routeOnboardingClaims)
+        .where(
+          and(
+            eq(routeOnboardingClaims.userId, input.userId),
+            eq(routeOnboardingClaims.claimedAt, claimedAt),
+          ),
+        );
+    }
+  }
+
+  /** Takes the user's claim, or a claim abandoned past its TTL; throws while one is live. */
+  private async claim(userId: string): Promise<Date> {
+    const [claimed] = await this.db
+      .insert(routeOnboardingClaims)
+      // Millisecond precision, so the JS Date read back matches the row exactly on release.
+      .values({ userId, claimedAt: sql`date_trunc('milliseconds', now())` })
+      .onConflictDoUpdate({
+        target: routeOnboardingClaims.userId,
+        set: { claimedAt: sql`date_trunc('milliseconds', now())`, updatedAt: sql`now()` },
+        setWhere: sql`${routeOnboardingClaims.claimedAt} < now() - make_interval(secs => ${ROUTE_ONBOARDING_CLAIM_TTL_MS / 1000})`,
+      })
+      .returning({ claimedAt: routeOnboardingClaims.claimedAt });
+    if (claimed === undefined) throw new RouteOnboardingInProgressError();
+    return claimed.claimedAt;
+  }
+
+  private async submit(input: SubmitRouteOnboardingInput): Promise<LinkedAccountRow> {
     const { userId, form } = input;
     const existing = await this.payouts.linkedFor(userId);
     if (existing !== undefined && !OPEN.has(existing.kycStatus)) {

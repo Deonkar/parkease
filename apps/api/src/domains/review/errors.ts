@@ -64,3 +64,17 @@ export class ReviewAlreadyRemovedError extends ReviewDomainError {
     super('REVIEW_ALREADY_REMOVED', 'That review was already removed.', HttpStatus.CONFLICT);
   }
 }
+
+/**
+ * A driver may report only reviews of spaces they have booked (S-129). Every report is admin time,
+ * and a review needs no relationship to report, so a fleet of fresh accounts could flood the queue.
+ */
+export class ReportNeedsBookingError extends ReviewDomainError {
+  constructor() {
+    super(
+      'REPORT_NEEDS_BOOKING',
+      "You can report reviews of spaces you've parked at.",
+      HttpStatus.FORBIDDEN,
+    );
+  }
+}

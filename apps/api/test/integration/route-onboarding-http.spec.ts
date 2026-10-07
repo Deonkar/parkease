@@ -247,6 +247,55 @@ describe('/me/route-onboarding over HTTP (task 16b)', () => {
     expect(sent.map((m) => m.template)).toContain('promo.commission_waiver_granted');
   });
 
+  describe('one submit per user at a time (S-112)', () => {
+    beforeEach(async () => {
+      await h.sql`TRUNCATE route_onboarding_claims`;
+    });
+
+    it('refuses a second submit while the first is still talking to Razorpay', async () => {
+      let release: () => void = () => undefined;
+      route.upsertAccount.mockImplementationOnce(
+        () =>
+          new Promise<string>((resolve) => {
+            release = () => {
+              resolve('acc_QK7l1nOwner');
+            };
+          }),
+      );
+
+      const first = put();
+      await vi.waitFor(() => {
+        expect(route.upsertAccount).toHaveBeenCalledTimes(1);
+      });
+      const second = await put();
+      release();
+
+      expect(second.status).toBe(409);
+      expect((second.body as { error: { code: string } }).error.code).toBe(
+        'ROUTE_ONBOARDING_IN_PROGRESS',
+      );
+      expect((await first).status).toBe(200);
+      // Only the first ever reached Razorpay: one account, never two.
+      expect(route.upsertAccount).toHaveBeenCalledTimes(1);
+      expect(await h.sql`SELECT 1 FROM route_onboarding_claims`).toHaveLength(0);
+    });
+
+    it('takes over a claim a crashed submit left behind', async () => {
+      await h.sql`INSERT INTO route_onboarding_claims (user_id, claimed_at)
+                  VALUES (${ownerId}, now() - interval '5 minutes')`;
+
+      expect((await put()).status).toBe(200);
+    });
+
+    it('releases the claim when Razorpay refuses a step, so a corrected retry can run', async () => {
+      route.upsertStakeholder.mockRejectedValueOnce(new RazorpayApiError(400, 'bad PAN'));
+
+      expect((await put()).status).toBe(422);
+      expect(await h.sql`SELECT 1 FROM route_onboarding_claims`).toHaveLength(0);
+      expect((await put()).status).toBe(200);
+    });
+  });
+
   it('rejects a malformed PAN with 400 before calling Razorpay', async () => {
     expect((await put({ ...FORM, pan: 'abc' })).status).toBe(400);
     expect(route.upsertAccount).not.toHaveBeenCalled();

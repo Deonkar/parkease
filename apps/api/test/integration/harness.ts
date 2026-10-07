@@ -300,6 +300,8 @@ export interface SeedBookingOptions {
   /** Offsets from now, in minutes. Defaults cover the discovery window. */
   readonly startsInMinutes?: number;
   readonly endsInMinutes?: number;
+  /** Defaults to the harness's own driver. */
+  readonly driverId?: string;
 }
 
 export async function seedBooking(h: Harness, opts: SeedBookingOptions): Promise<string> {
@@ -313,7 +315,7 @@ export async function seedBooking(h: Harness, opts: SeedBookingOptions): Promise
       owner_earnings_paise
     )
     VALUES (
-      ${h.driverId}, ${opts.spaceId}, ${opts.vehicleType}, 'hourly',
+      ${opts.driverId ?? h.driverId}, ${opts.spaceId}, ${opts.vehicleType}, 'hourly',
       now() + make_interval(mins => ${startsIn}),
       now() + make_interval(mins => ${endsIn}),
       'confirmed',

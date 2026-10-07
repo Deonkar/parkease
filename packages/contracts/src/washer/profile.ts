@@ -11,6 +11,22 @@ import { uploadIdIn } from '../shared/upload-signature.js';
  * A business's shop-front photos: uploads signed into `spaces`, the folder a
  * space listing's photos use, at most ten.
  */
+/**
+ * Words a partner's name may not carry (S-60). The name is what a driver sees on the washer card,
+ * and an admin approves it at verification, but "ParkEase Support" should never reach that queue:
+ * it is an impersonation of us, made before any human looks.
+ */
+const RESERVED_NAME = /park\s*ease|support|customer\s*care|helpline|\badmin\b|official/i;
+
+export const partnerDisplayNameSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(120)
+  .refine((name) => !RESERVED_NAME.test(name), {
+    message: 'Use your own or your business’s name, not ParkEase’s or a support title.',
+  });
+
 const businessPhotoIdsSchema = z.array(uploadIdIn('spaces')).max(10);
 
 export const WASHER_PARTNER_TYPE_VALUES = ['business', 'gig'] as const;
@@ -69,7 +85,7 @@ export const createWasherProfileSchema = z
      * card: a business's business name, a gig partner's own name. Required for
      * both (ruling T10-C2) — nothing else captures a display name.
      */
-    businessName: z.string().trim().min(1).max(120),
+    businessName: partnerDisplayNameSchema,
     /** Optional for a business, meaningless for a gig partner. */
     gstin: z
       .string()
