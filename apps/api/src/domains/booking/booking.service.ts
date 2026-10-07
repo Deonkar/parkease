@@ -1,4 +1,4 @@
-import { BadRequestException, Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import type { BookingFilter, ListBookingsQuery } from '@parkease/contracts/driver';
 import type {
   BookingStatus,
@@ -14,6 +14,11 @@ import { z } from 'zod';
 
 import { DB, type Database } from '../../platform/db/db.module.js';
 import type { TxHandle } from '../../platform/db/transaction.js';
+import {
+  decodeJsonCursor,
+  encodeJsonCursor,
+  InvalidCursorError,
+} from '../../platform/http/json-cursor.js';
 
 export interface InsertBookingInput {
   readonly driverId: string;
@@ -52,24 +57,12 @@ interface BookingCursor {
 type CursorFilter = BookingFilter | `owner-${OwnerBookingGroup}`;
 
 const encodeCursor = (filter: CursorFilter, row: { startsAt: Date; id: string }): string =>
-  Buffer.from(
-    JSON.stringify({ f: filter, t: row.startsAt.toISOString(), i: row.id }),
-    'utf8',
-  ).toString('base64url');
+  encodeJsonCursor({ f: filter, t: row.startsAt.toISOString(), i: row.id });
 
 function decodeCursor(raw: string, filter: CursorFilter): BookingCursor | undefined {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'));
-  } catch {
-    // Malformed base64url or JSON. A typed failure, not a swallowed error.
-    return undefined;
-  }
-
-  const payload = cursorPayloadSchema.safeParse(parsed);
-  if (!payload.success || payload.data.f !== filter) return undefined;
-
-  return { startsAt: new Date(payload.data.t), id: payload.data.i };
+  const payload = decodeJsonCursor(raw, cursorPayloadSchema);
+  if (payload === undefined || payload.f !== filter) return undefined;
+  return { startsAt: new Date(payload.t), id: payload.i };
 }
 
 @Injectable()
@@ -189,10 +182,7 @@ export class BookingService {
     if (query.cursor !== undefined) {
       const cursor = decodeCursor(query.cursor, query.filter);
       if (cursor === undefined) {
-        throw new BadRequestException({
-          error: 'INVALID_CURSOR',
-          message: 'That page link is no longer valid. Pull to refresh.',
-        });
+        throw new InvalidCursorError();
       }
       // Compare on the whole tuple, so rows sharing a start time still page
       // deterministically instead of repeating or vanishing at the boundary.
@@ -358,10 +348,7 @@ export class BookingService {
     if (query.cursor !== undefined) {
       const cursor = decodeCursor(query.cursor, `owner-${query.group}`);
       if (cursor === undefined) {
-        throw new BadRequestException({
-          error: 'INVALID_CURSOR',
-          message: 'That page link is no longer valid. Pull to refresh.',
-        });
+        throw new InvalidCursorError();
       }
       // Same explicit cast as `listForDriver` — see the comment there.
       conditions.push(

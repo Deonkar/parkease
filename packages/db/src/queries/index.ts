@@ -21,3 +21,5 @@ export {
   ageingReviewTargets,
   type RatingAggregate,
 } from './rating-aggregate.js';
+
+export { sumPaise } from './sum-paise.js';

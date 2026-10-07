@@ -6,6 +6,8 @@
 export const PG_EXCLUSION_VIOLATION = '23P01';
 export const PG_UNIQUE_VIOLATION = '23505';
 export const PG_FOREIGN_KEY_VIOLATION = '23503';
+export const PG_DEADLOCK_DETECTED = '40P01';
+export const PG_SERIALIZATION_FAILURE = '40001';
 
 interface PgErrorShape {
   readonly code: string;

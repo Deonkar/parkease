@@ -5,6 +5,7 @@ import {
   type WasherEarningsPeriod,
   type WasherEarningsView,
 } from '@parkease/contracts/washer';
+import { sumPaise } from '@parkease/db/queries';
 import { ledgerEntries, washJobs } from '@parkease/db/schema';
 import { and, desc, eq, sql } from 'drizzle-orm';
 
@@ -82,8 +83,8 @@ export class WasherEarningsQuery {
       { isolationLevel: 'repeatable read', accessMode: 'read only' },
     );
 
-    const creditsPaise = Number(summary?.creditsPaise ?? 0);
-    const debitsPaise = Number(summary?.debitsPaise ?? 0);
+    const creditsPaise = sumPaise(summary?.creditsPaise);
+    const debitsPaise = sumPaise(summary?.debitsPaise);
 
     /**
      * The sign comes from the chart of accounts, not from a subtraction written
@@ -118,8 +119,8 @@ export class WasherEarningsQuery {
           vehicleType: row.vehicleType,
           completedAt: row.completedAt === null ? null : row.completedAt.toISOString(),
           grossPaise: row.grossPaise,
-          feePaise: row.feePaise === null ? null : Number(row.feePaise),
-          netPaise: row.netPaise === null ? null : Number(row.netPaise),
+          feePaise: row.feePaise === null ? null : sumPaise(row.feePaise),
+          netPaise: row.netPaise === null ? null : sumPaise(row.netPaise),
         })),
       },
       'washer earnings view',

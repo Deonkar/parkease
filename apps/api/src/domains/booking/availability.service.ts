@@ -3,7 +3,13 @@ import type { SlotStatus, VehicleType } from '@parkease/contracts/enums';
 import { bookingSlots } from '@parkease/db/schema';
 import { eq, sql } from 'drizzle-orm';
 
-import { PG_EXCLUSION_VIOLATION, isPgError, pgConstraintName } from '../../platform/db/errors.js';
+import {
+  PG_DEADLOCK_DETECTED,
+  PG_EXCLUSION_VIOLATION,
+  PG_SERIALIZATION_FAILURE,
+  isPgError,
+  pgConstraintName,
+} from '../../platform/db/errors.js';
 import type { TxHandle } from '../../platform/db/transaction.js';
 import { logger } from '../../platform/observability/logger.js';
 
@@ -72,10 +78,18 @@ export class AvailabilityService {
       // The constraint fired: someone took this exact slot-instance for an
       // overlapping window between our SELECT and our INSERT. The log line
       // carries the SQLSTATE and the constraint; the driver sees neither.
-      if (isPgError(error, PG_EXCLUSION_VIOLATION)) {
+      // A deadlock between two racers' exclusion checks (40P01) is the same lost race reached by
+      // another road (S-105, S-146): the database chose one transaction to abort, and that one
+      // lost. A serialization failure (40001) likewise. All three are one clean 409.
+      const lostRace = [
+        PG_EXCLUSION_VIOLATION,
+        PG_DEADLOCK_DETECTED,
+        PG_SERIALIZATION_FAILURE,
+      ].find((code) => isPgError(error, code));
+      if (lostRace !== undefined) {
         logger.info(
           {
-            pgCode: PG_EXCLUSION_VIOLATION,
+            pgCode: lostRace,
             constraint: pgConstraintName(error),
             spaceId: input.spaceId,
             slotIndex: candidate.slot_index,

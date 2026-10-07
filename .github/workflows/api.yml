@@ -38,5 +38,5 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # `@parkease/api` alone, not `...`: packages/db has its own suite, red on S-158 until fixed.
-      - run: pnpm turbo run test:integration --filter=@parkease/api
+      # The api's own suite and packages/db's schema suite (migrations, constraints, conformance).
+      - run: pnpm turbo run test:integration --filter=@parkease/api --filter=@parkease/db

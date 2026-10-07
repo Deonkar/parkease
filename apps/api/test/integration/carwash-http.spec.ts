@@ -187,7 +187,7 @@ beforeAll(async () => {
     lng: SPACE.lng,
     pricing: HOURLY_ONLY,
     schedule: OPEN_ALWAYS,
-    slots: { car: 4 },
+    carSlots: 4,
   });
 }, 180_000);
 

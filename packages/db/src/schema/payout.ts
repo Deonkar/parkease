@@ -138,6 +138,7 @@ export const reconciliationMismatches = pgTable(
     detail: text('detail').notNull(),
     resolvedAt: timestamp('resolved_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     uniqueIndex('reconciliation_mismatches_kind_reference_key')

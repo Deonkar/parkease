@@ -1,7 +1,7 @@
 import { MINIMUM_PAYOUT_PAISE, payoutEntries } from '@parkease/contracts/money';
 import { toPaise } from '@parkease/contracts/primitives';
 import { uuidv7 } from '@parkease/db/id';
-import { PAYABLE_BALANCE, partnerPayable } from '@parkease/db/queries';
+import { PAYABLE_BALANCE, partnerPayable, sumPaise } from '@parkease/db/queries';
 import { bankDetails, bookings, ledgerEntries, outboxMessages, payouts } from '@parkease/db/schema';
 import { eq, sql } from 'drizzle-orm';
 
@@ -86,7 +86,7 @@ async function payOne(deps: JobDeps, userId: string, period: string, now: Date):
       .from(ledgerEntries)
       .leftJoin(bookings, eq(bookings.id, ledgerEntries.bookingId))
       .where(partnerPayable(userId));
-    const balancePaise = Number(row?.balance ?? 0);
+    const balancePaise = sumPaise(row?.balance);
     if (balancePaise < MINIMUM_PAYOUT_PAISE) return;
 
     const posting = payoutEntries(toPaise(balancePaise), userId, now);
