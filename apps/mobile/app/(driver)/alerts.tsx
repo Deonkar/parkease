@@ -1,10 +1,6 @@
-import { EmptyState } from '@parkease/ui-native';
+import { NotificationsScreen } from '@/features/shared/notifications/NotificationsScreen';
 
+// The Alerts tab is the notification feed; the same screen is the modal other roles reach from Profile.
 export default function DriverAlertsScreen() {
-  return (
-    <EmptyState
-      title="No alerts"
-      body="Booking reminders, expiry warnings, and payment updates will appear here."
-    />
-  );
+  return <NotificationsScreen tab />;
 }

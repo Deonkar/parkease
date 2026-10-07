@@ -4,6 +4,7 @@ import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/contexts/AuthContext';
+import { NotificationsRow } from '@/features/shared/notifications/NotificationsRow';
 
 export default function DriverProfileScreen() {
   const auth = useAuth();
@@ -19,6 +20,8 @@ export default function DriverProfileScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top + spacing.xl }]}>
       <Text style={styles.title}>Profile</Text>
+
+      <NotificationsRow />
 
       <Pressable
         onPress={() => {

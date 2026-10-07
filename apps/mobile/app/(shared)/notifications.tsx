@@ -1,10 +1,3 @@
-import { EmptyState } from '@parkease/ui-native';
+import { NotificationsScreen } from '@/features/shared/notifications/NotificationsScreen';
 
-export default function NotificationsScreen() {
-  return (
-    <EmptyState
-      title="No notifications"
-      body="Booking updates, payment confirmations, and important alerts will appear here."
-    />
-  );
-}
+export default NotificationsScreen;

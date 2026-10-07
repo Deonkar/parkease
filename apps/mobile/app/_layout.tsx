@@ -5,6 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider } from '@/contexts/AuthContext';
 import { ThemeProvider } from '@/contexts/ThemeContext';
+import { PushRegistration } from '@/features/shared/notifications/PushRegistration';
 import { queryClient } from '@/lib/query';
 
 // Imported for its side effect, and from the ROOT layout rather than the valet
@@ -21,6 +22,7 @@ export default function RootLayout() {
         <AuthProvider>
           <ThemeProvider>
             <StatusBar style="auto" />
+            <PushRegistration />
             <Stack screenOptions={{ headerShown: false }}>
               <Stack.Screen name="index" />
               <Stack.Screen name="(auth)" />

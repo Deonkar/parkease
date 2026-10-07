@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
 import { RefreshNotice } from '@/features/shared/components/RefreshNotice';
 import { useAnnounce } from '@/features/shared/hooks/useAnnounce';
+import { NotificationsRow } from '@/features/shared/notifications/NotificationsRow';
 import { loadFailureCopy } from '@/features/washer/api/errors';
 import { FieldError } from '@/features/washer/components/FieldError';
 import { SubmitBlock } from '@/features/washer/components/FormFields';
@@ -303,6 +304,8 @@ export default function WasherProfileScreen() {
         {content()}
 
         <View style={styles.account}>
+          <NotificationsRow />
+
           <Pressable
             onPress={() => {
               router.push('/(shared)/switch-role');

@@ -2470,3 +2470,14 @@ Three runs of `test/integration/booking-concurrency.spec.ts` on one machine: one
 
 - **Why deferred:** outside task 19; the invariant (no oversell) held in every run, only the error mapping differs.
 - **Done means:** the command maps 40P01 to `SlotUnavailableError` (or retries once), with the test run 20 times green.
+
+### S-147 — Task 19b gaps: no real-device push check, no EAS project id, no in-app permission prompt flow
+
+- **Status:** `open`
+- **Found in:** task 19b, 2026-10-07
+- **Surface:** mobile · notifications
+
+Push registration and the tap-to-open path are unit-tested with mocked Expo modules and the feed and settings were walked in the web preview on fixtures. Nothing has run on a physical Android device: `getExpoPushTokenAsync` needs an EAS project id (`extra.eas.projectId`, written by `eas init`), which the repo does not have, so on a real build `registerForPush` currently logs "no EAS project id" and registers nothing. Permission is requested on first sign-in with no pre-prompt explaining why, and a user who denied it gets no route back (the settings screen does not link to the system settings). The Alerts tab for drivers and a Profile row for the other roles are the only entry points; owners, valets and washers have no bell on their main screens.
+
+- **Why deferred:** needs an Expo account and a device; the rest is polish on a working path.
+- **Done means:** `eas init` committed, one push received and tapped on a physical Android device for each of driver, owner and valet (cold start and foreground), a pre-prompt before the permission request, and a Settings link when permission is denied.

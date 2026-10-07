@@ -6,6 +6,7 @@ import type { ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/contexts/AuthContext';
+import { useBadgeText } from '@/features/shared/notifications/NotificationBadge';
 import { landingRouteFor } from '@/lib/landing-route';
 
 type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
@@ -35,6 +36,7 @@ const TAB_BAR_HEIGHT = 60;
 export default function DriverLayout() {
   const auth = useAuth();
   const insets = useSafeAreaInsets();
+  const alertsBadge = useBadgeText();
 
   if (auth.status !== 'authenticated') return <Redirect href="/" />;
   if (auth.activeRole !== Role.DRIVER) {
@@ -72,7 +74,11 @@ export default function DriverLayout() {
       />
       <Tabs.Screen
         name="alerts"
-        options={{ title: 'Alerts', tabBarIcon: tabIcon('bell-outline', 'bell') }}
+        options={{
+          title: 'Alerts',
+          tabBarIcon: tabIcon('bell-outline', 'bell'),
+          ...(alertsBadge === undefined ? {} : { tabBarBadge: alertsBadge }),
+        }}
       />
       <Tabs.Screen
         name="profile"

@@ -1,10 +1,3 @@
-import { EmptyState } from '@parkease/ui-native';
+import { NotificationSettingsScreen } from '@/features/shared/notifications/NotificationSettingsScreen';
 
-export default function NotificationSettingsScreen() {
-  return (
-    <EmptyState
-      title="Notification Preferences"
-      body="Choose which notifications you receive — booking alerts, payment updates, promotions, and more."
-    />
-  );
-}
+export default NotificationSettingsScreen;
