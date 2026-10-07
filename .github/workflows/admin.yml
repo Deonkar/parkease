@@ -20,3 +20,6 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm turbo run lint typecheck test --filter=@parkease/admin...
+      # The screens against `vite --mode fixtures` (playwright.config.ts): forms, dialogs, guards.
+      - run: pnpm --filter @parkease/admin exec playwright install --with-deps chromium
+      - run: pnpm --filter @parkease/admin test:e2e

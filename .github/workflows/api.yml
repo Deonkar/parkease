@@ -21,3 +21,22 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm run check:node
       - run: pnpm turbo run lint typecheck test --filter=@parkease/api...
+
+  # The four R-TEST-03 tests (booking concurrency, ledger balance, idempotency, search
+  # performance) live here and must be green on every change, not only when run by hand.
+  # Testcontainers starts PostgreSQL 18 + PostGIS 3.6 on the runner's Docker (R-TEST-02).
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: pnpm/action-setup@v4
+        with: { version: 9.15.4 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # `@parkease/api` alone, not `...`: packages/db has its own suite, red on S-158 until fixed.
+      - run: pnpm turbo run test:integration --filter=@parkease/api

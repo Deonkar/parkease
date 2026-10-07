@@ -4,6 +4,7 @@ import PgBoss from 'pg-boss';
 import { env } from './config/env.js';
 import { closeRedis, type JobDeps, redisClient } from './deps.js';
 import { registerHandlers } from './handlers.js';
+import { startOutboxPump } from './jobs/outbox/relay.job.js';
 import { logger } from './logger.js';
 import { ensureQueues } from './queues.js';
 import { registerSchedule } from './schedule.js';
@@ -28,13 +29,17 @@ const deps: JobDeps = { db, boss, redis: redisClient() };
 await ensureQueues(boss);
 await registerHandlers(boss, deps);
 await registerSchedule(boss);
+// The outbox lag budget is 30s (prd.md §12) and cron ticks once a minute, so the relay also runs
+// in-process every second. The `outbox.relay` cron job stays as the safety net.
+const outboxPump = startOutboxPump(deps);
 
 logger.info({ schema: 'pgboss' }, 'worker started');
 
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
-    void boss
-      .stop({ graceful: true })
+    void outboxPump
+      .stop()
+      .then(() => boss.stop({ graceful: true }))
       .then(closeRedis)
       .then(() => {
         process.exit(0);

@@ -2481,3 +2481,116 @@ Push registration and the tap-to-open path are unit-tested with mocked Expo modu
 
 - **Why deferred:** needs an Expo account and a device; the rest is polish on a working path.
 - **Done means:** `eas init` committed, one push received and tapped on a physical Android device for each of driver, owner and valet (cold start and foreground), a pre-prompt before the permission request, and a Settings link when permission is denied.
+
+### S-148 — The driver app cannot request a valet or a car wash, so the driver journey stops at check-in
+
+- **Status:** `open`
+- **Found in:** task 21 gap review, 2026-10-07
+- **Surface:** mobile · driver
+
+`POST /driver/valet/requests`, `GET /driver/valet/requests/:id`, `POST .../return`, and the matching `/driver/carwash/requests` routes all exist (tasks 11 and 13). Nothing in `apps/mobile` calls them. No driver screen requests a valet, tracks one on the map, asks for the car back, orders a wash, or shows before/after photos. `book/confirmed.tsx` says the "Add car wash" entry belongs on the booking detail screen once the booking is active, and that screen has none. Steps 9–11 of task 21's `driver-full-journey.yaml` cannot be written, and the valet and washer journeys need a driver to make the request.
+
+- **Why deferred:** it is feature work from tasks 11 and 13 on the driver side, not testing.
+- **Done means:** from an active booking a driver can request a valet, see it on the map with the 30s stale-fix indicator (§21.3 #9), request the return, order a wash and see its photos. Each step has a `testID` the Maestro journey can drive.
+
+### S-149 — No self-serve role grant: only an admin can make someone an owner, valet or washer
+
+- **Status:** `open` (needs a product decision)
+- **Found in:** task 21 gap review, 2026-10-07
+- **Surface:** api · mobile
+
+`GrantRoleCommand` has one caller, `POST /admin/users/:id/roles`. Task 21's owner journey starts "Profile → List your parking space → owner role granted, shell switches". The valet journey starts "Register as valet → upload licence + ID". The driver profile has no such entry, and no endpoint lets a user add a role to themselves. S-12 (valet document upload) is the valet half of the same gap.
+
+- **Why deferred:** whether owner is self-serve (with the space approval as the gate) or admin-granted is a product call, and the journeys assume self-serve.
+- **Done means:** the decision is written down. If self-serve: an endpoint grants `owner` (and `valet`/`washer` pending verification) to the caller, audited, and the profile row reaches it. If admin-only: the task 21 journeys are rewritten to grant through the API.
+
+### S-150 — The mobile app has no offline handling (§21.6)
+
+- **Status:** `open`
+- **Found in:** task 21 gap review, 2026-10-07
+- **Surface:** mobile
+
+`@react-native-community/netinfo` is not a dependency. No banner says "You're offline". The TanStack Query cache is not persisted, so a cold start offline shows nothing. Mutations are not queued for replay. The only offline handling is per-screen error copy (driver home picks "You're offline." when the error has no response).
+
+- **Why deferred:** a native dependency (new dev build) and a mutation-queue design. It needs to be designed, not bolted on in a test task.
+- **Done means:** a persistent banner driven by NetInfo. Bookings, earnings and notifications render from a persisted cache when offline. A queued mutation keeps the `Idempotency-Key` minted at intent time (R-FE-05) and replays in order on reconnect. A replay that fails surfaces to the user. Unit tests for the queue cover the drop and duplicate cases.
+
+### S-151 — Task 21's Maestro journeys, cold-start and install-size checks do not exist
+
+- **Status:** `blocked` (needs S-148, S-149, an Android device or emulator, and an EAS build)
+- **Found in:** task 21 gap review, 2026-10-07
+- **Surface:** mobile · E2E · release
+
+`apps/mobile/.maestro/` holds the two washer flows from task 14, still never executed. The valet flows S-04 names are not in the repo. There is no `driver-full-journey.yaml`, `owner-full-journey.yaml` or `valet-full-journey.yaml`. Nothing measures cold start (< 3s) or install size (< 20MB, ADR-023): there is no `android/` directory and no EAS profile to build from.
+
+- **Done means:** the three journeys exist and run green on a Redmi 9A-class device against a seeded API, with output in the PR. Cold start is measured by Maestro. The release AAB size is recorded and checked in CI.
+
+### S-152 — Task 20's marketing site is not built, so the web journey has nothing to test
+
+- **Status:** `blocked` (on task 20)
+- **Found in:** task 21 gap review, 2026-10-07
+- **Surface:** web
+
+`apps/web` is one placeholder page. `/pricing`, `/bangalore`, `/legal/privacy`, the FAQ accordion and the earnings calculator from `marketing-site.spec.ts` do not exist, and `apps/web` has no Playwright setup.
+
+- **Done means:** task 20 ships, then `marketing-site.spec.ts` runs in `web.yml` with an axe-core contrast check.
+
+### S-153 — Rate limiting (§21.3 #13) is never driven over HTTP
+
+- **Status:** `open`
+- **Found in:** task 21 gap review, 2026-10-07
+- **Surface:** api · test
+
+`http-harness.ts` leaves `RateLimitModule` out. `ratelimit-policies.spec.ts` checks the policy table. No test sends an 11th `POST /driver/bookings` in a minute and sees `429` with `Retry-After` from `ratelimit.guard.ts`.
+
+- **Done means:** an integration test with the guard mounted and a real or faithful Redis asserts the 11th request is `429`, carries `Retry-After`, and that the first ten were not throttled.
+
+### S-154 — Two admin integration tests fail under CPU contention
+
+- **Status:** `open`
+- **Found in:** task 21, first full-suite run beside other work, 2026-10-07
+- **Surface:** api · test
+
+`admin-bookings-http.spec.ts` "a failed re-read after the refund commits is not a 500, and a retry does not refund again": the retry got `409` (expected `200`). `admin-completion-http.spec.ts` "caps concurrent exports, answers 429…": the third export got `200` (expected `429`), because the first two finished before it arrived. Both passed 3 of 3 times in isolation. CI now runs the integration suite on every change (task 21), so a slow runner will show these.
+
+- **Done means:** the refund retry waits for the stored response, the way `booking-http.spec.ts` does with `vi.waitFor`. The export test holds the first two streams open deterministically instead of racing them. Both pass 20 runs under full-suite load.
+
+### S-155 — `ledger-balance.spec.ts` does not drive valet, car wash, admin refund or a real payout run
+
+- **Status:** `open`
+- **Found in:** task 21 gap review, 2026-10-07
+- **Surface:** api · ledger · mandatory test
+
+§21.2 asks for zero unbalanced txns "after the full seeded journey including bookings, valet, car wash, refunds, and payouts". The spec covers booking, surge, extension, both cancellation paths, commission waivers and settlement. It covers valet and payout only by posting the composer outputs directly, and car wash and admin refunds not at all. The worker's own tests check the balance of the flows they post.
+
+- **Done means:** one test drives a valet job, a wash job, an admin refund and a payout run through their real commands or jobs against one database, then asserts the same `HAVING` query returns nothing.
+
+### S-156 — Ledger imbalance and outbox lag are log lines; nothing pages, and nothing watches a dead worker
+
+- **Status:** `open` (feeds task 22)
+- **Found in:** task 21, 2026-10-07
+- **Surface:** worker · ops
+
+Task 21 fixed `ledger.assert-balance` so a one-sided posting is found, and the outbox relay now logs `OUTBOX_LAG` past 30s. Both are `logger.fatal` / `logger.error` only. §21.3 #16 says the job "pages immediately", and the finance dashboard does show IMBALANCED (`imbalancedTxnIds`). If the worker itself is down, nothing reports lag at all, because the check runs inside the relay.
+
+- **Done means:** task 22's alerting routes `LEDGER_IMBALANCE` and `OUTBOX_LAG` to a pager, and an external probe (or the API's health endpoint) reports outbox lag from the same query, so a dead worker is noticed.
+
+### S-157 — No table-driven screen-states test (§21.8) and no automated accessibility checks
+
+- **Status:** `open`
+- **Found in:** task 21 gap review, 2026-10-07
+- **Surface:** mobile · admin
+
+Skeleton, error and empty states exist per screen and are unit-tested one component at a time. No test enumerates every screen and asserts all three. Nothing enforces `accessibilityLabel` and `accessibilityRole` on every `Pressable` (R-FE-12): no lint rule, no test. Admin has no axe-core check. TalkBack and VoiceOver passes of the booking flow have not been done.
+
+- **Done means:** a `*.states.spec.tsx` table covers every mobile route, and an admin Playwright spec covers every page, each asserting skeleton, error and empty states. A lint rule or test fails a `Pressable` without a label. `@axe-core/playwright` runs on the admin flows. A manual TalkBack pass of search → book → confirm is recorded.
+
+### S-158 — `packages/db`'s integration suite is red and runs nowhere
+
+- **Status:** `open`
+- **Found in:** task 21, wiring integration tests into CI, 2026-10-07
+- **Surface:** db · CI
+
+`schema.integration.test.ts` "every table except ledger_entries, audit_log, idempotency_keys has id, created_at, updated_at" fails: `reconciliation_mismatches` (migration 0033, task 16a) has `resolved_at` but no `updated_at`. No workflow ran this suite, so the drift went unnoticed. Task 21's `api.yml` integration job is scoped to `@parkease/api` to stay green on what was verified.
+
+- **Done means:** a migration adds `updated_at` to `reconciliation_mismatches` (or the test exempts it with the reason), the suite is green, and a CI job runs `test:integration --filter=@parkease/db`.
