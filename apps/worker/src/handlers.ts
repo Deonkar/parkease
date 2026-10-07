@@ -75,8 +75,9 @@ export async function registerHandlers(boss: PgBoss, deps: JobDeps): Promise<voi
     for (const job of jobs) await reconcileOrphanCapture(deps, job.data);
   });
 
-  // One at a time, like the booking jobs. Both take a row lock on valet_jobs,
-  // and the no-show handler posts money — the one thing that must not run twice.
+  // One at a time, like the booking jobs. No-show takes a row lock on valet_jobs and posts money,
+  // the one thing that must not run twice; accept-timeout pins the status and round it read in
+  // each write instead (S-18), so an accept that lands mid-search wins.
   // The queue names come from contracts, so the enqueue in the API and the work
   // registration here cannot drift into a job nobody picks up.
   await boss.work<unknown>(VALET_ACCEPT_TIMEOUT_JOB, { batchSize: 1 }, async (jobs) => {

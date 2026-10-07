@@ -110,6 +110,28 @@ describe('editing a service', () => {
     await withTransaction(h.db, (tx) => catalog.seedMenu(tx, washerId, EVERY_SERVICE));
   });
 
+  it('keeps capabilities in step with the active menu when a service is toggled (S-56)', async () => {
+    await h.sql`INSERT INTO washer_profiles (user_id, partner_type, business_name, capabilities)
+                VALUES (${washerId}, 'gig', 'Raju M.', ${[...EVERY_SERVICE]})`;
+
+    await catalog.upsertService({
+      washerUserId: washerId,
+      serviceName: 'quick_wipe',
+      carPricePaise: 9900,
+      bikePricePaise: 4900,
+      durationMinutes: 15,
+      isActive: false,
+    });
+
+    const [profile] = await h.sql<{ capabilities: string[] }[]>`
+      SELECT capabilities FROM washer_profiles WHERE user_id = ${washerId}`;
+    const active = await h.sql<{ name: string }[]>`
+      SELECT DISTINCT service_name AS name FROM wash_services
+      WHERE washer_user_id = ${washerId} AND is_active ORDER BY 1`;
+    expect(profile?.capabilities).toEqual(active.map((r) => r.name));
+    expect(profile?.capabilities).not.toContain('quick_wipe');
+  });
+
   it('upserts both vehicle-type rows from one edit', async () => {
     await catalog.upsertService({
       washerUserId: washerId,

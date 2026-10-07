@@ -321,14 +321,30 @@ export class PaymentService {
       .where(eq(payments.id, paymentId));
   }
 
+  /**
+   * Moves a captured payment to refunded (or partially). Checked like `insertRefund` beside it
+   * (S-19): a write that matches nothing would leave the payment `captured` while its refund row
+   * and the `payment.issue-refund` message commit, and anything keyed off `payments.status` would
+   * see it as refundable again. Only a payment that still holds money can move, and zero rows
+   * throws, rolling the refund back with it (R-FAIL-01).
+   */
   async markRefunded(tx: TxHandle, paymentId: string, fully: boolean): Promise<void> {
-    await tx
+    const moved = await tx
       .update(payments)
       .set({
         status: (fully ? 'refunded' : 'partially_refunded') satisfies PaymentStatus,
         updatedAt: new Date(),
       })
-      .where(eq(payments.id, paymentId));
+      .where(
+        and(
+          eq(payments.id, paymentId),
+          inArray(payments.status, ['captured', 'partially_refunded'] satisfies PaymentStatus[]),
+        ),
+      )
+      .returning({ id: payments.id });
+    if (moved.length === 0) {
+      throw new Error(`payment ${paymentId} could not be marked refunded: not captured, or gone`);
+    }
   }
 
   async insertRefund(
