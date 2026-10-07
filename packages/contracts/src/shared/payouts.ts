@@ -19,6 +19,12 @@ export const updateBankDetailsSchema = z
     accountHolderName: z.string().trim().min(1).max(120),
     accountNumber: z.string().regex(/^\d{9,18}$/, 'Enter a valid account number'),
     ifscCode: z.string().regex(/^[A-Z]{4}0[A-Z0-9]{6}$/, 'Enter a valid IFSC code'),
+    /**
+     * A Firebase ID token from a phone OTP the user has just completed (S-100). Where money is
+     * paid is changed only by someone holding the phone right now, not by any live session: a
+     * stolen session alone cannot redirect a payout.
+     */
+    reauthToken: z.string().min(1).max(4096),
   })
   .strict();
 
@@ -30,6 +36,11 @@ export const bankDetailsViewSchema = z.object({
   accountNumberLast4: z.string().regex(/^\d{4}$/),
   ifscPrefix: z.string().regex(/^[A-Z]{4}$/),
   updatedAt: z.string().datetime(),
+  /**
+   * Payouts to these details wait until this time after a change (S-100); null when nothing is
+   * held. The screen says when the first payout to the new account can go.
+   */
+  payoutsHeldUntil: z.string().datetime().nullable(),
 });
 
 export type BankDetailsView = z.infer<typeof bankDetailsViewSchema>;

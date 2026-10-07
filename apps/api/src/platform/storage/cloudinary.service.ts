@@ -7,6 +7,8 @@ import { uuidv7 } from '@parkease/db';
 import { env } from '../config/env.schema.js';
 
 export interface SignedUploadPayload {
+  /** The id Cloudinary stores the upload under, `parkease/<folder>/<uuid>` (S-50 records it). */
+  readonly uploadId: string;
   readonly uploadUrl: string;
   readonly publicUrl: string;
   readonly fields: Record<string, string>;
@@ -97,6 +99,7 @@ export class CloudinaryService {
     const publicUrl = `https://res.cloudinary.com/${env.CLOUDINARY_CLOUD_NAME}/image/${deliveryType}/${folderPath}/${publicId}`;
 
     return {
+      uploadId: `${folderPath}/${publicId}`,
       uploadUrl,
       publicUrl,
       fields: {

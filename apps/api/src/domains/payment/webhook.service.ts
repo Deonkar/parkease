@@ -7,6 +7,7 @@ import {
   razorpayWebhookPayloadSchema,
 } from '@parkease/contracts/public';
 
+import { idempotencyClaim } from '../../platform/idempotency/claim-context.js';
 import { IdempotencyService } from '../../platform/idempotency/idempotency.service.js';
 import { logger } from '../../platform/observability/logger.js';
 import { ApplyRouteStatusCommand } from '../payout/commands/apply-route-status.command.js';
@@ -55,6 +56,9 @@ export class WebhookService {
     const event = razorpayWebhookPayloadSchema.parse(JSON.parse(rawBody.toString('utf8')));
 
     const eventId = this.dedupKey(input.eventId, event.id, rawBody);
+    // This delivery's claim token (S-75): store and release land only on this delivery's claim,
+    // never on a redelivery that took the key over after this one stalled.
+    const claimedAt = new Date();
 
     const claim = await this.idempotency.claim({
       key: eventId,
@@ -64,6 +68,7 @@ export class WebhookService {
       userId: null,
       endpoint: WEBHOOK_ENDPOINT,
       requestHash: createHash('sha256').update(rawBody).digest('hex'),
+      claimedAt,
     });
 
     switch (claim.outcome) {
@@ -71,6 +76,12 @@ export class WebhookService {
         // Razorpay redelivers on any non-2xx and occasionally on a 2xx. A
         // redelivered payment.captured must not credit the owner twice.
         logger.info({ eventId, event: event.event }, 'webhook redelivery ignored');
+        return;
+
+      case 'committed':
+        // An earlier delivery's write committed and its store was lost. The commands are
+        // idempotent by state, but there is nothing left to do: answer 200 so Razorpay stops.
+        logger.info({ eventId, event: event.event }, 'webhook already applied');
         return;
 
       case 'in_flight':
@@ -93,14 +104,22 @@ export class WebhookService {
     }
 
     try {
-      await this.dispatch(event, eventId);
-      await this.idempotency.store(eventId, 200, { received: true });
+      // Inside the claim, so a delivery that stalled past the stale threshold and was taken over
+      // cannot commit beside the redelivery (`fenceOnClaim`, S-64).
+      await idempotencyClaim.run({ key: eventId, claimedAt }, () => this.dispatch(event, eventId));
+      if (!(await this.idempotency.store(eventId, 200, { received: true }, claimedAt))) {
+        logger.warn({ eventId, event: event.event }, 'webhook store matched no claim');
+      }
     } catch (error) {
       // Release the claim so Razorpay's retry can actually re-run. Holding it
       // would leave the event permanently `in_flight` and silently drop every
       // redelivery — a capture that never confirms, with no failure anywhere
-      // to show for it (R-FAIL-01).
-      await this.idempotency.release(eventId);
+      // to show for it (R-FAIL-01). Rerunnable even after a commit: every
+      // command here is idempotent by the state it reads.
+      const released = await this.idempotency.release(eventId, claimedAt, { rerunnable: true });
+      if (!released) {
+        logger.warn({ eventId, event: event.event }, 'webhook release matched no claim');
+      }
       throw error;
     }
   }

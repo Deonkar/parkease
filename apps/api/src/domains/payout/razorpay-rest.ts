@@ -1,6 +1,7 @@
 import type { z } from 'zod';
 
 import { env } from '../../platform/config/env.schema.js';
+import { GATEWAY_TIMEOUT_MS } from '../../platform/http/timeouts.js';
 
 /**
  * `status` is what Razorpay answered, or null when it never answered. Only a 400/422 is
@@ -42,7 +43,7 @@ export async function razorpayRequest<T>(
       method,
       headers: { authorization: `Basic ${auth}`, 'content-type': 'application/json' },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(GATEWAY_TIMEOUT_MS),
     });
   } catch (error) {
     throw new RazorpayApiError(null, `Razorpay ${method} ${path} unreachable: ${String(error)}`);

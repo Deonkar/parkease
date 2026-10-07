@@ -36,6 +36,23 @@ export async function sendPayout(
     );
   }
 
+  // The backstop for the bank-change hold (S-100). The run delays the send message to the end of
+  // the hold, but a payout created before a change is cancelled by it, and anything else that
+  // reaches here early waits rather than pays: it is rescheduled for the hold's end.
+  const heldUntil = await holdFor(deps, payoutId);
+  if (heldUntil !== null) {
+    await deps.boss.send(
+      PAYOUT_SEND_JOB,
+      { payoutId },
+      { startAfter: heldUntil, singletonKey: `${payoutId}:held:${heldUntil.toISOString()}` },
+    );
+    logger.info(
+      { payoutId, heldUntil },
+      `${PAYOUT_SEND_JOB}: bank details changed recently; waits`,
+    );
+    return;
+  }
+
   const [claimed] = await deps.db
     .update(payouts)
     .set({ status: 'processing', initiatedAt: new Date(), updatedAt: new Date() })
@@ -97,4 +114,15 @@ export async function sendPayout(
     .update(payouts)
     .set({ razorpayPayoutId: sent.id, updatedAt: new Date() })
     .where(eq(payouts.id, payoutId));
+}
+
+/** The payee's bank-change hold, if it has not passed; null otherwise. */
+async function holdFor(deps: JobDeps, payoutId: string): Promise<Date | null> {
+  const [row] = await deps.db
+    .select({ heldUntil: bankDetails.payoutsHeldUntil })
+    .from(payouts)
+    .innerJoin(bankDetails, eq(bankDetails.userId, payouts.userId))
+    .where(eq(payouts.id, payoutId));
+  const heldUntil = row?.heldUntil ?? null;
+  return heldUntil !== null && heldUntil > new Date() ? heldUntil : null;
 }

@@ -47,7 +47,6 @@ const toQuoteBreakdown = (row: BookingRow): QuoteBreakdown =>
     surgePremiumPaise: row.surgePremiumPaise,
     gstPaise: row.gstPaise,
     totalPaise: row.totalPaise,
-    ownerEarningsPaise: row.ownerEarningsPaise,
     surgeMultiplierBp: row.surgeMultiplierBp,
   }) as QuoteBreakdown;
 

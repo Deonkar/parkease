@@ -81,6 +81,11 @@ export const bankDetails = pgTable(
     razorpayxContactId: text('razorpayx_contact_id'),
     /** Replaced in the same UPDATE as the bank details it was created from. */
     razorpayxFundAccountId: text('razorpayx_fund_account_id'),
+    /**
+     * After a change of details, no payout is sent before this (S-100, 48h): the window in which
+     * the account holder, told of every change, can report one they did not make.
+     */
+    payoutsHeldUntil: timestamp('payouts_held_until', { withTimezone: true }),
     ...timestamps,
   },
   (t) => [uniqueIndex('bank_details_user_id_key').on(t.userId)],

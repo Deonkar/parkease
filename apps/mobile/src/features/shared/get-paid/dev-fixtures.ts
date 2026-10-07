@@ -21,6 +21,7 @@ let bank: BankDetailsView | null = {
   accountNumberLast4: '6789',
   ifscPrefix: 'HDFC',
   updatedAt: '2026-09-01T10:00:00.000Z',
+  payoutsHeldUntil: null,
 };
 
 const PAYOUTS: PayoutView[] = [
@@ -83,12 +84,16 @@ export const devGetPaid = {
   }),
   bank: () => bank,
   saveBank: (form: UpdateBankDetails): BankDetailsView => {
-    bank = {
+    const changed = bank !== null;
+    const saved: BankDetailsView = {
       accountHolderName: form.accountHolderName,
       accountNumberLast4: form.accountNumber.slice(-4),
       ifscPrefix: form.ifscCode.slice(0, 4),
       updatedAt: new Date().toISOString(),
+      // As the server does (S-100): a change waits 48 hours, a first account does not.
+      payoutsHeldUntil: changed ? new Date(Date.now() + 48 * 3_600_000).toISOString() : null,
     };
-    return bank;
+    bank = saved;
+    return saved;
   },
 };

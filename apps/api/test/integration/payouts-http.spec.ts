@@ -13,10 +13,16 @@ import { decryptField } from '../../src/platform/crypto/aes-gcm.js';
 import { withTransaction } from '../../src/platform/db/transaction.js';
 
 import { type Harness, seedUser, startHarness, stopHarness } from './harness.js';
-import { actingAs, type HttpApp, startHttpApp, stopHttpApp } from './http-harness.js';
+import { actingAs, firebaseStub, type HttpApp, startHttpApp, stopHttpApp } from './http-harness.js';
 
 const ACCOUNT = '50100123456789';
-const BODY = { accountHolderName: 'Priya Sharma', accountNumber: ACCOUNT, ifscCode: 'HDFC0001234' };
+const BODY = {
+  accountHolderName: 'Priya Sharma',
+  accountNumber: ACCOUNT,
+  ifscCode: 'HDFC0001234',
+  // The step-up proof (S-100); the stub verifier decides what it proves.
+  reauthToken: 'fresh-otp-id-token',
+};
 
 /**
  * `/me/bank-details` and `/me/payouts` through the real Fastify pipeline: the
@@ -64,7 +70,19 @@ describe('/me bank details and payouts over HTTP (task 16a)', () => {
     razorpayx.createFundAccount.mockResolvedValue('fa_QK7l1nFirst');
     valetId = await seedUser(h, 'valet');
     as(valetId, 'valet');
+    await provesPhoneOf(valetId);
   });
+
+  /** The next reauth token proves a fresh OTP on this user's own phone. */
+  const provesPhoneOf = async (userId: string, authTime = new Date()) => {
+    const [user] = await h.sql<{ firebase_uid: string; phone: string }[]>`
+      SELECT firebase_uid, phone FROM users WHERE id = ${userId}`;
+    firebaseStub.verified = {
+      firebaseUid: user?.firebase_uid ?? '',
+      phone: user?.phone ?? '',
+      authTime,
+    };
+  };
 
   describe('PUT /me/bank-details', () => {
     it('needs an Idempotency-Key', async () => {
@@ -88,6 +106,8 @@ describe('/me bank details and payouts over HTTP (task 16a)', () => {
           accountNumberLast4: '6789',
           ifscPrefix: 'HDFC',
           updatedAt: expect.any(String) as string,
+          // A first set of details holds nothing.
+          payoutsHeldUntil: null,
         },
       });
       expect(JSON.stringify(response.body)).not.toContain(ACCOUNT);
@@ -174,7 +194,15 @@ describe('/me bank details and payouts over HTTP (task 16a)', () => {
         SELECT before, after FROM audit_log WHERE action = 'bank_details.update' ORDER BY created_at`;
       expect(audit).toHaveLength(2);
       expect(audit[1]?.before).toBeNull();
-      expect(audit[1]?.after).toEqual({ last4: '4321', cancelledPayouts: 1 });
+      expect(audit[1]?.after).toMatchObject({ last4: '4321', cancelledPayouts: 1 });
+
+      // A change holds payouts to the new account for 48 hours (S-100), and says until when.
+      const heldUntil = new Date(
+        (response.body as { data: { payoutsHeldUntil: string } }).data.payoutsHeldUntil,
+      );
+      const hours = (heldUntil.getTime() - Date.now()) / 3_600_000;
+      expect(hours).toBeGreaterThan(47.9);
+      expect(hours).toBeLessThanOrEqual(48);
 
       const notes = await h.sql<{ template: string }[]>`
         SELECT payload->>'template' AS template FROM outbox_messages
@@ -211,7 +239,9 @@ describe('/me bank details and payouts over HTTP (task 16a)', () => {
     });
 
     it.each(['owner', 'washer'])('is open to a %s too', async (role) => {
-      as(await seedUser(h, role), role);
+      const userId = await seedUser(h, role);
+      as(userId, role);
+      await provesPhoneOf(userId);
       expect((await put()).status).toBe(200);
       expect((await get('/api/v1/me/payouts')).status).toBe(200);
     });
@@ -234,6 +264,38 @@ describe('/me bank details and payouts over HTTP (task 16a)', () => {
 
       expect(response.status).toBe(422);
       expect(response.body).toMatchObject({ error: { code: 'BANK_DETAILS_REJECTED' } });
+    });
+
+    describe('step-up: only someone holding the phone now can change where money goes (S-100)', () => {
+      const refused = async (body: unknown) => {
+        const response = await put(body);
+        expect(response.status).toBe(403);
+        expect((response.body as { error: { code: string } }).error.code).toBe('REAUTH_REQUIRED');
+        expect(razorpayx.createFundAccount).not.toHaveBeenCalled();
+        expect(await h.sql`SELECT 1 FROM bank_details WHERE user_id = ${valetId}`).toHaveLength(0);
+      };
+
+      it('refuses a body with no reauth token as malformed, before anything else', async () => {
+        const withoutToken = Object.fromEntries(
+          Object.entries(BODY).filter(([field]) => field !== 'reauthToken'),
+        );
+        expect((await put(withoutToken)).status).toBe(400);
+      });
+
+      it('refuses an OTP older than five minutes', async () => {
+        await provesPhoneOf(valetId, new Date(Date.now() - 6 * 60_000));
+        await refused(BODY);
+      });
+
+      it("refuses a fresh OTP on somebody else's phone", async () => {
+        await provesPhoneOf(await seedUser(h, 'valet'));
+        await refused(BODY);
+      });
+
+      it('refuses a token the verifier rejects', async () => {
+        firebaseStub.verified = null;
+        await refused(BODY);
+      });
     });
 
     it('is refused to a driver with 403', async () => {

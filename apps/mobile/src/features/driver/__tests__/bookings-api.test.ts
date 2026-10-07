@@ -29,7 +29,6 @@ const QUOTE = {
   surgePremiumPaise: 3000,
   gstPaise: 702,
   totalPaise: 9702,
-  ownerEarningsPaise: 5100,
   surgeMultiplierBp: 15_000,
   surgeBadge: 'high_demand' as const,
 };

@@ -13,3 +13,4 @@ export * from './notification.js';
 export * from './surge.js';
 export * from './outbox.js';
 export * from './audit.js';
+export * from './storage.js';

@@ -8,6 +8,7 @@ import { DB, type Database } from '../../../platform/db/db.module.js';
 import { withTransaction } from '../../../platform/db/transaction.js';
 import { type AdminActor, AuditService } from '../../../platform/observability/audit.service.js';
 import { OutboxService } from '../../../platform/outbox/outbox.service.js';
+import { CommissionWaiverService } from '../../pricing/commission-waiver.service.js';
 import { IllegalApprovalTransitionError } from '../errors.js';
 
 /**
@@ -43,6 +44,7 @@ export class ReviewSpaceCommand {
     @Inject(DB) private readonly db: Database,
     private readonly audit: AuditService,
     private readonly outbox: OutboxService,
+    private readonly waivers: CommissionWaiverService,
   ) {}
 
   approve(spaceId: string, actor: AdminActor): Promise<ReviewOutcome> {
@@ -114,6 +116,10 @@ export class ReviewSpaceCommand {
         type: event,
         payload: { spaceId: id, ownerId: before.ownerId, notes },
       });
+
+      // An approved space can be what completes commission-free eligibility (S-123). A savepoint
+      // inside: a failed grant never blocks the approval.
+      if (decision === 'approve') await this.waivers.grantIfEligible(tx, before.ownerId);
 
       return { id, approvalStatus: to };
     });

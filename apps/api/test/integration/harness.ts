@@ -225,6 +225,8 @@ export interface SeedSpaceOptions {
   readonly carSlots?: number;
   readonly twoWheelerSlots?: number;
   readonly thumbnail?: string;
+  /** Defaults to the harness's own owner. */
+  readonly ownerId?: string;
 }
 
 /**
@@ -239,7 +241,7 @@ export async function seedSpace(h: Harness, opts: SeedSpaceOptions): Promise<str
       approval_status, rating_avg_bp, rating_count, deleted_at
     )
     VALUES (
-      ${h.ownerId},
+      ${opts.ownerId ?? h.ownerId},
       ${opts.title ?? 'Test Space'},
       '5th Cross, Koramangala',
       'Bengaluru',
@@ -363,4 +365,22 @@ export function surgePayload(multiplier: number): string {
   };
 
   return JSON.stringify(snapshot);
+}
+
+/**
+ * Records upload ids as signed for `userId`, the way `POST /me/upload-signature` does (S-50), so a
+ * test about what happens after an attach can attach. A reused fixture id moves to the latest
+ * caller: tests share literal ids across many seeded partners.
+ */
+export async function registerUploads(
+  h: Harness,
+  userId: string,
+  ...publicIds: readonly string[]
+): Promise<void> {
+  for (const publicId of publicIds) {
+    const folder = publicId.split('/')[1] ?? '';
+    await h.sql`
+      INSERT INTO uploads (public_id, user_id, folder) VALUES (${publicId}, ${userId}, ${folder})
+      ON CONFLICT (public_id) DO UPDATE SET user_id = EXCLUDED.user_id`;
+  }
 }

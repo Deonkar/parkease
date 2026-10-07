@@ -6,6 +6,7 @@ import { UserRepository } from '../../domains/identity/repositories/user.reposit
 import { CurrentUser, type AuthUser } from '../../platform/auth/current-user.decorator.js';
 import type { SessionTokens } from '../../platform/auth/token.service.js';
 import { CloudinaryService } from '../../platform/storage/cloudinary.service.js';
+import { UploadRegistry } from '../../platform/storage/upload-registry.js';
 
 @Controller('me')
 export class MeController {
@@ -13,6 +14,7 @@ export class MeController {
     private readonly switchRole: SwitchRoleCommand,
     private readonly cloudinary: CloudinaryService,
     private readonly userRepo: UserRepository,
+    private readonly uploads: UploadRegistry,
   ) {}
 
   @Get()
@@ -34,8 +36,12 @@ export class MeController {
 
   @Post('upload-signature')
   @HttpCode(HttpStatus.OK)
-  uploadSignature(@Body() body: unknown) {
+  async uploadSignature(@Body() body: unknown, @CurrentUser() user: AuthUser) {
     const parsed = requestUploadSignatureSchema.parse(body);
-    return this.cloudinary.createSignedUpload(parsed.folder, parsed.contentType);
+    const signed = this.cloudinary.createSignedUpload(parsed.folder, parsed.contentType);
+    // Recorded before the signature leaves: an id this caller can attach later is one we issued
+    // to them (S-50).
+    await this.uploads.record(user.id, parsed.folder, signed.uploadId);
+    return signed;
   }
 }

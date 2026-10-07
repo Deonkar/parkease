@@ -70,14 +70,12 @@ export function PriceBreakdown({ quote, surgeBadge }: PriceBreakdownProps) {
       <View style={styles.rule} />
 
       {/*
-        The owner's share, shown to the driver on purpose. It is the one line
-        that makes the fee model legible: the money is going to a person who
-        owns this spot, and ParkEase's cut comes out of their side, not on top
-        of the driver's.
+        Where the money goes, without a figure (S-124). It keeps the fee model
+        legible (the money goes to the person who owns this spot, and ParkEase's
+        cut comes out of their side, not on top of the driver's), but an amount
+        here told every driver which owners were commission-free.
       */}
-      <Text style={styles.ownerNote}>
-        Owner earns {formatPaise(quote.ownerEarningsPaise, { alwaysDecimals: true })}
-      </Text>
+      <Text style={styles.ownerNote}>Most of this goes to the space owner.</Text>
     </View>
   );
 }

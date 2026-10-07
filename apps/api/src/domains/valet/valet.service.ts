@@ -22,6 +22,7 @@ import { and, asc, count, eq, inArray, notInArray, sql } from 'drizzle-orm';
 
 import { DB, type Database } from '../../platform/db/db.module.js';
 import type { TxHandle } from '../../platform/db/transaction.js';
+import { UploadRegistry } from '../../platform/storage/upload-registry.js';
 
 import {
   BookingNotValetEligibleError,
@@ -95,7 +96,10 @@ export class ConcurrentValetTransitionError extends Error {
  */
 @Injectable()
 export class ValetService {
-  constructor(@Inject(DB) private readonly db: Database) {}
+  constructor(
+    @Inject(DB) private readonly db: Database,
+    private readonly uploads: UploadRegistry,
+  ) {}
 
   /**
    * The booking a valet is being requested against, if this driver owns it.
@@ -352,10 +356,17 @@ export class ValetService {
     valetUserId: string,
     proofPhotoId: string,
   ): Promise<ValetJobRow | undefined> {
+    const mine = and(eq(valetJobs.id, jobId), eq(valetJobs.assignedUserId, valetUserId));
+    // Not yours is a 404 before anything is said about the photo (R-SEC-04).
+    const [assigned] = await this.db.select({ id: valetJobs.id }).from(valetJobs).where(mine);
+    if (assigned === undefined) return undefined;
+    // The driver's only evidence of where their car went: it must be this valet's own upload (S-50).
+    await this.uploads.assertOwned(valetUserId, 'proofs', [proofPhotoId]);
+
     const [updated] = await this.db
       .update(valetJobs)
       .set({ proofPhotoId, updatedAt: new Date() })
-      .where(and(eq(valetJobs.id, jobId), eq(valetJobs.assignedUserId, valetUserId)))
+      .where(mine)
       .returning();
 
     return updated;

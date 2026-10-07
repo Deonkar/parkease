@@ -78,6 +78,25 @@ interface ExportRow {
 export async function* streamLedgerCsv(sql: SqlClient, range: IstRange): AsyncGenerator<string> {
   yield csvLine(LEDGER_CSV_HEADER);
 
+  // The pool's statement_timeout (30s) counts a cursor's whole life, slow reader included, so an
+  // export on a pooled connection would be cancelled mid-file. It gets a connection of its own with
+  // a timeout matching its deadline, reset before the connection goes back to the pool.
+  const conn = await sql.reserve();
+  try {
+    await conn.unsafe(`SET statement_timeout = ${String(EXPORT_DEADLINE_MS + 30_000)}`);
+    yield* exportRows(conn, range);
+  } finally {
+    await conn.unsafe('RESET statement_timeout').catch((error: unknown) => {
+      logger.warn({ err: error }, 'ledger export could not reset its statement_timeout');
+    });
+    conn.release();
+  }
+}
+
+async function* exportRows(
+  sql: Awaited<ReturnType<SqlClient['reserve']>>,
+  range: IstRange,
+): AsyncGenerator<string> {
   try {
     const rows = sql<ExportRow[]>`
       SELECT id,

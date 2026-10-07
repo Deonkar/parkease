@@ -159,6 +159,12 @@ export const idempotencyKeys = pgTable(
     responseStatus: integer('response_status'),
     responseBody: jsonb('response_body'),
     lockedAt: timestamp('locked_at', { withTimezone: true }),
+    /**
+     * Set inside the request's own domain transaction, while its claim still holds the key
+     * (S-64). A claim with this set and no stored response is never taken over: its write
+     * happened, and running the handler again would do it twice.
+     */
+    committedAt: timestamp('committed_at', { withTimezone: true }),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

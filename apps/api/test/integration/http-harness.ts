@@ -40,6 +40,7 @@ import {
   type VerifiedPhone,
 } from '../../src/platform/auth/firebase-verifier.service.js';
 import { IS_PUBLIC_KEY } from '../../src/platform/auth/public.decorator.js';
+import { ReauthService } from '../../src/platform/auth/reauth.service.js';
 import { TokenService } from '../../src/platform/auth/token.service.js';
 import { DB, DbModule } from '../../src/platform/db/db.module.js';
 import { AllExceptionsFilter } from '../../src/platform/http/exception.filter.js';
@@ -104,7 +105,9 @@ export const actingAs = { user: null as AuthUser | null };
  * What the stubbed Firebase verifier says the next ID token proves. Set per test,
  * like `actingAs`. `null` makes `verify` refuse, the way a bad token does.
  */
-export const firebaseStub = { verified: null as VerifiedPhone | null };
+export const firebaseStub = {
+  verified: null as (Omit<VerifiedPhone, 'authTime'> & { authTime?: Date }) | null,
+};
 
 /**
  * Stands in for FirebaseVerifierService, which initialises firebase-admin in its
@@ -117,7 +120,8 @@ class StubFirebaseVerifier {
     if (firebaseStub.verified === null) {
       return Promise.reject(new UnauthorizedException('We could not verify that code.'));
     }
-    return Promise.resolve(firebaseStub.verified);
+    // A token minted by a sign-in that just happened, unless the test says when it was.
+    return Promise.resolve({ authTime: new Date(), ...firebaseStub.verified });
   }
 }
 
@@ -255,6 +259,8 @@ class StubAuthGuard implements CanActivate {
     PartnerQueries,
     ReviewPartnerCommand,
     { provide: FirebaseVerifierService, useClass: StubFirebaseVerifier },
+    // Step-up for bank changes (S-100), over the stub verifier above.
+    ReauthService,
     // Registered exactly as AppModule does, and in its order. This is the whole
     // point of these tests: the interceptor and guard stack a real request
     // actually passes through. Only RateLimitModule's guard is absent —

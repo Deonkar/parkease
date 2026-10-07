@@ -33,7 +33,8 @@ export const quoteBreakdownSchema = z.object({
   surgePremiumPaise: paiseSchema,
   gstPaise: paiseSchema,
   totalPaise: paiseSchema,
-  ownerEarningsPaise: paiseSchema,
+  // No owner figure (S-124): the owner's share is the full base for a commission-free owner and
+  // 85% of it otherwise, so showing it told every driver which owners hold a waiver.
   surgeMultiplierBp: z.number().int().min(10_000).max(30_000),
   /**
    * The tier the multiplier belongs to, travelling with the number it names.

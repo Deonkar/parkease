@@ -764,3 +764,68 @@ describe('payout.reconcile', () => {
     expect(await owedTo(valet)).toBe(net);
   });
 });
+
+/**
+ * S-100: after bank details change, money waits 48 hours before it moves to the new account. The
+ * payout is still recorded on Monday (the balance is owed); only the send waits.
+ */
+describe('the bank-change payout hold', () => {
+  const holdFor = async (userId: string, hours: number) => {
+    await pg.sql`
+      UPDATE bank_details SET payouts_held_until = now() + make_interval(hours => ${hours})
+      WHERE user_id = ${userId}`;
+  };
+
+  it('records the payout on Monday and makes its send wait for the hold', async () => {
+    const valet = await seedUser('valet');
+    await withBank(valet);
+    await holdFor(valet, 24);
+    await earn(valet);
+
+    await runWeeklyPayouts(deps, ON);
+
+    expect((await payoutsOf(valet))[0]?.status).toBe('pending');
+    const [send] = await pg.sql<{ waits: boolean }[]>`
+      SELECT available_at > now() + interval '23 hours' AS waits
+      FROM outbox_messages WHERE type = 'payout.send'`;
+    expect(send?.waits).toBe(true);
+  });
+
+  it('sends at once when nothing is held', async () => {
+    const valet = await seedUser('valet');
+    await withBank(valet);
+    await earn(valet);
+
+    await runWeeklyPayouts(deps, ON);
+
+    const [send] = await pg.sql<{ ready: boolean }[]>`
+      SELECT available_at <= now() AS ready FROM outbox_messages WHERE type = 'payout.send'`;
+    expect(send?.ready).toBe(true);
+  });
+
+  it('never pays a held account early, whatever delivers the send: it reschedules instead', async () => {
+    const valet = await seedUser('valet');
+    await withBank(valet);
+    await earn(valet);
+    await runWeeklyPayouts(deps, ON);
+    const [payout] = await payoutsOf(valet);
+    await holdFor(valet, 24);
+    const pay = gateway();
+    const send = vi.fn().mockResolvedValue('job-id');
+
+    await sendPayout(
+      { ...deps, boss: { send } as unknown as JobDeps['boss'] },
+      { payoutId: payout?.id },
+      pay,
+      ON.accountNumber,
+    );
+
+    expect(pay.create).not.toHaveBeenCalled();
+    expect((await payoutsOf(valet))[0]?.status).toBe('pending');
+    expect(send).toHaveBeenCalledWith(
+      'payout.send',
+      { payoutId: payout?.id },
+      expect.objectContaining({ startAfter: expect.any(Date) as Date }),
+    );
+  });
+});

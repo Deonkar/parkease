@@ -169,7 +169,6 @@ export class DriverSearchController {
         surgePremiumPaise: quote.surgePremiumPaise,
         gstPaise: quote.gstPaise,
         totalPaise: quote.driverTotalPaise,
-        ownerEarningsPaise: quote.ownerEarningsPaise,
         surgeMultiplierBp: quote.surgeMultiplierBp,
       },
     } as DefaultBooking;

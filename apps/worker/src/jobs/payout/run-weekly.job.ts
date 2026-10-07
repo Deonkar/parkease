@@ -67,7 +67,10 @@ export async function runWeeklyPayouts(
 async function payOne(deps: JobDeps, userId: string, period: string, now: Date): Promise<void> {
   await deps.db.transaction(async (tx) => {
     const [bank] = await tx
-      .select({ fundAccountId: bankDetails.razorpayxFundAccountId })
+      .select({
+        fundAccountId: bankDetails.razorpayxFundAccountId,
+        heldUntil: bankDetails.payoutsHeldUntil,
+      })
       .from(bankDetails)
       .where(eq(bankDetails.userId, userId));
     const fundAccountId = bank?.fundAccountId;
@@ -109,9 +112,13 @@ async function payOne(deps: JobDeps, userId: string, period: string, now: Date):
     if (payout === undefined) return;
 
     await postLedger(tx, { txnId, payoutId: payout.id, entries: posting.entries });
+    // Details changed under 48h ago (S-100): the payout is owed and recorded now, and the money
+    // waits for the hold, so a change the holder did not make can be reported before it moves.
+    const held = bank?.heldUntil != null && bank.heldUntil > now ? bank.heldUntil : null;
     await tx.insert(outboxMessages).values({
       type: PAYOUT_SEND_JOB,
       payload: { payoutId: payout.id },
+      ...(held === null ? {} : { availableAt: held }),
     });
   });
 }

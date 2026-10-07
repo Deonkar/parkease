@@ -5,7 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 
 import { RazorpayApiError } from '../../src/domains/payout/razorpay-rest.js';
 
-import { type Harness, seedUser, startHarness, stopHarness } from './harness.js';
+import { type Harness, seedSpace, seedUser, startHarness, stopHarness } from './harness.js';
 import { actingAs, type HttpApp, startHttpApp, stopHttpApp } from './http-harness.js';
 
 const FORM = {
@@ -72,6 +72,8 @@ describe('/me/route-onboarding over HTTP (task 16b)', () => {
     route.requestProduct.mockResolvedValue('acc_prd_QK7l1nRoute');
     route.configureSettlement.mockResolvedValue({ status: 'under_review', requirements: [] });
     ownerId = await seedUser(h, 'owner');
+    // Commission-free eligibility needs a live listing as well as Route (S-123).
+    await seedSpace(h, { lat: 12.9719, lng: 77.6412, ownerId });
     as(ownerId, 'owner');
   });
 
@@ -418,6 +420,53 @@ describe('/me/route-onboarding over HTTP (task 16b)', () => {
         expect(msg?.endsOn).toBe(istDateOf(new Date(String(w?.ends))));
       });
 
+      it('grants nothing at activation to an owner with no approved space (S-123)', async () => {
+        await h.sql`UPDATE spaces SET approval_status = 'pending_approval' WHERE owner_id = ${ownerId}`;
+
+        await deliver(event('product.route.activated', 'activated', [], T + 10), 'evt_w13');
+
+        expect(await row()).toMatchObject({ kyc_status: 'activated' });
+        expect(await waiverOf(ownerId)).toBeUndefined();
+      });
+
+      it('grants when an admin approves the first space of an already-activated owner (S-123)', async () => {
+        const [space] = await h.sql<{ id: string }[]>`
+          UPDATE spaces SET approval_status = 'pending_approval' WHERE owner_id = ${ownerId}
+          RETURNING id`;
+        await deliver(event('product.route.activated', 'activated', [], T + 10), 'evt_w14');
+        expect(await waiverOf(ownerId)).toBeUndefined();
+
+        const adminId = await seedUser(h, 'admin');
+        actingAs.user = { id: adminId, roles: ['admin'], activeRole: 'admin' };
+        const approved = await http.request({
+          method: 'POST',
+          url: `/api/v1/admin/spaces/${space?.id ?? ''}/approve`,
+          payload: {},
+          headers: { 'idempotency-key': crypto.randomUUID() },
+        });
+
+        expect(approved.status).toBeLessThan(300);
+        expect(await waiverOf(ownerId)).toEqual({ slot: 1 });
+        expect(await notifications()).toContain('promo.commission_waiver_granted');
+      });
+
+      it('grants nothing on approval while Route is not yet active (S-123)', async () => {
+        const [space] = await h.sql<{ id: string }[]>`
+          UPDATE spaces SET approval_status = 'pending_approval' WHERE owner_id = ${ownerId}
+          RETURNING id`;
+        const adminId = await seedUser(h, 'admin');
+        actingAs.user = { id: adminId, roles: ['admin'], activeRole: 'admin' };
+
+        await http.request({
+          method: 'POST',
+          url: `/api/v1/admin/spaces/${space?.id ?? ''}/approve`,
+          payload: {},
+          headers: { 'idempotency-key': crypto.randomUUID() },
+        });
+
+        expect(await waiverOf(ownerId)).toBeUndefined();
+      });
+
       it('grants an owner who is also a washer', async () => {
         await h.sql`INSERT INTO user_roles (user_id, role) VALUES (${ownerId}, 'washer')`;
 
@@ -487,6 +536,7 @@ describe('/me/route-onboarding over HTTP (task 16b)', () => {
       it('gives slot 50 to exactly one of two owners activating at once', async () => {
         await seedGrants(49);
         const second = await seedUser(h, 'owner');
+        await seedSpace(h, { lat: 12.9719, lng: 77.6412, ownerId: second });
         await h.sql`INSERT INTO linked_accounts (user_id, razorpay_account_id, kyc_status)
                     VALUES (${second}, 'acc_QK7l1nOwner2', 'pending')`;
 

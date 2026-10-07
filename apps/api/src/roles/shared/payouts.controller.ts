@@ -17,6 +17,7 @@ import { UpsertBankDetailsCommand } from '../../domains/payout/commands/upsert-b
 import { BankDetailsNotFoundError, PayoutNotFoundError } from '../../domains/payout/errors.js';
 import { PayoutService } from '../../domains/payout/payout.service.js';
 import { type AuthUser, CurrentUser } from '../../platform/auth/current-user.decorator.js';
+import { ReauthService } from '../../platform/auth/reauth.service.js';
 import { parseOutgoing } from '../../platform/http/outgoing-contract.js';
 import { Roles } from '../../platform/rbac/roles.decorator.js';
 
@@ -35,6 +36,7 @@ export class MePayoutsController {
   constructor(
     private readonly payouts: PayoutService,
     private readonly upsert: UpsertBankDetailsCommand,
+    private readonly reauth: ReauthService,
   ) {}
 
   @Put('bank-details')
@@ -42,7 +44,9 @@ export class MePayoutsController {
     @CurrentUser() user: AuthUser,
     @Body() body: unknown,
   ): Promise<BankDetailsView> {
-    const details = updateBankDetailsSchema.parse(body);
+    const { reauthToken, ...details } = updateBankDetailsSchema.parse(body);
+    // Where money goes changes only for someone holding the phone now (S-100).
+    await this.reauth.assertFresh(user.id, reauthToken);
     const row = await this.upsert.execute({ userId: user.id, role: user.activeRole, details });
     return toBankDetailsView(row);
   }

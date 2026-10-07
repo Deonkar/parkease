@@ -55,6 +55,8 @@ export interface BankDetailsWrite {
   readonly ifscPrefix: string;
   readonly razorpayxContactId: string;
   readonly razorpayxFundAccountId: string;
+  /** Set on a change of details (S-100); null for a first set of details. */
+  readonly payoutsHeldUntil: Date | null;
 }
 
 /**

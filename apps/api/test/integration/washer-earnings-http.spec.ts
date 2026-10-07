@@ -10,6 +10,7 @@ import {
   seedBooking,
   seedSpace,
   seedUser,
+  registerUploads,
   startHarness,
   stopHarness,
 } from './harness.js';
@@ -128,8 +129,9 @@ const advance = (jobId: string, washerId: string, event: string) => {
   });
 };
 
-const attachPhoto = (jobId: string, washerId: string, slot: 'before' | 'after') => {
+const attachPhoto = async (jobId: string, washerId: string, slot: 'before' | 'after') => {
   asUser(washerId, ['washer']);
+  await registerUploads(h, washerId, `parkease/proofs/${slot}-abc123`);
   return http.request({
     method: 'POST',
     url: `/api/v1/washer/jobs/${jobId}/${slot}-photo`,

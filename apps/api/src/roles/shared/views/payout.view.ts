@@ -17,6 +17,10 @@ export const toBankDetailsView = (row: BankDetailsRow): BankDetailsView =>
       accountNumberLast4: row.last4,
       ifscPrefix: row.ifscPrefix,
       updatedAt: row.updatedAt.toISOString(),
+      payoutsHeldUntil:
+        row.payoutsHeldUntil !== null && row.payoutsHeldUntil > new Date()
+          ? row.payoutsHeldUntil.toISOString()
+          : null,
     },
     'bank details view',
   );
