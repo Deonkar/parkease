@@ -33,6 +33,7 @@
       "expo-router",
       "expo-secure-store",
       "expo-status-bar",
+      ["expo-notifications", { "color": "#0369A1" }],
       [
         "expo-location",
         {

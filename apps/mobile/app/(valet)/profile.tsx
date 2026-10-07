@@ -6,6 +6,8 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/contexts/AuthContext';
+import { useUnreadCount } from '@/features/shared/notifications/hooks';
+import { NotificationBadge } from '@/features/shared/notifications/NotificationBadge';
 import { resolveScreenState } from '@/features/shared/screen-state';
 import { VerificationGate } from '@/features/valet/components/VerificationGate';
 import { useValetProfile } from '@/features/valet/hooks/useValetQueries';
@@ -50,6 +52,7 @@ function DocumentRow({ label, state }: { readonly label: string; readonly state:
 
 export default function ValetProfileScreen() {
   const auth = useAuth();
+  const unread = useUnreadCount().data ?? 0;
   const insets = useSafeAreaInsets();
   const profile = useValetProfile();
   const screen = resolveScreenState(profile);
@@ -169,6 +172,23 @@ export default function ValetProfileScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>ACCOUNT</Text>
+          <Pressable
+            testID="notifications-row"
+            accessibilityRole="button"
+            accessibilityLabel={
+              unread > 0 ? `Notifications, ${String(unread)} unread` : 'Notifications'
+            }
+            onPress={() => {
+              router.push('/(shared)/notifications');
+            }}
+            style={styles.rowButton}
+          >
+            <MaterialCommunityIcons name="bell-outline" size={20} color={colors.textSecondary} />
+            <Text style={styles.rowLabel}>Notifications</Text>
+            <NotificationBadge count={unread} />
+            <MaterialCommunityIcons name="chevron-right" size={20} color={colors.muted} />
+          </Pressable>
+
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Switch to another role"
