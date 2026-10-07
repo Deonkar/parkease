@@ -93,6 +93,34 @@ describe('pg-boss queues (S-104)', () => {
     expect(jobs).toEqual([{ n: 1 }]);
   });
 
+  it('turns a domain event that tells someone something into a notification job (task 19)', async () => {
+    await ensureQueues(boss);
+    const driverId = crypto.randomUUID();
+    const [message] = await pg.sql<{ id: string }[]>`
+      INSERT INTO outbox_messages (type, payload)
+      VALUES ('booking.confirmed', ${JSON.stringify({ bookingId: 'b1', driverId })}::jsonb)
+      RETURNING id`;
+
+    await relayOutbox(deps);
+
+    const [job] = await pg.sql<{ data: { userId: string; template: string } }[]>`
+      SELECT data FROM pgboss.job
+      WHERE name = 'notification.dispatch' AND singleton_key = ${message?.id ?? ''}`;
+    expect(job?.data).toMatchObject({ userId: driverId, template: 'booking.confirmed' });
+  });
+
+  it('settles an event with no recipient without a job, and does not retry it', async () => {
+    const [message] = await pg.sql<{ id: string }[]>`
+      INSERT INTO outbox_messages (type, payload)
+      VALUES ('space.approved', '{}'::jsonb) RETURNING id`;
+
+    await relayOutbox(deps);
+
+    const [row] = await pg.sql<{ status: string }[]>`
+      SELECT status FROM outbox_messages WHERE id = ${message?.id ?? ''}`;
+    expect(row?.status).toBe('dispatched');
+  });
+
   it('settles a domain event nobody subscribes to yet, without creating a job', async () => {
     const [message] = await pg.sql<{ id: string }[]>`
       INSERT INTO outbox_messages (type, payload)

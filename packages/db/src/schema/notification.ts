@@ -26,6 +26,10 @@ export const notifications = pgTable(
     title: text('title').notNull(),
     body: text('body').notNull(),
     data: jsonb('data'),
+    category: text('category').notNull().default('account'),
+    actionable: boolean('actionable').notNull().default(false),
+    deepLink: text('deep_link'),
+    dedupeKey: text('dedupe_key'),
     isRead: boolean('is_read').notNull().default(false),
     readAt: timestamp('read_at', { withTimezone: true }),
     ...timestamps,
@@ -33,15 +37,14 @@ export const notifications = pgTable(
   (t) => [
     index('notifications_user_id_idx').on(t.userId),
     index('notifications_user_id_is_read_idx').on(t.userId, t.isRead),
+    index('notifications_user_id_id_idx').on(t.userId, t.id.desc()),
+    uniqueIndex('notifications_dedupe_key_key')
+      .on(t.dedupeKey)
+      .where(sql`${t.dedupeKey} IS NOT NULL`),
     check(
-      'notifications_type_check',
-      sql`${t.type} IN (
-        'booking_confirmed','booking_reminder','booking_expired','booking_cancelled',
-        'valet_assigned','valet_arrived','valet_parked',
-        'wash_accepted','wash_completed',
-        'payout_processed','review_request',
-        'space_approved','space_rejected',
-        'weekly_summary'
+      'notifications_category_check',
+      sql`${t.category} IN (
+        'bookings','valet','carwash','jobs','spaces','payouts','reviews','account','promotions'
       )`,
     ),
   ],
@@ -66,22 +69,21 @@ export const pushTokens = pgTable(
   ],
 );
 
-export interface NotificationPreferencesMap {
-  booking_confirmed?: boolean;
-  booking_reminder?: boolean;
-  booking_expired?: boolean;
-  booking_cancelled?: boolean;
-  valet_assigned?: boolean;
-  valet_arrived?: boolean;
-  valet_parked?: boolean;
-  wash_accepted?: boolean;
-  wash_completed?: boolean;
-  payout_processed?: boolean;
-  review_request?: boolean;
-  space_approved?: boolean;
-  space_rejected?: boolean;
-  weekly_summary?: boolean;
-}
+/** Per category; a missing category or key falls back to DEFAULT_PUSH_ENABLED / in-app on. */
+export type NotificationPreferencesMap = Partial<
+  Record<
+    | 'bookings'
+    | 'valet'
+    | 'carwash'
+    | 'jobs'
+    | 'spaces'
+    | 'payouts'
+    | 'reviews'
+    | 'account'
+    | 'promotions',
+    { push?: boolean; inApp?: boolean }
+  >
+>;
 
 export const notificationPreferences = pgTable(
   'notification_preferences',
@@ -94,4 +96,24 @@ export const notificationPreferences = pgTable(
     ...timestamps,
   },
   (t) => [uniqueIndex('notification_preferences_user_id_key').on(t.userId)],
+);
+
+export const pushReceipts = pgTable(
+  'push_receipts',
+  {
+    id: primaryId(),
+    ticketId: text('ticket_id').notNull(),
+    tokenId: uuid('token_id')
+      .notNull()
+      .references(() => pushTokens.id, { onDelete: 'cascade' }),
+    processedAt: timestamp('processed_at', { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex('push_receipts_ticket_id_key').on(t.ticketId),
+    index('push_receipts_token_id_idx').on(t.tokenId),
+    index('push_receipts_pending_idx')
+      .on(t.createdAt)
+      .where(sql`${t.processedAt} IS NULL`),
+  ],
 );

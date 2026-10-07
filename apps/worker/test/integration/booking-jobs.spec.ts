@@ -325,8 +325,8 @@ describe('booking worker jobs', () => {
       expect(rows[0]?.type).toBe('notification.dispatch');
       expect(rows[0]?.payload).toMatchObject({
         userId: driverId,
-        type: 'booking_reminder',
-        title: 'Parking in 30 min ⏰',
+        template: 'booking.remind',
+        data: { bookingId },
       });
     });
 

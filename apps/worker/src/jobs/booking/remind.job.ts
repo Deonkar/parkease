@@ -46,10 +46,8 @@ export async function remindBooking(deps: JobDeps, raw: unknown): Promise<void> 
       type: 'notification.dispatch',
       payload: {
         userId: row.booking.driverId,
-        type: 'booking_reminder',
-        title: 'Parking in 30 min ⏰',
-        body: `Your spot at ${row.spaceTitle} is ready soon.`,
-        data: { bookingId },
+        template: 'booking.remind',
+        data: { bookingId, spaceName: row.spaceTitle },
       },
     });
 

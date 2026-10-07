@@ -19,7 +19,6 @@ import {
   CARWASH_SERVICE_NAME_VALUES,
   PAYOUT_STATUS_VALUES,
   LEDGER_ACCOUNT_VALUES,
-  NOTIFICATION_TYPE_VALUES,
   USER_STATUS_VALUES,
   ROLE_STATUS_VALUES,
   SLOT_STATUS_VALUES,
@@ -195,12 +194,6 @@ const enumMapping: Array<{
     tableName: 'wash_jobs',
     constraintLike: '%service_name_check%',
     values: CARWASH_SERVICE_NAME_VALUES,
-  },
-  {
-    name: 'notification_type',
-    tableName: 'notifications',
-    constraintLike: '%type_check%',
-    values: NOTIFICATION_TYPE_VALUES,
   },
   {
     name: 'outbox_status',

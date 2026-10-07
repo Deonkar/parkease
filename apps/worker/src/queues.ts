@@ -5,6 +5,7 @@ import {
 } from '@parkease/contracts/washer';
 import type PgBoss from 'pg-boss';
 
+import { NOTIFICATION_FETCH_RECEIPTS_JOB } from './jobs/notification/fetch-receipts.job.js';
 import {
   PAYOUT_RECONCILE_JOB,
   PAYOUT_RUN_WEEKLY_JOB,
@@ -25,6 +26,7 @@ import { SURGE_RECALCULATE } from './jobs/surge/recalculate.job.js';
 export const QUEUES = [
   'outbox.relay',
   'notification.dispatch',
+  NOTIFICATION_FETCH_RECEIPTS_JOB,
   'ledger.assert-balance',
   'idempotency.prune',
   SURGE_RECALCULATE,
@@ -44,9 +46,9 @@ export const QUEUES = [
 ] as const;
 
 /**
- * Domain events the API records in the outbox that nothing consumes yet (notifications, task 19;
- * analytics). The relay marks them dispatched without creating a job: a queue with no worker would
- * only fill up. A future subscriber moves its event into `QUEUES` with a handler.
+ * Domain events the API records in the outbox that have no job of their own (analytics). The relay
+ * marks them dispatched without creating a job: a queue with no worker would only fill up. Those
+ * with an entry in `EVENT_NOTIFICATIONS` are first sent on as a `notification.dispatch` job (task 19). A future subscriber moves its event into `QUEUES` with a handler.
  */
 export const UNSUBSCRIBED_EVENTS = [
   'booking.created',

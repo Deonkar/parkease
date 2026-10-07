@@ -1,29 +1,34 @@
 import { z } from 'zod';
 
-import { notificationTypeSchema } from '../enums/notification-type.js';
 import { notificationIdSchema } from '../primitives/ids.js';
-import { paginationQuerySchema } from '../primitives/pagination.js';
+import { cursorPageOf } from '../primitives/pagination.js';
 
-export const notificationsQuerySchema = paginationQuerySchema.extend({
-  unreadOnly: z.coerce.boolean().default(false),
+import { NOTIFICATION_CATEGORIES } from './notification-catalog.js';
+
+/**
+ * Keyset on the notification id, like payouts: ids are UUIDv7, so id order is creation order and
+ * the cursor is simply the last id.
+ */
+export const notificationFeedQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+  cursor: notificationIdSchema.optional(),
 });
+export type NotificationFeedQuery = z.infer<typeof notificationFeedQuerySchema>;
 
-export type NotificationsQuery = z.infer<typeof notificationsQuerySchema>;
-
-export const notificationSchema = z.object({
+export const notificationViewSchema = z.object({
   id: notificationIdSchema,
-  type: notificationTypeSchema,
+  category: z.enum(NOTIFICATION_CATEGORIES),
+  actionable: z.boolean(),
   title: z.string(),
   body: z.string(),
-  data: z.record(z.unknown()).nullable(),
-  readAt: z.string().datetime().nullable(),
+  deepLink: z.string().nullable(),
+  isRead: z.boolean(),
   createdAt: z.string().datetime(),
 });
+export type NotificationView = z.infer<typeof notificationViewSchema>;
 
-export type Notification = z.infer<typeof notificationSchema>;
+export const notificationFeedSchema = cursorPageOf(notificationViewSchema);
+export type NotificationFeed = z.infer<typeof notificationFeedSchema>;
 
-export const markReadSchema = z.object({
-  notificationIds: z.array(notificationIdSchema).min(1).max(100),
-});
-
-export type MarkRead = z.infer<typeof markReadSchema>;
+export const unreadCountSchema = z.object({ count: z.number().int().nonnegative() });
+export type UnreadCount = z.infer<typeof unreadCountSchema>;
