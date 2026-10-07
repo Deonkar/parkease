@@ -21,11 +21,6 @@ export {
 } from './carwash-job-status.js';
 export { PAYOUT_STATUS_VALUES, payoutStatusSchema, PayoutStatus } from './payout-status.js';
 export { LEDGER_ACCOUNT_VALUES, ledgerAccountSchema, LedgerAccount } from './ledger-account.js';
-export {
-  NOTIFICATION_TYPE_VALUES,
-  notificationTypeSchema,
-  NotificationType,
-} from './notification-type.js';
 export { USER_STATUS_VALUES, userStatusSchema, UserStatus } from './user-status.js';
 export { ROLE_STATUS_VALUES, roleStatusSchema, RoleStatus } from './role-status.js';
 export { SLOT_STATUS_VALUES, slotStatusSchema, SlotStatus } from './slot-status.js';

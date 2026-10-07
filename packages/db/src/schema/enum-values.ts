@@ -104,21 +104,4 @@ export const CARWASH_JOB_STATUS_VALUES = [
   'cancelled',
 ] as const;
 
-export const NOTIFICATION_TYPE_VALUES = [
-  'booking_confirmed',
-  'booking_reminder',
-  'booking_expired',
-  'booking_cancelled',
-  'valet_assigned',
-  'valet_arrived',
-  'valet_parked',
-  'wash_accepted',
-  'wash_completed',
-  'payout_processed',
-  'review_request',
-  'space_approved',
-  'space_rejected',
-  'weekly_summary',
-] as const;
-
 export const OUTBOX_STATUS_VALUES = ['pending', 'dispatched', 'failed'] as const;

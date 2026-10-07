@@ -14,6 +14,8 @@ const envSchema = z.object({
    * dev machine without a RazorpayX account still boots.
    */
   RAZORPAYX_ACCOUNT_NUMBER: z.string().min(1).optional(),
+  /** Expo's push access token (task 19). Optional: Expo accepts unauthenticated sends. */
+  EXPO_ACCESS_TOKEN: z.string().min(1).optional(),
 });
 
 export type WorkerEnv = z.infer<typeof envSchema>;

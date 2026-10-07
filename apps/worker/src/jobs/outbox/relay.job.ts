@@ -1,3 +1,4 @@
+import { EVENT_NOTIFICATIONS } from '@parkease/contracts/shared';
 import { outboxMessages } from '@parkease/db/schema';
 import { eq, sql } from 'drizzle-orm';
 
@@ -31,7 +32,22 @@ export async function relayOutbox(deps: JobDeps): Promise<void> {
     `);
 
     for (const message of batch) {
-      const route = outboxRoute(message.type);
+      // A domain event that also tells someone something is sent on as a notification job
+      // (task 19); the outbox message id stays the pg-boss singleton key, so a retry sends once.
+      const eventMap = Object.hasOwn(EVENT_NOTIFICATIONS, message.type)
+        ? EVENT_NOTIFICATIONS[message.type]
+        : undefined;
+      const notification = eventMap?.(message.payload);
+      if (eventMap !== undefined && notification === null) {
+        // No recipient in the payload: nobody to tell, and a retry cannot add one. Loud, then done.
+        logger.warn(
+          { messageId: message.id, type: message.type },
+          'event has no notification recipient',
+        );
+      }
+      const route = notification ? 'job' : outboxRoute(message.type);
+      const sendType = notification ? 'notification.dispatch' : message.type;
+      const sendPayload = notification ?? message.payload;
       if (route === 'event') {
         // Recorded for a subscriber that does not exist yet: done, with nothing to send.
         await tx
@@ -47,7 +63,7 @@ export async function relayOutbox(deps: JobDeps): Promise<void> {
         if (route === 'unknown') {
           throw new Error(`no queue for message type ${message.type}`);
         }
-        const jobId = await deps.boss.send(message.type, message.payload, {
+        const jobId = await deps.boss.send(sendType, sendPayload, {
           singletonKey: message.id,
           retryLimit: 5,
           retryBackoff: true,
@@ -58,7 +74,7 @@ export async function relayOutbox(deps: JobDeps): Promise<void> {
         if (jobId === null) {
           const [existing] = await tx.execute<{ id: string }>(sql`
             SELECT id FROM pgboss.job
-            WHERE name = ${message.type} AND singleton_key = ${message.id}
+            WHERE name = ${sendType} AND singleton_key = ${message.id}
             LIMIT 1`);
           if (existing === undefined) {
             throw new Error(`pg-boss created no job for ${message.type}; is its queue missing?`);

@@ -6,20 +6,41 @@ export {
 } from './me.js';
 export { switchActiveRoleSchema, type SwitchActiveRole } from './switch-active-role.js';
 export {
-  notificationsQuerySchema,
-  type NotificationsQuery,
-  notificationSchema,
-  type Notification,
-  markReadSchema,
-  type MarkRead,
+  notificationFeedQuerySchema,
+  type NotificationFeedQuery,
+  notificationViewSchema,
+  type NotificationView,
+  notificationFeedSchema,
+  type NotificationFeed,
+  unreadCountSchema,
+  type UnreadCount,
 } from './notifications.js';
 export {
   notificationPreferenceSchema,
   type NotificationPreference,
+  notificationPreferencesSchema,
   updateNotificationPreferencesSchema,
   type UpdateNotificationPreferences,
 } from './notification-preferences.js';
-export { registerPushTokenSchema, type RegisterPushToken } from './push-token.js';
+export {
+  registerPushTokenSchema,
+  type RegisterPushToken,
+  deactivatePushTokenSchema,
+  type DeactivatePushToken,
+} from './push-token.js';
+export {
+  NOTIFICATION_CATEGORIES,
+  type NotificationCategory,
+  DEFAULT_PUSH_ENABLED,
+  NOTIFICATION_CATALOG,
+  type NotificationTemplate,
+  isNotificationTemplate,
+  renderNotification,
+  type RenderedNotification,
+  EVENT_NOTIFICATIONS,
+  type EventNotification,
+  formatRupees,
+} from './notification-catalog.js';
 export {
   UPLOAD_FOLDER_VALUES,
   uploadFolderSchema,

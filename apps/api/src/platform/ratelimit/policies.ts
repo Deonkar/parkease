@@ -63,6 +63,16 @@ export const RATE_LIMIT_POLICIES: Readonly<Record<string, RateLimitPolicy>> = {
   // person correcting a typo, and too few to probe PANs with.
   'PUT /api/v1/me/route-onboarding': { limit: 3, windowSeconds: 60, keyBy: 'user' },
   'GET /api/v1/me/route-onboarding': { limit: 60, windowSeconds: 60, keyBy: 'user' },
+  // Task 19. The bell polls the count every 30s, so reads are loose; a device registers its token
+  // once per launch, so the write is tight (§19.10).
+  'GET /api/v1/me/notifications': { limit: 60, windowSeconds: 60, keyBy: 'user' },
+  'GET /api/v1/me/notifications/unread-count': { limit: 60, windowSeconds: 60, keyBy: 'user' },
+  'POST /api/v1/me/notifications/:id/read': { limit: 60, windowSeconds: 60, keyBy: 'user' },
+  'POST /api/v1/me/notifications/read-all': { limit: 30, windowSeconds: 60, keyBy: 'user' },
+  'GET /api/v1/me/notifications/preferences': { limit: 60, windowSeconds: 60, keyBy: 'user' },
+  'PUT /api/v1/me/notifications/preferences': { limit: 30, windowSeconds: 60, keyBy: 'user' },
+  'POST /api/v1/me/push-tokens': { limit: 10, windowSeconds: 60, keyBy: 'user' },
+  'DELETE /api/v1/me/push-tokens': { limit: 10, windowSeconds: 60, keyBy: 'user' },
   'POST /api/v1/driver/payments/orders': { limit: 10, windowSeconds: 60, keyBy: 'user' },
   'POST /api/v1/driver/payments/verify': { limit: 10, windowSeconds: 60, keyBy: 'user' },
   // Razorpay's own range, per security.md §4.3. Keyed by IP because there is no

@@ -31,9 +31,6 @@ import {
   LEDGER_ACCOUNT_VALUES,
   LedgerAccount,
   ledgerAccountSchema,
-  NOTIFICATION_TYPE_VALUES,
-  NotificationType,
-  notificationTypeSchema,
   USER_STATUS_VALUES,
   UserStatus,
   userStatusSchema,
@@ -117,12 +114,6 @@ const allEnums = [
     obj: LedgerAccount,
     schema: ledgerAccountSchema,
   },
-  {
-    name: 'NotificationType',
-    values: NOTIFICATION_TYPE_VALUES,
-    obj: NotificationType,
-    schema: notificationTypeSchema,
-  },
   { name: 'UserStatus', values: USER_STATUS_VALUES, obj: UserStatus, schema: userStatusSchema },
   { name: 'RoleStatus', values: ROLE_STATUS_VALUES, obj: RoleStatus, schema: roleStatusSchema },
   { name: 'SlotStatus', values: SLOT_STATUS_VALUES, obj: SlotStatus, schema: slotStatusSchema },
@@ -185,8 +176,8 @@ describe('enums', () => {
     expect(result.success).toBe(false);
   });
 
-  it('all 21 enum types are tested', () => {
-    expect(allEnums).toHaveLength(21);
+  it('all 20 enum types are tested', () => {
+    expect(allEnums).toHaveLength(20);
   });
 });
 

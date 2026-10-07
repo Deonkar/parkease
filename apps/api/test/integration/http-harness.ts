@@ -23,6 +23,7 @@ import { PartnerQueries } from '../../src/domains/identity/partner.queries.js';
 import { RoleRepository } from '../../src/domains/identity/repositories/role.repository.js';
 import { UserRepository } from '../../src/domains/identity/repositories/user.repository.js';
 import { LedgerModule } from '../../src/domains/ledger/ledger.module.js';
+import { NotificationModule } from '../../src/domains/notification/notification.module.js';
 import { PaymentModule } from '../../src/domains/payment/payment.module.js';
 import { RAZORPAY } from '../../src/domains/payment/razorpay.client.js';
 import { PayoutModule } from '../../src/domains/payout/payout.module.js';
@@ -77,6 +78,7 @@ import { OwnerSpacesController } from '../../src/roles/owner/spaces.controller.j
 import { AdminAuthController } from '../../src/roles/public/admin-auth.controller.js';
 import { RazorpayWebhookController } from '../../src/roles/public/webhooks/razorpay.controller.js';
 import { MeController } from '../../src/roles/shared/me.controller.js';
+import { MeNotificationsController } from '../../src/roles/shared/notifications.controller.js';
 import { MePayoutsController } from '../../src/roles/shared/payouts.controller.js';
 import { MeRouteOnboardingController } from '../../src/roles/shared/route-onboarding.controller.js';
 import { ValetAvailabilityController } from '../../src/roles/valet/availability.controller.js';
@@ -188,6 +190,8 @@ class StubAuthGuard implements CanActivate {
     // `/me/bank-details` and `/me/payouts`. Its RazorpayX client is overridden below.
     PayoutModule,
     ReviewModule,
+    // `/me/notifications` and `/me/push-tokens` (task 19a).
+    NotificationModule,
   ],
   controllers: [
     // The admin panel's session. Public, so it goes through the real interceptor
@@ -225,6 +229,7 @@ class StubAuthGuard implements CanActivate {
     WasherEarningsController,
     WasherProfileController,
     MeController,
+    MeNotificationsController,
     MePayoutsController,
     MeRouteOnboardingController,
   ],

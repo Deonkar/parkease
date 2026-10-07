@@ -13,10 +13,11 @@ import { acceptTimeout as carwashAcceptTimeout } from './jobs/carwash/accept-tim
 import { washCompleteReminder } from './jobs/carwash/wash-complete-reminder.job.js';
 import { pruneIdempotencyKeys } from './jobs/idempotency/prune.job.js';
 import { assertLedgerBalance } from './jobs/ledger/assert-balance.job.js';
+import { dispatchNotifications } from './jobs/notification/dispatch.job.js';
 import {
-  dispatchNotifications,
-  type NotificationPayload,
-} from './jobs/notification/dispatch.job.js';
+  fetchReceipts,
+  NOTIFICATION_FETCH_RECEIPTS_JOB,
+} from './jobs/notification/fetch-receipts.job.js';
 import { relayOutbox } from './jobs/outbox/relay.job.js';
 import { issueRefund } from './jobs/payment/issue-refund.job.js';
 import { reconcileOrphanCapture } from './jobs/payment/reconcile-orphan.job.js';
@@ -44,9 +45,10 @@ import { noShow } from './jobs/valet/no-show.job.js';
  */
 export async function registerHandlers(boss: PgBoss, deps: JobDeps): Promise<void> {
   await boss.work('outbox.relay', { pollingIntervalSeconds: 1 }, () => relayOutbox(deps));
-  await boss.work<NotificationPayload>('notification.dispatch', { batchSize: 50 }, (jobs) =>
+  await boss.work<unknown>('notification.dispatch', { batchSize: 50 }, (jobs) =>
     dispatchNotifications(deps, jobs),
   );
+  await boss.work(NOTIFICATION_FETCH_RECEIPTS_JOB, {}, () => fetchReceipts(deps));
   await boss.work('ledger.assert-balance', {}, () => assertLedgerBalance(deps));
   await boss.work('idempotency.prune', {}, () => pruneIdempotencyKeys(deps));
 

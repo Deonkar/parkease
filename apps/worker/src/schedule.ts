@@ -1,5 +1,6 @@
 import type PgBoss from 'pg-boss';
 
+import { NOTIFICATION_FETCH_RECEIPTS_JOB } from './jobs/notification/fetch-receipts.job.js';
 import { PAYOUT_RECONCILE_JOB, PAYOUT_RUN_WEEKLY_JOB } from './jobs/payout/payload.js';
 import { REVIEW_RECOMPUTE_AGGREGATES_JOB } from './jobs/review/recompute-aggregates.job.js';
 import { SURGE_RECALCULATE } from './jobs/surge/recalculate.job.js';
@@ -14,6 +15,9 @@ export async function registerSchedule(boss: PgBoss): Promise<void> {
   // Five minutes is the cycle the 600s surge TTL is sized against: two missed
   // runs still leave a valid key (R-ASYNC-06, ADR-010).
   await boss.schedule(SURGE_RECALCULATE, '*/5 * * * *', {}, { tz: IST });
+
+  // Expo's receipts are ready about 15 minutes after a send (task 19).
+  await boss.schedule(NOTIFICATION_FETCH_RECEIPTS_JOB, '*/15 * * * *', {}, { tz: IST });
 
   // Monday 06:00 IST (§16.6).
   await boss.schedule(PAYOUT_RUN_WEEKLY_JOB, '0 6 * * 1', {}, { tz: IST });

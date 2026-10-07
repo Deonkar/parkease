@@ -1823,7 +1823,7 @@ filmed, and a reviewer comparing the two screens sees a bug that isn't there.
 - **Done means:** the owner fixtures derive the dashboard figures from the same transaction list the
   earnings fixture serves, with a unit test asserting dashboard month = sum of earnings month.
 
-### S-97 — The owner's scan screen keeps re-posting check-in after a successful scan
+### S-106 — The owner's scan screen keeps re-posting check-in after a successful scan
 
 - **Status:** `open`
 - **Found in:** launch series (brag) owner video capture — 2026-09-29
@@ -1944,25 +1944,21 @@ All are fine at launch volume.
   Also switch reconcile to `transfers.all({ from, to })`. Each change is justified by an EXPLAIN
   before and after.
 
-### S-98 — The web map never renders a frame in headless capture (driver discovery, owner listing step 1)
+### S-107 — The web map never renders a frame (driver discovery, owner listing step 1)
 
-- **Status:** `open` — cause not found; environment-specific not ruled out
+- **Status:** `fixed on fix/web-map (905016f)` — PR pending; close when it merges
 - **Found in:** launch series (brag) capture — 2026-09-29
 - **Surface:** mobile (web build) · packages/ui-native `ParkMap.tsx`
 
-In the capture browser (Chrome 153 headless, real AMD GPU via ANGLE/D3D11) the MapLibre 6.9.0 canvas is sized
-(390x590), OSM tiles return 200 and decode (256x256), WebGL2 works with `failIfMajorPerformanceCaveat`, blob
-workers run, the page is visible and nothing logs an error — yet the canvas stays blank and every
-`.maplibregl-marker` keeps an identity transform at the container's top-left, i.e. the map never renders a
-frame. Forcing a viewport resize does not help. Not yet checked in a visible desktop browser.
+Blank since task 6. Three stacked causes, each confirmed by instrumenting the running page (learnings.md,
+"The web map was blank since task 6"): MapLibre 6's worker resolved against the Metro bundle URL and got
+Expo's HTML fallback; the injected CSS clipped `.maplibregl-canvas-container` (zero height) with
+`overflow:hidden`; the marker entrance animated `transform` on the element MapLibre positions, pinning every
+marker to the top-left.
 
-- **Why deferred:** web is not the shipping platform (Android uses maplibre-react-native); the launch video
-  works around it.
-- **Done means:** open the driver home in a visible desktop Chrome; if the map renders there, record the
-  headless cause in learnings.md; if it does not, fix ParkMap's web init with a Playwright check that a marker
-  gets a non-identity transform.
+- **Done means:** fix/web-map merged; the driver map shows every marker at its own position on web.
 
-### S-99 — Uncaught "12000ms timeout exceeded" from an icon font on the web build
+### S-108 — Uncaught "12000ms timeout exceeded" from an icon font on the web build
 
 - **Status:** `open`
 - **Found in:** launch series (brag) driver probe — 2026-09-29
@@ -1976,7 +1972,7 @@ red-screen in dev; it may also mean an icon font never finishes loading.
 - **Done means:** the font load that times out is identified, its rejection is handled (R-FAIL-01: logged at
   warn with context), and the icon font loads or falls back deliberately.
 
-### S-100 — On web, focusing a price input on listing step 4 shifts the whole step sideways
+### S-109 — On web, focusing a price input on listing step 4 shifts the whole step sideways
 
 - **Status:** `open`
 - **Found in:** launch series (brag) owner capture — 2026-09-29
@@ -2011,6 +2007,37 @@ code is still unseen.
 - **Done means:** the test logs the cause code of any unexpected rejection; once seen, the create
   path maps it (40P01/40001 → retry once or answer 409 SLOT_UNAVAILABLE), and 20 consecutive
   full-suite runs stay green.
+
+### S-110 — A MapLibre runtime error on web leaves a blank map instead of the fallback
+
+- **Status:** `open`
+- **Found in:** fix/web-map review (silent-failure lens) — 2026-09-29
+- **Surface:** mobile (web build) · packages/ui-native `ParkMap.tsx`
+
+`WebMap` registers no `map.on('error')`. If the worker files are missing at runtime (install scripts skipped,
+a deploy that never ran postinstall) or the style fails, the map is blank with no reason shown. Not done in
+fix/web-map because MapLibre also emits `error` for every transient tile failure: flipping the whole map to
+"Map unavailable" on a tile hiccup would be a new bug. It needs a design for which errors are fatal.
+
+- **Why deferred:** needs its own design (fatal vs transient errors); fix/web-map already makes install fail
+  loudly when the worker cannot be copied.
+- **Done means:** worker/style failures switch ParkMap to its fallback with the reason (R-FAIL-01); transient
+  tile errors do not; a test covers both.
+
+### S-111 — Driver map: price pins overlap at the default zoom, and clustering does not merge them
+
+- **Status:** `open`
+- **Found in:** fix/web-map UI audit (mobile-app-design lens) — 2026-09-29, first time the web map rendered
+- **Surface:** mobile · `features/driver/clustering.ts`, `ParkMap` markers
+
+At the driver home's default zoom over Koramangala, about eight of the 21 sample pins overlap in the centre:
+their prices are unreadable and their 48px hit areas overlap, so which space a tap selects is ambiguous
+(Material asks for 8dp between targets). Clustering only merges above `CLUSTER_MAX_ZOOM`'s threshold, so
+nearby-but-distinct pins stay separate and stacked. Contrast and target sizes themselves pass.
+
+- **Why deferred:** pre-existing and shared with native; a clustering/zoom design question, outside the fix.
+- **Done means:** pins that would overlap at the current zoom merge into a count cluster (or the initial zoom
+  frames them apart), checked with the dev fixtures at 390px, with a clustering unit test for overlap.
 
 ### S-112 — Route onboarding cannot recover a step whose response was lost, and two devices can race it
 
@@ -2268,7 +2295,7 @@ a phone OTP, which bounds it, but nothing caps reports per review or requires a 
 
 ### S-130 — No push asks a driver to review; drivers rate nothing they are not reminded of
 
-- **Status:** `open`
+- **Status:** `fixed in task 19a` — `booking.completed` maps to a `review.request` notification through the relay (EVENT_NOTIFICATIONS), once per booking by the outbox singleton key
 - **Found in:** task 17a scoping (user-approved cut), 2026-10-05
 - **Surface:** worker · notifications
 
@@ -2330,6 +2357,22 @@ test (ordering, chips, respond) but was not looked at on a screen.
 - **Why deferred:** blocked by S-107 on this branch.
 - **Done means:** after fix/web-map merges, create a listing in the web preview, open its Reviews section at
   375 and 1280 wide, and check respond / report / show more.
+
+### S-132 — The router's global-skill count is stale: 56 documented, 110 on disk
+
+- **Status:** `open`
+- **Found in:** installing Emil Kowalski's skills (ADR-033), 2026-10-05
+- **Surface:** harness — `~/.claude/skills/flow/`, `CLAUDE.md`
+
+`gen-skills-index.py` reports `global=110`. `flow/SKILL.md`, `reference/skill-index.md` and
+`CLAUDE.md` all say 56. The difference is global installs made outside ParkEase (firecrawl ×28,
+linkedin ×14, hyperframes ×9, brag, media-use and others) — never routed, and never run through
+`audit-conflicts.sh`'s known list on purpose. The generator exists to make exactly this drift loud.
+
+- **Why deferred:** those skills are global and mostly unrelated to ParkEase; routing them is its
+  own curation pass, and ADR-033 was scoped to the ten project-local skills.
+- **Done means:** each of the 54 is either routed in `reference/skill-index.md` or listed under
+  "not routed for ParkEase", and the three documents state the count the generator prints.
 
 ### S-138 — The ledger has no index on (occurred_at, id): the explorer and the export sort the range
 
@@ -2405,3 +2448,25 @@ POST `/auth/admin/refresh` and `/logout` with `{}` (Fastify answers 400 to an em
 Not built: the surge heat map (needs an API that lists every zone's live multiplier, not only overrides); a tier-ladder editor for zone overrides (overrides are created inheriting the global ladder; cap/tiers editable via the API); the bookings/revenue chart on the dashboard; Playwright E2E for approve / request changes / grant role / refund / surge edit / remove review / export; route-level code splitting (one 1.7 MB bundle: antd + firebase); `/admin/users/:id` detail page. Verified instead: unit tests for the API client (single-flight refresh, error envelope, contract refusal) and money formatting, and every page opened against dev fixtures at desktop and 375 px.
 
 - **Done means:** each item built with a test, or ruled out here.
+
+### S-145 — Task 19a events and templates the spec lists that have no producer yet
+
+- **Status:** `open`
+- **Found in:** task 19a, 2026-10-07
+- **Surface:** api · worker · notifications
+
+The spec's matrix has rows nothing emits: `booking.new` (the owner is never told of a booking: `booking.confirmed` carries no owner id, so the mapper needs a space lookup), `valet.arrived`, `role.added`, `payout.processed` (the payout job posts no notification on success), and `review.created` (its payload carries a polymorphic target, not an owner id). The catalog has no entry for them, so nothing can be dispatched by mistake. Also: copy omits the spec's `{space_name}`, `{time}`, `{valet_name}`, `{eta}` because producers send ids only; a lookup in the worker would restore them. `EXPO_ACCESS_TOKEN` is optional and absent from `.env.example`. A push-only dedupe table closes the in-app-off double-send gap documented in `dispatch.job.ts`.
+
+- **Why deferred:** each needs a producer change or a read in the worker, and 19a is the delivery path and the feed.
+- **Done means:** each row either emits and maps (with a test through the relay) or is struck from the matrix here with the reason.
+
+### S-146 — `booking-concurrency` flakes on a Postgres deadlock (40P01)
+
+- **Status:** `open`
+- **Found in:** task 19a pre-PR run, 2026-10-07 (unrelated to 19a; booking insert path untouched)
+- **Surface:** api · booking · mandatory test
+
+Three runs of `test/integration/booking-concurrency.spec.ts` on one machine: one failed "fails one of two concurrent callers even when another index was free", one failed "never oversells three slots" with the loser rejected by `SQLSTATE 40P01` (deadlock detected) where the test expects `SlotUnavailableError`, one passed 9/9. Two concurrent inserts into `booking_slots` can deadlock on the exclusion constraint instead of one losing cleanly.
+
+- **Why deferred:** outside task 19; the invariant (no oversell) held in every run, only the error mapping differs.
+- **Done means:** the command maps 40P01 to `SlotUnavailableError` (or retries once), with the test run 20 times green.
