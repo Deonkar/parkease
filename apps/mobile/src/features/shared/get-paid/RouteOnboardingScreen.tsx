@@ -27,6 +27,7 @@ import { toApiFailure } from '../api/errors';
 import { FieldError } from '../components/FieldError';
 import { TextField } from '../components/FormFields';
 import { ReadableColumn } from '../components/ReadableColumn';
+import { RefreshNotice } from '../components/RefreshNotice';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { resolveScreenState } from '../screen-state';
 
@@ -186,6 +187,14 @@ export function RouteOnboardingScreen({ payee }: { readonly payee: RoutePayee })
     return (
       <View style={styles.root}>
         <ScreenHeader title="Get paid" />
+        {/* The status changes rarely, but a failed refresh still says it is the last one (S-119). */}
+        {query.isError ? (
+          <RefreshNotice
+            testID="get-paid-refresh-notice"
+            retryLabel="Refresh your payout status"
+            onRetry={() => void query.refetch()}
+          />
+        ) : null}
         <ScrollView contentContainerStyle={styles.scroll}>
           <ReadableColumn style={styles.column}>
             <StatusCard

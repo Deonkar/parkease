@@ -7,6 +7,7 @@ import { Alert, Linking, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { z } from 'zod';
 
+import { RefreshNotice } from '@/features/shared/components/RefreshNotice';
 import { resolveScreenState } from '@/features/shared/screen-state';
 import { OfferFocusCard } from '@/features/valet/components/OfferFocusCard';
 import { OnlineStatusBar } from '@/features/valet/components/OnlineStatusBar';
@@ -231,6 +232,14 @@ export default function ValetOffersScreen() {
 
     return (
       <>
+        {/* A failed refresh keeps the last offers on screen, and says they may be stale (S-48). */}
+        {offers.isError ? (
+          <RefreshNotice
+            testID="offers-refresh-notice"
+            retryLabel="Refresh the offers"
+            onRetry={() => void offers.refetch()}
+          />
+        ) : null}
         {takenNotice === null ? null : (
           // A live region because the sighted cue is the card swapping to a
           // different address; without this a screen reader user just hears
