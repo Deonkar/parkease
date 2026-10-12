@@ -12,3 +12,4 @@ export {
   startPgContainer,
   stopPgContainer,
 } from './pg-container.js';
+export { startRedisContainer } from './redis-container.js';
