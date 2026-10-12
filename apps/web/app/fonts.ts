@@ -2,6 +2,10 @@ import { Atkinson_Hyperlegible_Next, Big_Shoulders, Big_Shoulders_Stencil } from
 
 /** Condensed signage face for display type. Self-hosted by next/font, so no third-party request. */
 export const bigShoulders = Big_Shoulders({
+  // Not preloaded: a preload competes with the CSS and body font for the first bytes and pushes
+  // LCP (the hero's body-text lead) past the 2.5s gate. The browser still fetches it as soon as
+  // the first layout needs it, and headlines swap in when it lands.
+  preload: false,
   // Only latin is preloaded; latin-ext (which has ₹) still loads on demand through unicode-range.
   subsets: ['latin'],
   weight: ['800', '900'],
