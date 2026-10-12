@@ -5,6 +5,7 @@ import {
   elevation,
   fontSize,
   fontWeight,
+  iconSize,
   layout,
   radius,
   spacing,
@@ -55,7 +56,7 @@ import { formatPaise } from '@/lib/money';
 const ELAPSED_TICK_MS = 30_000;
 
 function EmptyIcon({ name }: { readonly name: keyof typeof MaterialCommunityIcons.glyphMap }) {
-  return <MaterialCommunityIcons name={name} size={48} color={colors.textTertiary} />;
+  return <MaterialCommunityIcons name={name} size={iconSize.hero} color={colors.textTertiary} />;
 }
 
 function ActiveSkeleton() {
@@ -337,7 +338,7 @@ export default function WasherActiveScreen() {
                 <View style={styles.actionNotice} testID="active-action-notice">
                   <MaterialCommunityIcons
                     name="alert-circle-outline"
-                    size={18}
+                    size={iconSize.md}
                     color={colors.errorInk}
                   />
                   <Text style={styles.actionNoticeText}>{actionNotice}</Text>
@@ -356,7 +357,7 @@ export default function WasherActiveScreen() {
                 >
                   <MaterialCommunityIcons
                     name="navigation-variant-outline"
-                    size={20}
+                    size={iconSize.base}
                     color={colors.primary}
                   />
                   <Text style={styles.navigateLabel}>Navigate to the car</Text>

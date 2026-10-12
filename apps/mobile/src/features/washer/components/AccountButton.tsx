@@ -1,5 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { colors, spacing, touchTarget } from '@parkease/tokens';
+import { colors, iconSize, spacing, touchTarget } from '@parkease/tokens';
 import { router } from 'expo-router';
 import { Pressable, StyleSheet } from 'react-native';
 
@@ -26,7 +26,7 @@ export function AccountButton() {
     >
       <MaterialCommunityIcons
         name="account-circle-outline"
-        size={24}
+        size={iconSize.lg}
         color={colors.textSecondary}
       />
     </Pressable>

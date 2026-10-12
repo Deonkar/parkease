@@ -5,6 +5,7 @@ import {
   elevation,
   fontSize,
   fontWeight,
+  iconSize,
   layout,
   lineHeight,
   radius,
@@ -124,7 +125,11 @@ export default function WasherProfileScreen() {
     if (view.idDocumentId !== null) {
       return (
         <View style={styles.docRow} testID="id-document-present">
-          <MaterialCommunityIcons name="check-circle-outline" size={20} color={colors.primary} />
+          <MaterialCommunityIcons
+            name="check-circle-outline"
+            size={iconSize.base}
+            color={colors.primary}
+          />
           <Text style={styles.docText}>ID proof added</Text>
         </View>
       );
@@ -171,7 +176,7 @@ export default function WasherProfileScreen() {
           <View style={styles.notice} testID="registration-notice">
             <MaterialCommunityIcons
               name="information-outline"
-              size={18}
+              size={iconSize.md}
               color={colors.primaryDark}
             />
             <Text style={styles.noticeText}>{notice}</Text>
@@ -190,7 +195,7 @@ export default function WasherProfileScreen() {
           <View style={styles.verified}>
             <MaterialCommunityIcons
               name="check-decagram-outline"
-              size={20}
+              size={iconSize.base}
               color={colors.primary}
             />
             <Text style={styles.verifiedText}>Verified. You can accept jobs.</Text>
@@ -232,7 +237,7 @@ export default function WasherProfileScreen() {
                 name={
                   view.businessPhotoIds.length > 0 ? 'check-circle-outline' : 'image-off-outline'
                 }
-                size={20}
+                size={iconSize.base}
                 color={view.businessPhotoIds.length > 0 ? colors.primary : colors.textTertiary}
               />
               <Text style={styles.docText}>
@@ -262,7 +267,7 @@ export default function WasherProfileScreen() {
             icon={
               <MaterialCommunityIcons
                 name="account-plus-outline"
-                size={48}
+                size={iconSize.hero}
                 color={colors.textTertiary}
               />
             }
@@ -315,7 +320,11 @@ export default function WasherProfileScreen() {
             accessibilityLabel="Switch role"
           >
             <Text style={styles.itemText}>Switch role</Text>
-            <MaterialCommunityIcons name="chevron-right" size={24} color={colors.textTertiary} />
+            <MaterialCommunityIcons
+              name="chevron-right"
+              size={iconSize.lg}
+              color={colors.textTertiary}
+            />
           </Pressable>
 
           <Pressable
@@ -327,7 +336,11 @@ export default function WasherProfileScreen() {
             accessibilityLabel="Settings"
           >
             <Text style={styles.itemText}>Settings</Text>
-            <MaterialCommunityIcons name="chevron-right" size={24} color={colors.textTertiary} />
+            <MaterialCommunityIcons
+              name="chevron-right"
+              size={iconSize.lg}
+              color={colors.textTertiary}
+            />
           </Pressable>
 
           <Pressable

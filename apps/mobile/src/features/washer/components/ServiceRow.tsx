@@ -13,6 +13,7 @@ import {
   elevation,
   fontSize,
   fontWeight,
+  iconSize,
   radius,
   spacing,
   touchTarget,
@@ -209,7 +210,11 @@ export function ServiceRow({ row, onSave, saving = false, failure = null }: Serv
           ]}
         >
           <View style={styles.slotHead}>
-            <MaterialCommunityIcons name={SLOT_ICON[field]} size={16} color={colors.textTertiary} />
+            <MaterialCommunityIcons
+              name={SLOT_ICON[field]}
+              size={iconSize.sm}
+              color={colors.textTertiary}
+            />
             <Text style={styles.slotName}>{SLOT_NAME[field]}</Text>
           </View>
           <View style={styles.amount}>
@@ -348,7 +353,11 @@ export function ServiceRow({ row, onSave, saving = false, failure = null }: Serv
 
       {failure === null ? null : (
         <View style={styles.failure} testID={`save-error-${name}`}>
-          <MaterialCommunityIcons name="alert-circle-outline" size={16} color={colors.errorInk} />
+          <MaterialCommunityIcons
+            name="alert-circle-outline"
+            size={iconSize.sm}
+            color={colors.errorInk}
+          />
           <Text style={styles.failureText}>{failure}</Text>
         </View>
       )}

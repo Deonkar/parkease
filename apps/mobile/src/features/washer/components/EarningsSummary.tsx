@@ -1,6 +1,14 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { WasherEarningsPeriod, WasherEarningsSummary } from '@parkease/contracts/washer';
-import { colors, fontSize, fontWeight, lineHeight, radius, spacing } from '@parkease/tokens';
+import {
+  colors,
+  fontSize,
+  fontWeight,
+  iconSize,
+  lineHeight,
+  radius,
+  spacing,
+} from '@parkease/tokens';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { formatPaise } from '@/lib/money';
@@ -71,7 +79,11 @@ export function EarningsSummary({ period, summary }: EarningsSummaryProps) {
 
       {reversed === null ? null : (
         <View style={styles.reversed}>
-          <MaterialCommunityIcons name="undo-variant" size={16} color={colors.textSecondary} />
+          <MaterialCommunityIcons
+            name="undo-variant"
+            size={iconSize.sm}
+            color={colors.textSecondary}
+          />
           <Text style={styles.reversedLabel} testID="earnings-reversed">
             {reversed}
           </Text>

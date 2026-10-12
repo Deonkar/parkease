@@ -1,5 +1,13 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { colors, fontSize, fontWeight, radius, spacing, touchTarget } from '@parkease/tokens';
+import {
+  colors,
+  fontSize,
+  fontWeight,
+  iconSize,
+  radius,
+  spacing,
+  touchTarget,
+} from '@parkease/tokens';
 import {
   Image,
   Pressable,
@@ -76,7 +84,11 @@ export function PhotoField({
             android_ripple={{ color: colors.surfaceTertiary }}
             style={[size, styles.add, error !== undefined && styles.addError]}
           >
-            <MaterialCommunityIcons name="camera-plus-outline" size={28} color={colors.primary} />
+            <MaterialCommunityIcons
+              name="camera-plus-outline"
+              size={iconSize.xl}
+              color={colors.primary}
+            />
             <Text style={styles.addLabel}>{addLabel}</Text>
           </Pressable>
         ) : null}
@@ -120,7 +132,7 @@ function Tile({ item, position, size, onRetry, onRemove }: TileProps) {
           hitSlop={spacing.sm}
           style={styles.remove}
         >
-          <MaterialCommunityIcons name="close" size={16} color={colors.textInverse} />
+          <MaterialCommunityIcons name="close" size={iconSize.sm} color={colors.textInverse} />
         </Pressable>
       </View>
 
@@ -133,7 +145,7 @@ function Tile({ item, position, size, onRetry, onRemove }: TileProps) {
                 ? 'alert-circle-outline'
                 : 'check-circle-outline'
           }
-          size={14}
+          size={iconSize.xs}
           color={item.error !== null ? colors.errorInk : colors.textTertiary}
         />
         <Text style={[styles.statusText, item.error !== null && styles.statusFailed]}>{state}</Text>

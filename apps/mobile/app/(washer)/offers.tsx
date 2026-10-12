@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { WashJobOffer } from '@parkease/contracts/washer';
-import { colors, fontSize, fontWeight, layout, radius, spacing } from '@parkease/tokens';
+import { colors, fontSize, fontWeight, iconSize, layout, radius, spacing } from '@parkease/tokens';
 import { EmptyState, ErrorState, Skeleton } from '@parkease/ui-native';
 import { FlashList } from '@shopify/flash-list';
 import { useQueryClient } from '@tanstack/react-query';
@@ -99,7 +99,7 @@ const durationKey = (offer: Pick<WashJobOffer, 'serviceName' | 'vehicleType'>) =
   `${offer.serviceName}:${offer.vehicleType}`;
 
 function EmptyIcon({ name }: { readonly name: keyof typeof MaterialCommunityIcons.glyphMap }) {
-  return <MaterialCommunityIcons name={name} size={48} color={colors.textTertiary} />;
+  return <MaterialCommunityIcons name={name} size={iconSize.hero} color={colors.textTertiary} />;
 }
 
 function OfferSkeletons() {
@@ -325,7 +325,11 @@ export default function WasherOffersScreen() {
       visibleNotice === null ? null : (
         // Announced by `useAnnounce(visibleNotice)` above (H4).
         <View style={styles.notice} testID="offer-taken-notice">
-          <MaterialCommunityIcons name="information-outline" size={18} color={colors.primaryDark} />
+          <MaterialCommunityIcons
+            name="information-outline"
+            size={iconSize.md}
+            color={colors.primaryDark}
+          />
           <Text style={styles.noticeText}>{visibleNotice}</Text>
         </View>
       );

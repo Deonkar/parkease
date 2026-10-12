@@ -38,4 +38,38 @@ describe('design literals', () => {
     const offenders = sources.filter((file) => chipWithSm.test(readFileSync(file, 'utf8')));
     expect(offenders.map(label)).toEqual([]);
   });
+
+  describe('icon sizes on the washer surface and in ui-native (S-79)', () => {
+    // The surface the row named; other roles move to `iconSize` as their screens are next touched.
+    const scoped = sources.filter(
+      (file) =>
+        file.startsWith(uiNative) ||
+        file.includes(join('app', '(washer)')) ||
+        file.includes(join('features', 'washer')) ||
+        file.endsWith('RefreshNotice.tsx'),
+    );
+
+    it('covers the washer screens, components and ui-native', () => {
+      expect(scoped.some((file) => file.endsWith(join('(washer)', 'offers.tsx')))).toBe(true);
+      expect(scoped.some((file) => file.endsWith('EvidencePair.tsx'))).toBe(true);
+      expect(scoped.some((file) => file.endsWith('EmptyState.tsx'))).toBe(true);
+    });
+
+    it.each(scoped.map(label))('%s sizes its icons from iconSize', (file) => {
+      expect(readFileSync(join(root, file), 'utf8')).not.toMatch(/\bsize=\{\s*\d+\s*\}/);
+    });
+
+    it.each(scoped.map(label))('%s types no 52 for a primary action', (file) => {
+      // touchTarget + spacing.xs, not a number the touch-target scan cannot see.
+      expect(readFileSync(join(root, file), 'utf8')).not.toMatch(/\b(minHeight|height):\s*52\b/);
+    });
+
+    it('draws the empty and error states from layout.state, not literals', () => {
+      const empty = readFileSync(join(uiNative, 'EmptyState.tsx'), 'utf8');
+      const error = readFileSync(join(uiNative, 'ErrorState.tsx'), 'utf8');
+      expect(empty).toContain('layout.state.illustration');
+      expect(error).toContain('layout.state.badge');
+      expect(`${empty}\n${error}`).not.toMatch(/\b(width|height|borderRadius|lineHeight):\s*\d+/);
+    });
+  });
 });

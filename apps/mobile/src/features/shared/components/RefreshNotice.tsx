@@ -1,5 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { colors, fontSize, fontWeight, spacing, touchTarget } from '@parkease/tokens';
+import { colors, fontSize, fontWeight, iconSize, spacing, touchTarget } from '@parkease/tokens';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useAnnounce } from '@/features/shared/hooks/useAnnounce';
@@ -27,7 +27,7 @@ export function RefreshNotice({ testID, retryLabel, onRetry }: RefreshNoticeProp
   useAnnounce(MESSAGE);
   return (
     <View style={styles.root} testID={testID}>
-      <MaterialCommunityIcons name="cloud-off-outline" size={18} color={colors.warning} />
+      <MaterialCommunityIcons name="cloud-off-outline" size={iconSize.md} color={colors.warning} />
       <Text style={styles.text}>{MESSAGE}</Text>
       <Pressable
         accessibilityRole="button"

@@ -1,6 +1,14 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { WasherPartnerType } from '@parkease/contracts/washer';
-import { colors, elevation, fontSize, fontWeight, radius, spacing } from '@parkease/tokens';
+import {
+  colors,
+  elevation,
+  fontSize,
+  fontWeight,
+  iconSize,
+  radius,
+  spacing,
+} from '@parkease/tokens';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 export interface PartnerTypePickerProps {
@@ -49,13 +57,17 @@ export function PartnerTypePicker({ onPick }: PartnerTypePickerProps) {
           style={styles.card}
         >
           <View style={styles.icon}>
-            <MaterialCommunityIcons name={choice.icon} size={28} color={colors.primary} />
+            <MaterialCommunityIcons name={choice.icon} size={iconSize.xl} color={colors.primary} />
           </View>
           <View style={styles.copy}>
             <Text style={styles.title}>{choice.title}</Text>
             <Text style={styles.body}>{choice.body}</Text>
           </View>
-          <MaterialCommunityIcons name="chevron-right" size={24} color={colors.textTertiary} />
+          <MaterialCommunityIcons
+            name="chevron-right"
+            size={iconSize.lg}
+            color={colors.textTertiary}
+          />
         </Pressable>
       ))}
     </View>

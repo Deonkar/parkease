@@ -1,5 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { colors, fontSize, fontWeight, radius, spacing } from '@parkease/tokens';
+import { colors, fontSize, fontWeight, iconSize, radius, spacing } from '@parkease/tokens';
 import { StyleSheet, Switch, Text, View } from 'react-native';
 
 import { useAnnounce } from '@/features/shared/hooks/useAnnounce';
@@ -164,7 +164,7 @@ export function OnlineRail({
       style={[styles.root, { backgroundColor: view.ground, borderColor: view.edge }]}
       testID="online-rail"
     >
-      <MaterialCommunityIcons name={view.icon} size={20} color={view.ink} />
+      <MaterialCommunityIcons name={view.icon} size={iconSize.base} color={view.ink} />
 
       <View style={styles.copy}>
         <Text style={[styles.title, { color: view.ink }]}>{view.title}</Text>

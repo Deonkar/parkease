@@ -1,7 +1,15 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { CarwashServiceName } from '@parkease/contracts/enums';
 import type { CreateWasherProfile } from '@parkease/contracts/washer';
-import { colors, fontSize, fontWeight, radius, spacing, touchTarget } from '@parkease/tokens';
+import {
+  colors,
+  fontSize,
+  fontWeight,
+  iconSize,
+  radius,
+  spacing,
+  touchTarget,
+} from '@parkease/tokens';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -219,7 +227,7 @@ function TimeStepper({ id, label, value, onChange }: TimeStepperProps) {
           }}
           style={styles.step}
         >
-          <MaterialCommunityIcons name="minus" size={20} color={colors.primary} />
+          <MaterialCommunityIcons name="minus" size={iconSize.base} color={colors.primary} />
         </Pressable>
         <Text style={styles.time}>{shown}</Text>
         <Pressable
@@ -231,7 +239,7 @@ function TimeStepper({ id, label, value, onChange }: TimeStepperProps) {
           }}
           style={styles.step}
         >
-          <MaterialCommunityIcons name="plus" size={20} color={colors.primary} />
+          <MaterialCommunityIcons name="plus" size={iconSize.base} color={colors.primary} />
         </Pressable>
       </View>
     </View>

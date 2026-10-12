@@ -3,6 +3,7 @@ import {
   colors,
   fontSize,
   fontWeight,
+  iconSize,
   lineHeight,
   radius,
   spacing,
@@ -46,7 +47,7 @@ export function VerificationNotice({ banner, onAction }: VerificationNoticeProps
     >
       <MaterialCommunityIcons
         name={isError ? 'alert-circle-outline' : 'clock-outline'}
-        size={22}
+        size={iconSize.base}
         color={ink}
       />
 

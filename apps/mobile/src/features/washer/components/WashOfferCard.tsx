@@ -5,9 +5,11 @@ import {
   elevation,
   fontSize,
   fontWeight,
+  iconSize,
   lineHeight,
   radius,
   spacing,
+  touchTarget,
 } from '@parkease/tokens';
 import { memo, useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -95,14 +97,18 @@ export const WashOfferCard = memo(function WashOfferCard({
         <View style={styles.chip}>
           <MaterialCommunityIcons
             name="map-marker-distance"
-            size={16}
+            size={iconSize.sm}
             color={colors.textSecondary}
           />
           <Text style={styles.chipLabel}>{`${formatDistance(offer.distanceM)} away`}</Text>
         </View>
         {durationMinutes === null ? null : (
           <View style={styles.chip}>
-            <MaterialCommunityIcons name="timer-outline" size={16} color={colors.textSecondary} />
+            <MaterialCommunityIcons
+              name="timer-outline"
+              size={iconSize.sm}
+              color={colors.textSecondary}
+            />
             <Text style={styles.chipLabel}>{`${String(durationMinutes)} min`}</Text>
           </View>
         )}
@@ -135,7 +141,11 @@ export const WashOfferCard = memo(function WashOfferCard({
           testID="offer-accept"
         >
           {locked ? (
-            <MaterialCommunityIcons name="lock-outline" size={18} color={colors.textSecondary} />
+            <MaterialCommunityIcons
+              name="lock-outline"
+              size={iconSize.md}
+              color={colors.textSecondary}
+            />
           ) : null}
           <Text style={[styles.acceptLabel, locked && styles.acceptLabelLocked]}>
             {accepting ? 'Accepting…' : 'Accept job'}
@@ -193,7 +203,8 @@ const styles = StyleSheet.create({
   // The ripple is clipped by its parent on Android, not by its own radius.
   acceptClip: { marginTop: spacing.base, borderRadius: radius.md, overflow: 'hidden' },
   accept: {
-    minHeight: 52,
+    // The screen's one primary action: a touch target plus a step, so it reads as primary.
+    minHeight: touchTarget + spacing.xs,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
