@@ -8,6 +8,7 @@ import { JsonLd } from '@/components/ui/JsonLd';
 import { BLOG_POSTS, findPost, formatPostDate, type BlogSlug } from '@/lib/blog';
 import { blogPostingJsonLd } from '@/lib/jsonld';
 import { BLOG_CONTENT } from '@/lib/mdx';
+import { OG_IMAGE } from '@/lib/seo';
 import { SITE_NAME, SITE_URL } from '@/lib/site';
 
 interface PostParams {
@@ -40,6 +41,7 @@ export async function generateMetadata({
       title: `${post.title} — ${SITE_NAME}`,
       description: post.description,
       publishedTime: post.published,
+      images: [OG_IMAGE],
     },
   };
 }

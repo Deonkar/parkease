@@ -1,10 +1,18 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
-import { MAP_ATTRIBUTION, StreetMap } from '@/components/sections/StreetMap';
+import { withRupee } from '@/lib/rupee';
 
-const STEPS = [
+/** Amounts the story quotes, passed in from lib/pricing so the client bundle skips contracts. */
+export interface StoryAmounts {
+  readonly ownerCancelGoodwill: string;
+  readonly valetFee: string;
+  readonly exampleHours: number;
+  readonly exampleTotal: string;
+}
+
+const steps = (a: StoryAmounts) => [
   {
     title: 'Drop a pin where you’re going',
     body: 'Pick car or two-wheeler. Green on the map means a slot is free right now, and nothing else on ParkEase is green.',
@@ -15,16 +23,28 @@ const STEPS = [
   },
   {
     title: 'Show your pass at the gate',
-    body: 'The owner scans it and you’re in. If they cancel on you, you get everything back plus ₹50 from us.',
+    body: `The owner scans it and you’re in. If they cancel on you, you get everything back plus ${a.ownerCancelGoodwill} from us.`,
   },
-] as const;
+];
 
 /**
  * The home page story: the app screen follows the step you're reading. Scrolling a step into
  * the middle of the viewport activates it; each step is also a button, so it works without
  * scrolling and from the keyboard.
  */
-export function HowItWorks({ qrPath }: { readonly qrPath: string }) {
+export function HowItWorks({
+  qrPath,
+  amounts,
+  map,
+  mapAttribution,
+}: {
+  readonly qrPath: string;
+  readonly amounts: StoryAmounts;
+  /** Rendered on the server and passed in, so the map geometry never ships as JavaScript. */
+  readonly map: ReactNode;
+  readonly mapAttribution: string;
+}) {
+  const STEPS = steps(amounts);
   const [active, setActive] = useState(0);
   const stepRefs = useRef<(HTMLLIElement | null)[]>([]);
 
@@ -53,11 +73,9 @@ export function HowItWorks({ qrPath }: { readonly qrPath: string }) {
         >
           <div className="relative size-full overflow-hidden rounded-[35px] bg-porcelain text-ink">
             <div className="screen" data-active={active === 0} aria-hidden={active !== 0}>
-              <div className="absolute inset-0">
-                <StreetMap theme="light" pinScale={1.45} />
-              </div>
+              <div className="absolute inset-0">{map}</div>
               <div className="absolute inset-x-3.5 top-4 flex flex-col gap-2">
-                <div className="flex h-12 items-center gap-2.5 rounded-[14px] bg-paper px-3.5 shadow-[0_2px_10px_rgba(8,17,30,0.12)]">
+                <div className="flex h-12 items-center gap-2.5 rounded-[14px] bg-paper px-3.5 shadow-[0_2px_10px_var(--pe-shadow-soft)]">
                   <svg
                     width="18"
                     height="18"
@@ -78,13 +96,13 @@ export function HowItWorks({ qrPath }: { readonly qrPath: string }) {
                   <span className="rounded-full bg-paper px-3 py-1.5">Two-wheeler</span>
                 </div>
               </div>
-              <div className="absolute inset-x-0 bottom-0 rounded-t-3xl bg-paper px-[18px] pt-3 pb-5 shadow-[0_-4px_16px_rgba(8,17,30,0.1)]">
+              <div className="absolute inset-x-0 bottom-0 rounded-t-3xl bg-paper px-[18px] pt-3 pb-5 shadow-[0_-4px_16px_var(--pe-shadow-soft)]">
                 <div className="mx-auto mb-3.5 h-1 w-10 rounded-full bg-rule" />
                 <div className="flex items-baseline justify-between gap-3">
                   <span className="text-lg font-extrabold">5 spaces free nearby</span>
                   <span className="text-[13px] text-slate">Closest first</span>
                 </div>
-                <p className="mt-1.5 text-[11px] text-slate">{MAP_ATTRIBUTION}</p>
+                <p className="mt-1.5 text-[11px] text-slate">{mapAttribution}</p>
               </div>
             </div>
 
@@ -108,7 +126,7 @@ export function HowItWorks({ qrPath }: { readonly qrPath: string }) {
                 </div>
                 <div className="rounded-[14px] bg-paper px-3.5">
                   {[
-                    ['Add a valet', '₹50 plus ₹10 a km'],
+                    ['Add a valet', amounts.valetFee],
                     ['Add a wash', 'From the partner’s menu'],
                   ].map(([title, sub]) => (
                     <div
@@ -126,10 +144,10 @@ export function HowItWorks({ qrPath }: { readonly qrPath: string }) {
                   ))}
                 </div>
               </div>
-              <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-paper px-[18px] pt-3.5 pb-5 shadow-[0_-4px_16px_rgba(8,17,30,0.08)]">
+              <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-paper px-[18px] pt-3.5 pb-5 shadow-[0_-4px_16px_var(--pe-shadow-soft)]">
                 <div>
-                  <p className="text-[13px] text-slate">2 hrs, incl. GST</p>
-                  <p className="type-figure text-[30px]">₹82.16</p>
+                  <p className="text-[13px] text-slate">{amounts.exampleHours} hrs, incl. GST</p>
+                  <p className="type-figure text-[30px]">{withRupee(amounts.exampleTotal)}</p>
                 </div>
                 <span className="inline-flex h-[46px] items-center rounded-xl bg-primary px-5 font-bold text-on-primary">
                   Pay and book

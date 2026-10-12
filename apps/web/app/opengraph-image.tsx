@@ -107,7 +107,8 @@ export default async function OpengraphImage() {
                   position: 'relative',
                   display: 'flex',
                   borderLeft: `4px solid ${webColors.floorPaint}`,
-                  borderRight: i === BAYS - 1 ? `4px solid ${webColors.floorPaint}` : undefined,
+                  // Satori rejects undefined style values, so the last bay's line is always set.
+                  borderRight: `4px solid ${i === BAYS - 1 ? webColors.floorPaint : 'transparent'}`,
                 }}
               >
                 {free ? (

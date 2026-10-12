@@ -8,6 +8,7 @@ import { SectionHeading } from '@/components/sections/SectionHeading';
 import { ServiceSwitch } from '@/components/sections/ServiceSwitch';
 import { PAGES } from '@/lib/pages';
 import { formatRupees, PRICING } from '@/lib/pricing';
+import { withRupee } from '@/lib/rupee';
 import { pageMetadata } from '@/lib/seo';
 
 export const metadata: Metadata = pageMetadata(PAGES.valet);
@@ -22,7 +23,7 @@ export default function ValetPage() {
         lead="Add a valet to any booking. They meet you where you stop, park at the bay you booked, and bring the car back when you ask for it."
         aside={
           <div className="flex flex-[0_1_320px] flex-col gap-1.5 rounded-[20px] bg-midnight-raised p-6.5 shadow-[inset_0_0_0_1px_var(--pe-midnight-rule)]">
-            <span className="type-figure text-6xl">{formatRupees(v.base)}</span>
+            <span className="type-figure text-6xl">{withRupee(formatRupees(v.base))}</span>
             <span className="text-[17px] font-bold">
               plus {formatRupees(v.perKm)} a km, each way
             </span>

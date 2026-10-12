@@ -6,12 +6,14 @@ import { HowItWorks } from '@/components/sections/HowItWorks';
 import { PageHero } from '@/components/sections/PageHero';
 import { ParkingFloor } from '@/components/sections/ParkingFloor';
 import { SectionHeading } from '@/components/sections/SectionHeading';
+import { MAP_ATTRIBUTION } from '@/components/sections/StreetMap';
 import { JsonLd } from '@/components/ui/JsonLd';
 import { estimateMonthlyEarnings } from '@/lib/earnings';
 import { softwareApplicationJsonLd } from '@/lib/jsonld';
 import { PAGES } from '@/lib/pages';
-import { PRICING } from '@/lib/pricing';
+import { formatRupees, PRICING } from '@/lib/pricing';
 import { qrPatternPath } from '@/lib/qr';
+import { withRupee } from '@/lib/rupee';
 import { pageMetadata } from '@/lib/seo';
 
 export const metadata: Metadata = pageMetadata(PAGES.home);
@@ -47,7 +49,25 @@ export default function HomePage() {
           <SectionHeading id="story-title" className="max-w-[820px]">
             Three moves, from your sofa to the gate.
           </SectionHeading>
-          <HowItWorks qrPath={qrPatternPath()} />
+          <HowItWorks
+            qrPath={qrPatternPath()}
+            map={
+              <img
+                src="/maps/indiranagar-light.svg"
+                alt=""
+                loading="lazy"
+                decoding="async"
+                className="size-full object-cover"
+              />
+            }
+            mapAttribution={MAP_ATTRIBUTION}
+            amounts={{
+              ownerCancelGoodwill: formatRupees(PRICING.refunds.ownerCancelGoodwill),
+              valetFee: `${formatRupees(PRICING.valet.base)} plus ${formatRupees(PRICING.valet.perKm)} a km`,
+              exampleHours: PRICING.example.hours,
+              exampleTotal: formatRupees(PRICING.example.driverTotal, 2),
+            }}
+          />
         </div>
       </section>
 
@@ -65,7 +85,7 @@ export default function HomePage() {
           </div>
           <figure className="flex flex-[0_1_400px] flex-col gap-2.5 rounded-[20px] bg-midnight p-8 text-on-midnight shadow-[0_30px_60px_-30px_var(--pe-shadow)]">
             <span className="text-[15px] font-bold text-on-midnight-muted">Example month</span>
-            <span className="type-figure text-8xl">₹{example.toLocaleString('en-IN')}</span>
+            <span className="type-figure text-8xl">{withRupee(formatRupees(example))}</span>
             <figcaption className="mt-1.5 border-t border-midnight-rule pt-3.5 text-[15px] leading-normal text-on-midnight-muted">
               One slot at ₹{EXAMPLE.hourlyPrice} an hour, booked {EXAMPLE.hoursPerDay} hours a day,
               after the {PRICING.commissionPercent}% ParkEase commission.

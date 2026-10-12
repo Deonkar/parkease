@@ -2,7 +2,8 @@ import { Atkinson_Hyperlegible_Next, Big_Shoulders, Big_Shoulders_Stencil } from
 
 /** Condensed signage face for display type. Self-hosted by next/font, so no third-party request. */
 export const bigShoulders = Big_Shoulders({
-  subsets: ['latin', 'latin-ext'],
+  // Only latin is preloaded; latin-ext (which has ₹) still loads on demand through unicode-range.
+  subsets: ['latin'],
   weight: ['800', '900'],
   variable: '--font-big-shoulders',
   display: 'swap',
@@ -23,7 +24,8 @@ export const bigShouldersStencil = Big_Shoulders_Stencil({
 
 /** Body text. Designed for legibility, and it covers the rupee sign. */
 export const atkinson = Atkinson_Hyperlegible_Next({
-  subsets: ['latin', 'latin-ext'],
+  // Only latin is preloaded; latin-ext (which has ₹) still loads on demand through unicode-range.
+  subsets: ['latin'],
   weight: ['400', '700', '800'],
   variable: '--font-atkinson',
   display: 'swap',

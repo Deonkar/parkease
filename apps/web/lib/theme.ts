@@ -37,6 +37,9 @@ const vars: Record<string, string> = {
   'warn-soft': webColors.warnSoft,
   'warn-ink': webColors.warnInk,
   shadow: webColors.shadow,
+  'shadow-soft': webColors.shadowSoft,
+  'car-shadow': webColors.carShadow,
+  'pin-shadow': webColors.pinShadow,
 };
 
 export const themeCss = `:root{${Object.entries(vars)

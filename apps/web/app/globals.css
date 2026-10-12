@@ -107,6 +107,15 @@
     font-weight: 900;
     line-height: 0.85;
   }
+  /* ₹ in display figures: a small raised sign in the body face (see lib/rupee.tsx). */
+  .rupee {
+    margin-right: 0.06em;
+    font-family: var(--font-sans);
+    font-size: 0.5em;
+    font-weight: 800;
+    line-height: 0;
+    vertical-align: 0.62em;
+  }
 
   /* Buttons: press feedback on every pressable; hover only for fine pointers. */
   .btn {
@@ -274,7 +283,9 @@
 .rise-line {
   display: block;
   overflow: hidden;
-  padding-bottom: 0.04em;
+  /* Room for descenders inside the mask, given back so line spacing is unchanged. */
+  padding-bottom: 0.14em;
+  margin-bottom: -0.1em;
 }
 .rise-line > span {
   display: block;

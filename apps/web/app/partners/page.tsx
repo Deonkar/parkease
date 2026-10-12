@@ -5,6 +5,7 @@ import { PageHero } from '@/components/sections/PageHero';
 import { Tabs } from '@/components/sections/Tabs';
 import { PAGES } from '@/lib/pages';
 import { formatRupees, PRICING } from '@/lib/pricing';
+import { withRupee } from '@/lib/rupee';
 import { pageMetadata } from '@/lib/seo';
 
 export const metadata: Metadata = pageMetadata(PAGES.partners);
@@ -23,16 +24,16 @@ function Panel({
   return (
     <div className="flex flex-wrap items-start gap-x-22 gap-y-12 rounded-t-3xl bg-porcelain px-6 py-16 text-ink md:px-12">
       <div className="flex flex-[1_1_420px] flex-col gap-4.5">
-        <span className="type-figure text-[clamp(44px,5vw,72px)]">{figure}</span>
+        <span className="type-figure text-[clamp(44px,5vw,72px)]">{withRupee(figure)}</span>
         <p className="max-w-[460px] text-[19px] leading-normal text-slate">{lead}</p>
         <div className="mt-2 flex gap-7 self-start rounded-[18px] bg-midnight px-6.5 py-5.5 text-on-midnight">
           <div>
             <p className="text-sm text-on-midnight-muted">{example[0]}</p>
-            <p className="type-figure text-[44px]">{example[1]}</p>
+            <p className="type-figure text-[44px]">{withRupee(example[1])}</p>
           </div>
           <div>
             <p className="text-sm text-on-midnight-muted">You earn</p>
-            <p className="type-figure text-[44px]">{example[2]}</p>
+            <p className="type-figure text-[44px]">{withRupee(example[2])}</p>
           </div>
         </div>
       </div>

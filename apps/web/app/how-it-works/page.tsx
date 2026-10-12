@@ -86,9 +86,9 @@ function Timeline({ stages }: { readonly stages: readonly Stage[] }) {
             >
               {i + 1}
             </span>
-            <h3 className="font-display text-[clamp(26px,2.6vw,36px)] leading-[0.95] font-extrabold md:flex-[0_1_380px]">
+            <h2 className="font-display text-[clamp(26px,2.6vw,36px)] leading-[0.95] font-extrabold md:flex-[0_1_380px]">
               {stage.title}
-            </h3>
+            </h2>
             <div className="flex flex-[1_1_380px] flex-col gap-2.5">
               <p className="max-w-[560px] text-lg leading-relaxed text-slate">{stage.body}</p>
               <span className="self-start rounded-md bg-mist px-2.5 py-1.5 text-sm font-bold">

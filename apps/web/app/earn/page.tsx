@@ -29,10 +29,7 @@ export default function EarnPage() {
           </>
         }
         aside={
-          <aside
-            aria-labelledby="offer-title"
-            className="w-full flex-[0_1_320px] rounded-xl bg-primary p-2 text-on-primary shadow-[0_24px_48px_-20px_var(--pe-shadow)]"
-          >
+          <div className="w-full flex-[0_1_320px] rounded-xl bg-primary p-2 text-on-primary shadow-[0_24px_48px_-20px_var(--pe-shadow)]">
             <div className="flex flex-col gap-2 rounded-[7px] border-[2.5px] border-on-primary px-5.5 pt-5.5 pb-5">
               <h2 id="offer-title" className="type-figure text-8xl">
                 0%
@@ -45,7 +42,7 @@ export default function EarnPage() {
                 covers our share.
               </p>
             </div>
-          </aside>
+          </div>
         }
       />
       <section id="estimate" aria-labelledby="estimate-title" className="bg-paper">

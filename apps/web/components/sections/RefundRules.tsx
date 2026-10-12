@@ -1,4 +1,5 @@
 import { PRICING } from '@/lib/pricing';
+import { withRupee } from '@/lib/rupee';
 
 export function RefundRules() {
   const r = PRICING.refunds;
@@ -28,7 +29,7 @@ export function RefundRules() {
           <dt
             className={`type-figure flex-[0_0_250px] text-[44px] leading-none ${row.highlight ? 'text-primary' : ''}`}
           >
-            {row.figure}
+            {withRupee(row.figure)}
           </dt>
           <dd className="flex-[1_1_220px] text-[17px] leading-normal">{row.text}</dd>
         </div>

@@ -3,6 +3,7 @@
 import { useId, useState } from 'react';
 
 import { estimateMonthlyEarnings } from '@/lib/earnings';
+import { withRupee } from '@/lib/rupee';
 
 type Vehicle = 'car' | 'two_wheeler';
 
@@ -66,7 +67,7 @@ export function EarningsCalculator({
           {label}
         </label>
         <output htmlFor={`${id}-${key}`} className="type-figure text-4xl">
-          {shown}
+          {withRupee(shown)}
         </output>
       </div>
       <input
@@ -141,7 +142,7 @@ export function EarningsCalculator({
       <div className="flex max-w-[540px] min-w-0 flex-[1_1_420px] flex-col gap-4 rounded-3xl bg-midnight p-8 text-on-midnight shadow-[0_40px_80px_-40px_var(--pe-shadow)]">
         <span className="font-bold text-on-midnight-muted">Estimated monthly earnings</span>
         <span aria-live="polite" className="type-figure text-[clamp(64px,8vw,104px)]">
-          {inr(monthly)}
+          {withRupee(inr(monthly))}
         </span>
         <span className="text-on-midnight-muted">
           {waived

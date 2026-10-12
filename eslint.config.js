@@ -169,6 +169,12 @@ export default tseslint.config(
     rules: { '@typescript-eslint/no-require-imports': 'off' },
   },
   {
+    files: ['apps/web/scripts/**/*.mjs'],
+    languageOptions: {
+      globals: { process: 'readonly', fetch: 'readonly', Buffer: 'readonly' },
+    },
+  },
+  {
     ignores: [
       '**/dist/**',
       '**/.next/**',

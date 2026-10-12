@@ -9,6 +9,7 @@ import { PageHero } from '@/components/sections/PageHero';
 import { SectionHeading } from '@/components/sections/SectionHeading';
 import { cityDescription, cityTitle, findCity, LAUNCHED_CITIES, type CitySlug } from '@/lib/cities';
 import { PRICING } from '@/lib/pricing';
+import { OG_IMAGE } from '@/lib/seo';
 
 interface CityParams {
   readonly city: CitySlug;
@@ -46,6 +47,7 @@ export async function generateMetadata({
       url: path,
       title: `Parking in ${city.name} — ParkEase`,
       description: `${city.vehicleCount} vehicles, not enough parking. ParkEase connects drivers with private parking spaces in ${city.name}.`,
+      images: [OG_IMAGE],
     },
   };
 }

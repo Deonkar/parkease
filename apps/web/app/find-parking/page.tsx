@@ -8,6 +8,7 @@ import { MAP_ATTRIBUTION, StreetMap } from '@/components/sections/StreetMap';
 import { Badge } from '@/components/ui/Badge';
 import { LAUNCHED_CITIES } from '@/lib/cities';
 import { PAGES } from '@/lib/pages';
+import { withRupee } from '@/lib/rupee';
 import { pageMetadata } from '@/lib/seo';
 
 export const metadata: Metadata = pageMetadata(PAGES.findParking);
@@ -97,10 +98,12 @@ export default function FindParkingPage() {
                 Two-wheeler
               </span>
             </div>
-            {[
-              ['Covered basement, 12th Main', '6 two-wheeler slots free', '₹15/hr'],
-              ['Gated driveway, 4th Cross', '2 two-wheeler slots free', '₹10/hr'],
-            ].map(([name, free, price]) => (
+            {(
+              [
+                ['Covered basement, 12th Main', '6 two-wheeler slots free', '₹15/hr'],
+                ['Gated driveway, 4th Cross', '2 two-wheeler slots free', '₹10/hr'],
+              ] as const
+            ).map(([name, free, price]) => (
               <div
                 key={name}
                 className="flex items-center justify-between gap-3 rounded-[14px] bg-paper p-4"
@@ -111,7 +114,9 @@ export default function FindParkingPage() {
                     <Badge tone="free">{free}</Badge>
                   </div>
                 </div>
-                <span className="type-figure text-[26px] whitespace-nowrap">{price}</span>
+                <span className="type-figure text-[26px] whitespace-nowrap">
+                  {withRupee(price)}
+                </span>
               </div>
             ))}
           </div>

@@ -1,5 +1,7 @@
 import { webColors } from '@parkease/tokens';
 
+import { formatRupees, PRICING } from '@/lib/pricing';
+
 const BAYS = 15;
 const FREE_INDEX = 7;
 const FIRST_NUMBER = 9;
@@ -11,7 +13,7 @@ function Car({ color }: { readonly color: string }) {
       height="160"
       viewBox="0 0 78 160"
       fill="none"
-      className="drop-shadow-[0_12px_14px_rgba(0,0,0,0.45)]"
+      className="drop-shadow-[0_12px_14px_var(--pe-car-shadow)]"
     >
       <rect x="1" y="1" width="76" height="158" rx="22" fill={color} />
       <rect x="10" y="44" width="58" height="66" rx="12" fill={webColors.paper} opacity="0.045" />
@@ -31,7 +33,7 @@ function Car({ color }: { readonly color: string }) {
 function LeavingCar() {
   return (
     <svg
-      className="floor-leaving absolute top-6 left-6 overflow-visible drop-shadow-[0_12px_14px_rgba(0,0,0,0.45)]"
+      className="floor-leaving absolute top-6 left-6 overflow-visible drop-shadow-[0_12px_14px_var(--pe-car-shadow)]"
       width="78"
       height="160"
       viewBox="0 0 78 160"
@@ -119,7 +121,7 @@ export function ParkingFloor() {
       </div>
       <div aria-hidden="true" className="kerb" />
       <div className="floor-card absolute top-[calc(100%-30px)] left-1/2 z-[2] w-[min(372px,calc(100%-32px))] -translate-x-1/2">
-        <div className="flex items-center justify-between gap-3.5 rounded-2xl bg-paper p-[18px] text-ink shadow-[0_2px_4px_rgba(8,17,30,0.08),0_24px_48px_-14px_var(--pe-shadow)]">
+        <div className="flex items-center justify-between gap-3.5 rounded-2xl bg-paper p-[18px] text-ink shadow-[0_2px_4px_var(--pe-shadow-soft),0_24px_48px_-14px_var(--pe-shadow)]">
           <div className="flex min-w-0 flex-col gap-1">
             <span className="text-[17px] font-extrabold">Bay 16, 12th Main</span>
             <span className="inline-flex items-center gap-2 text-sm font-bold text-available-ink">
@@ -128,7 +130,7 @@ export function ParkingFloor() {
             </span>
           </div>
           <span className="inline-flex h-11 shrink-0 items-center rounded-[10px] bg-primary px-4 font-bold text-on-primary">
-            Book ₹40/hr
+            Book {formatRupees(PRICING.example.hourly)}/hr
           </span>
         </div>
       </div>

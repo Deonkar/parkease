@@ -41,7 +41,8 @@ export const webColors = {
   /** The parking floor under the hero. */
   floor: '#0D1828',
   floorPaint: 'rgba(226, 232, 240, 0.8)',
-  floorStencil: '#4A5D78',
+  /** Painted bay numbers: quiet, but 3:1 on the floor because they are real (large) text. */
+  floorStencil: '#6A80A2',
   /** Parked cars are quiet silhouettes so the lit bay is the only bright thing. */
   carShades: ['#1B2637', '#243045', '#1E2A3C', '#2A374B', '#212D40', '#283449', '#1C283A'],
   carLeaving: '#33425A',
@@ -65,6 +66,12 @@ export const webColors = {
   warnSoft: colors.surgeSoft,
   warnInk: colors.surge,
   shadow: 'rgba(8, 17, 30, 0.45)',
+  /** Light lift for cards and sheets on paper. */
+  shadowSoft: 'rgba(8, 17, 30, 0.1)',
+  /** Parked cars on the floor. */
+  carShadow: 'rgba(0, 0, 0, 0.45)',
+  /** Map pins. */
+  pinShadow: 'rgba(8, 17, 30, 0.35)',
 
   /** Map styles, drawn from OpenStreetMap geometry. Parks stay grey: green means free. */
   mapLight: {

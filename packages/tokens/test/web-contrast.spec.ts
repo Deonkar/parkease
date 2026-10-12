@@ -46,6 +46,7 @@ describe('web palette — non-text clears 3:1', () => {
     ['focus ring on porcelain', c.focus, c.porcelain],
     ['focus ring on midnight', c.focus, c.midnight],
     ['field border on paper', c.slate, c.paper],
+    ['stencilled bay numbers on floor (large text)', c.floorStencil, c.floor],
   ])('%s', (_label, fg, bg) => {
     expect(contrast(fg, bg)).toBeGreaterThanOrEqual(3);
   });
