@@ -75,7 +75,7 @@ export default function ContactPage() {
               </dd>
             </div>
             <div className="border-t border-rule py-4.5 sm:col-span-2">
-              <dt className="text-sm text-slate">Registered office</dt>
+              <dt className="text-sm text-slate">Based in</dt>
               <dd className="mt-1 text-lg font-bold">
                 {COMPANY.legalName}, {COMPANY.address}
               </dd>

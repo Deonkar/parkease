@@ -12,10 +12,15 @@ export interface LegalDocMeta {
   readonly sections: readonly string[];
 }
 
-/** Drafts are published so the stores and Razorpay can reach them; counsel signs off before launch. */
-export const LEGAL_STATUS: { readonly draft: boolean; readonly updated: string } = {
-  draft: true,
-  updated: '2026-10-07',
+/**
+ * ParkEase is a portfolio project, so these are sample documents: the rules that mirror the
+ * product (refund tiers, fees, processors) are real, and the rest is placeholder text. Before any
+ * real launch they need writing in full and review by counsel; `notice` then becomes null.
+ */
+export const LEGAL_STATUS: { readonly notice: string | null; readonly updated: string } = {
+  notice:
+    'Sample policy for a portfolio project. Parts are placeholder text, and none of it is legal advice.',
+  updated: '2026-10-12',
 };
 
 export const LEGAL_DOCS = [

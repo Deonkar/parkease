@@ -29,7 +29,7 @@ export function Tabs({
       <div
         role="tablist"
         aria-label={label}
-        className="relative flex self-start rounded-2xl bg-midnight-raised p-1.5 shadow-[inset_0_0_0_1px_var(--pe-midnight-rule)]"
+        className="relative flex w-full max-w-[440px] self-start rounded-2xl bg-midnight-raised p-1.5 shadow-[inset_0_0_0_1px_var(--pe-midnight-rule)]"
         onKeyDown={(e) => {
           if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
             const next = active === 0 ? 1 : 0;
@@ -55,7 +55,7 @@ export function Tabs({
             onClick={() => {
               setActive(i);
             }}
-            className={`relative h-[52px] w-[150px] cursor-pointer text-[17px] font-bold transition-colors sm:w-[210px] ${active === i ? 'text-midnight' : 'text-on-midnight-muted'}`}
+            className={`relative h-[52px] flex-1 cursor-pointer px-2 text-[15px] leading-tight font-bold transition-colors sm:text-[17px] ${active === i ? 'text-midnight' : 'text-on-midnight-muted'}`}
           >
             {item.label}
           </button>

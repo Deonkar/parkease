@@ -46,7 +46,7 @@ export default function FindParkingPage() {
           </>
         }
         aside={
-          <figure className="relative h-[460px] w-full flex-[1_1_480px] overflow-hidden rounded-[28px] shadow-[inset_0_0_0_1px_var(--pe-midnight-rule),0_40px_80px_-40px_var(--pe-shadow)] md:h-[520px]">
+          <figure className="relative h-[320px] w-full flex-[1_1_480px] sm:h-[460px] overflow-hidden rounded-[28px] shadow-[inset_0_0_0_1px_var(--pe-midnight-rule),0_40px_80px_-40px_var(--pe-shadow)] md:h-[520px]">
             <StreetMap theme="dark" pinScale={2.2} animatePins />
             <figcaption className="absolute right-3.5 bottom-2.5 text-[11px] text-on-midnight-muted">
               {MAP_ATTRIBUTION}

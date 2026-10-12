@@ -1,3 +1,5 @@
+import { PhotoTile } from '@/components/ui/PhotoTile';
+
 /** The in-app wash record: the product's proof, shown without inventing a photo. */
 export function WashProof() {
   const timeline = [
@@ -22,12 +24,8 @@ export function WashProof() {
           ['After', '2:41pm'],
         ].map(([label, time]) => (
           <figure key={label} className="flex flex-col gap-2">
-            <div
-              role="img"
-              aria-label={`${String(label)} photo, taken by the wash partner`}
-              className="flex aspect-[4/3] items-center justify-center rounded-[14px] bg-gradient-to-br from-midnight-raised to-floor p-3 text-center text-[13px] font-bold text-on-midnight-muted"
-            >
-              [Partner’s {label?.toLowerCase()} photo]
+            <div role="img" aria-label={`${String(label)} photo, taken by the wash partner`}>
+              <PhotoTile label={`${String(label)} photo`} className="aspect-[4/3] rounded-[14px]" />
             </div>
             <figcaption className="text-sm text-slate">
               <strong className="text-ink">{label}</strong>, {time}

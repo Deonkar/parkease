@@ -186,7 +186,7 @@ export function EarningsCalculator({
         </label>
         <p className="border-t border-midnight-rule pt-3 text-sm leading-relaxed text-on-midnight-muted">
           Price × hours × 30 days. Excludes busy-hour charges, which drivers pay on top. Paid weekly
-          on Mondays once you’ve earned ₹{minimumPayout}.
+          or monthly once you’ve earned ₹{minimumPayout}.
         </p>
       </div>
     </div>

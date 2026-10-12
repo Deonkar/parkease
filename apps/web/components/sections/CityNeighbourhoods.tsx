@@ -16,9 +16,9 @@ export function CityNeighbourhoods({ city }: { readonly city: City }) {
         {city.neighbourhoods.map((name, i) => (
           <li
             key={name}
-            className="flex h-[168px] flex-col justify-between border-x-2 border-floor-paint px-5 pt-6 pb-4 md:h-[220px] md:w-[200px]"
+            className="flex h-[168px] flex-col justify-between border-x-2 border-floor-paint px-4 pt-6 pb-4 md:px-5 md:h-[220px] md:w-[200px]"
           >
-            <span className="text-[22px] leading-tight font-extrabold">{name}</span>
+            <span className="text-[19px] leading-tight font-extrabold md:text-[22px]">{name}</span>
             <span
               aria-hidden="true"
               className="font-stencil text-[44px] leading-none font-extrabold text-floor-stencil"

@@ -17,7 +17,7 @@ export default function EarnPage() {
     <>
       <PageHero
         lines={['Your driveway', 'sits empty', 'from 9 to 6.']}
-        lead="Rent it to someone who works nearby. You set the price and the hours; ParkEase finds the drivers and pays you every Monday."
+        lead="Rent it to someone who works nearby. You set the price and the hours; ParkEase finds the drivers and pays you weekly or monthly, whichever you choose."
         actions={
           <>
             <Link className="btn btn-light" href="#start">

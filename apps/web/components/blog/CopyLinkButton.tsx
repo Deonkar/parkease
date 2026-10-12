@@ -9,7 +9,7 @@ export function CopyLinkButton({ url }: { readonly url: string }) {
   return (
     <button
       type="button"
-      className="btn btn-sm btn-ink"
+      className="btn btn-sm btn-outline-light"
       onClick={() => {
         void navigator.clipboard.writeText(url).then(() => {
           setCopied(true);

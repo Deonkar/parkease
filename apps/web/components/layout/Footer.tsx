@@ -1,7 +1,7 @@
 import Link from 'next/link';
 
 import { LAUNCHED_CITIES } from '@/lib/cities';
-import { COMPANY, CONTACT, FOOTER_NAV } from '@/lib/site';
+import { COMPANY, CONTACT, FOOTER_NAV, PROJECT_NOTE } from '@/lib/site';
 
 export function Footer() {
   return (
@@ -12,10 +12,14 @@ export function Footer() {
           <p className="font-display text-[27px] font-extrabold text-on-midnight">ParkEase</p>
           <p className="leading-relaxed">
             {COMPANY.legalName}
+            {COMPANY.cin !== null && (
+              <>
+                <br />
+                CIN {COMPANY.cin}
+              </>
+            )}
             <br />
-            CIN {COMPANY.cin}
-            <br />
-            Registered office: {COMPANY.address}
+            {COMPANY.address}
           </p>
           <p className="leading-relaxed">
             Grievance officer: {COMPANY.grievanceOfficer},{' '}
@@ -41,6 +45,7 @@ export function Footer() {
       </div>
       <div className="wrap flex flex-wrap justify-between gap-x-6 gap-y-3 border-t border-midnight-rule pt-5 pb-8">
         <span>© {new Date().getFullYear()} ParkEase</span>
+        <span className="basis-full text-sm sm:order-last">{PROJECT_NOTE}</span>
         <span className="flex flex-wrap gap-x-5 gap-y-1.5">
           Parking in
           {LAUNCHED_CITIES.map((city) => (

@@ -90,9 +90,9 @@ export default async function CityPage({ params }: { readonly params: Promise<Ci
           <div className="flex flex-[1_1_480px] flex-col gap-5">
             <SectionHeading id="own-title">Got a space in {city.name}?</SectionHeading>
             <p className="max-w-[520px] text-lg leading-relaxed text-slate">
-              List it free, set your own price and hours, and get paid every Monday. ParkEase keeps{' '}
-              {PRICING.commissionPercent}%, and nothing at all for the first {PRICING.waiverMonths}{' '}
-              months if you’re one of the first {PRICING.waiverSlots} owners.
+              List it free, set your own price and hours, and get paid weekly or monthly. ParkEase
+              keeps {PRICING.commissionPercent}%, and nothing at all for the first{' '}
+              {PRICING.waiverMonths} months if you’re one of the first {PRICING.waiverSlots} owners.
             </p>
             <div>
               <Link className="btn btn-primary" href="/earn#estimate">

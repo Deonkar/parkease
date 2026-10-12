@@ -63,7 +63,7 @@ export function PricingTable() {
             label: 'Launch offer',
             value: `0% for ${String(p.waiverMonths)} months, first ${String(p.waiverSlots)} owners`,
           },
-          { label: 'Payouts', value: 'Weekly, every Monday' },
+          { label: 'Payouts', value: p.payouts.label },
           { label: 'Minimum payout', value: formatRupees(p.minimumPayout) },
         ]}
       />

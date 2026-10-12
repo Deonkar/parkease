@@ -49,7 +49,7 @@ export const OWNER_FAQ: readonly FaqItem[] = [
   },
   {
     question: 'When do I get paid?',
-    answer: `Every Monday, to the bank account you connected through Razorpay, once your balance is at least ₹${String(p.minimumPayout)}.`,
+    answer: `Weekly on Mondays or monthly on the 1st, whichever you choose, to the bank account you connected through Razorpay, once your balance is at least ₹${String(p.minimumPayout)}.`,
   },
   {
     question: 'Do busy-hour charges change what I earn?',

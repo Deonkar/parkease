@@ -31,6 +31,12 @@ describe('pricing (ADR-009)', () => {
     expect(ledger('For space owners')).toContain('15% of the base booking price, charged once');
   });
 
+  it('offers weekly or monthly payouts with a ₹100 minimum', () => {
+    const owners = ledger('For space owners');
+    expect(owners).toContain('Weekly (Monday) or monthly (1st)');
+    expect(owners).toContain('₹100');
+  });
+
   it('lists valet and car wash commission as 20%', () => {
     expect(ledger('For valet partners')).toContain('20% of valet fee');
     expect(ledger('For car wash partners')).toContain('20% of service price');

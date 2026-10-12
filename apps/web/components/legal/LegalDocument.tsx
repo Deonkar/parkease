@@ -29,7 +29,7 @@ export async function LegalDocument({ doc }: { readonly doc: LegalDoc }) {
                   key={d.doc}
                   href={PAGES[d.page].path}
                   aria-current={current ? 'page' : undefined}
-                  className={`shrink-0 rounded-t-xl px-5 py-3.5 text-[17px] font-bold ${
+                  className={`shrink-0 rounded-t-xl px-3 py-3.5 text-[15px] font-bold sm:px-5 sm:text-[17px] ${
                     current
                       ? 'bg-porcelain text-ink'
                       : 'text-on-midnight-muted hover:text-on-midnight'
@@ -44,9 +44,9 @@ export async function LegalDocument({ doc }: { readonly doc: LegalDoc }) {
       </section>
       <div className="wrap flex flex-wrap gap-x-20 gap-y-10 py-16 md:py-20">
         <aside className="flex flex-[1_1_240px] flex-col gap-6 md:max-w-[280px]">
-          {LEGAL_STATUS.draft && (
+          {LEGAL_STATUS.notice !== null && (
             <p className="rounded-xl bg-warn-soft px-4 py-3 text-[15px] font-bold text-warn-ink">
-              Draft, pending legal review.
+              {LEGAL_STATUS.notice}
             </p>
           )}
           <p className="text-[15px] text-slate">

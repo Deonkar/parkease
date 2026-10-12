@@ -1,36 +1,48 @@
 export const SITE_URL = 'https://parkease.in';
 export const SITE_NAME = 'ParkEase';
 
-/** Android's listing is derived from the real package id in apps/mobile/app.json. */
+/**
+ * ParkEase is a portfolio project: the apps are not in the stores yet. Each store button links
+ * only when its listing URL is configured, and otherwise says the app is coming soon, so the site
+ * never sends anyone to a listing that does not exist.
+ */
 export const STORE_LINKS = {
-  android: 'https://play.google.com/store/apps/details?id=in.parkease.app',
-  /** The App Store id is assigned at first submission; until then the iPhone button says so. */
+  android: process.env.NEXT_PUBLIC_PLAY_STORE_URL ?? null,
   ios: process.env.NEXT_PUBLIC_APP_STORE_URL ?? null,
 } as const;
 
-/**
- * Mailboxes and company details shown in the footer, contact and legal pages.
- * Indian e-commerce and IT rules require the legal name, address and grievance officer to be
- * published. Values in brackets are pending from the founder (see the PR description).
- */
+/** Shown in the footer while the project is a showcase rather than a live service. */
+export const PROJECT_NOTE =
+  'ParkEase is a portfolio project. The apps are not in the stores yet, and no bookings or payments are taken.';
+
+const OWNER_EMAIL = 'onkardeokate@gmail.com';
+
+/** Every route goes to the project owner while ParkEase has no mailboxes of its own. */
 export const CONTACT = {
-  support: 'support@parkease.in',
-  partners: 'partners@parkease.in',
-  press: 'press@parkease.in',
-  grievance: 'grievance@parkease.in',
+  support: OWNER_EMAIL,
+  partners: OWNER_EMAIL,
+  press: OWNER_EMAIL,
+  grievance: OWNER_EMAIL,
 } as const;
 
-export const COMPANY = {
-  legalName: '[LEGAL ENTITY NAME] Private Limited',
-  cin: '[CIN]',
-  address: '[REGISTERED ADDRESS], Bengaluru [PIN]',
-  grievanceOfficer: '[GRIEVANCE OFFICER NAME]',
-} as const;
+/**
+ * Who runs the project. A registered company would add its CIN and registered office here; the
+ * footer, contact and legal pages show those lines only when they are set.
+ */
+export const COMPANY: {
+  readonly legalName: string;
+  readonly cin: string | null;
+  readonly address: string;
+  readonly grievanceOfficer: string;
+} = {
+  legalName: 'ParkEase, a project by Onkar Deokate',
+  cin: null,
+  address: 'Bengaluru, Karnataka, India',
+  grievanceOfficer: 'Onkar Deokate',
+};
 
-export const SOCIAL = [
-  'https://www.instagram.com/parkease.in',
-  'https://www.linkedin.com/company/parkease',
-];
+/** The project's public profile. Add social accounts here once they exist. */
+export const SOCIAL = ['https://github.com/Deonkar/parkease'];
 
 export interface NavLink {
   readonly href: string;

@@ -53,7 +53,7 @@ export default function PricingPage() {
                 <div
                   key={s.label}
                   style={{ flexGrow: s.amount }}
-                  className={`flex min-w-16 basis-0 flex-col justify-end rounded-[4px] px-3 py-3.5 first:rounded-l-[10px] last:rounded-r-[10px] ${s.className}`}
+                  className={`flex min-w-[88px] basis-0 flex-col justify-end rounded-[4px] px-3 py-3.5 first:rounded-l-[10px] last:rounded-r-[10px] ${s.className}`}
                 >
                   <span className={`type-figure ${s.size}`}>
                     {withRupee(formatRupees(s.amount, s.amount % 1 === 0 ? 0 : 2))}

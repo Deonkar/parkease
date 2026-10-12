@@ -48,6 +48,14 @@ export const PRICING = {
   waiverSlots: COMMISSION_WAIVER_SLOTS,
   waiverMonths: COMMISSION_WAIVER_MONTHS,
   minimumPayout: rupees(MINIMUM_PAYOUT_PAISE),
+  /**
+   * Owners choose weekly (Mondays) or monthly (the 1st) payouts, per the task 20 pricing table.
+   * Contracts do not model the schedule yet, so it is stated here rather than derived.
+   */
+  payouts: {
+    label: 'Weekly (Monday) or monthly (1st)',
+    sentence: 'every Monday, or on the 1st of the month if you prefer',
+  },
   example: {
     hours: 2,
     hourly: 40,

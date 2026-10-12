@@ -23,7 +23,7 @@ export const PAGES = {
     path: '/how-it-works',
     title: 'How It Works',
     description:
-      'How ParkEase works for drivers and space owners: find a free slot, book by the hour, show your pass at the gate, and get paid every Monday.',
+      'How ParkEase works for drivers and space owners: find a free slot, book by the hour, show your pass at the gate, and get paid weekly or monthly.',
   },
   earn: {
     path: '/earn',

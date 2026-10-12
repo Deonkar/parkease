@@ -67,22 +67,25 @@ const OWNER: readonly Stage[] = [
     note: 'You can rate every driver',
   },
   {
-    title: 'Get paid on Mondays',
-    body: `Your share lands in your bank every Monday once you’ve earned at least ₹${String(PRICING.minimumPayout)}.`,
+    title: 'Get paid weekly or monthly',
+    body: `Your share lands in your bank ${PRICING.payouts.sentence}, once you’ve earned at least ₹${String(PRICING.minimumPayout)}.`,
     note: `${String(PRICING.commissionPercent)}% commission, or 0% for the first ${String(PRICING.waiverSlots)} owners for ${String(PRICING.waiverMonths)} months`,
   },
 ];
 
 function Timeline({ stages }: { readonly stages: readonly Stage[] }) {
   return (
-    <div className="relative pl-24">
-      <div aria-hidden="true" className="absolute top-3 bottom-3 left-[30px] w-[3px] bg-primary" />
+    <div className="relative pl-16 md:pl-24">
+      <div
+        aria-hidden="true"
+        className="absolute top-3 bottom-3 left-[22px] w-[3px] bg-primary md:left-[30px]"
+      />
       <ol className="flex flex-col gap-14">
         {stages.map((stage, i) => (
           <li key={stage.title} className="relative flex flex-wrap items-baseline gap-x-12 gap-y-3">
             <span
               aria-hidden="true"
-              className="absolute -top-1.5 -left-24 flex size-16 items-center justify-center rounded-full bg-paper font-stencil text-[34px] font-extrabold text-primary shadow-[inset_0_0_0_3px_var(--pe-primary)]"
+              className="absolute -top-1 -left-16 flex size-12 items-center justify-center rounded-full bg-paper font-stencil text-[26px] md:-top-1.5 md:-left-24 md:size-16 md:text-[34px] font-extrabold text-primary shadow-[inset_0_0_0_3px_var(--pe-primary)]"
             >
               {i + 1}
             </span>

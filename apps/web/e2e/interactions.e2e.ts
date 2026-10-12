@@ -31,7 +31,7 @@ test.describe('tabs', () => {
 
     await listing.click();
     await expect(listing).toHaveAttribute('aria-selected', 'true');
-    await expect(page.getByRole('heading', { name: 'Get paid on Mondays' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Get paid weekly or monthly' })).toBeVisible();
 
     await listing.press('ArrowLeft');
     await expect(parking).toBeFocused();

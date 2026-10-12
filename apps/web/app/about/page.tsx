@@ -59,14 +59,14 @@ export default function AboutPage() {
       <section aria-labelledby="company-title">
         <div className="wrap flex flex-wrap gap-x-22 gap-y-10 py-28">
           <SectionHeading id="company-title" className="max-w-[420px] flex-[1_1_320px]">
-            The company
+            Who’s behind it
           </SectionHeading>
           <div className="flex flex-[1_1_560px] flex-col gap-10">
             <dl className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-x-10">
               {[
-                ['Legal name', COMPANY.legalName],
-                ['CIN', COMPANY.cin],
-                ['Registered office', COMPANY.address],
+                ['Who runs it', COMPANY.legalName],
+                ...(COMPANY.cin === null ? [] : [['CIN', COMPANY.cin]]),
+                ['Based in', COMPANY.address],
                 ['Grievance officer', COMPANY.grievanceOfficer],
               ].map(([label, value]) => (
                 <div key={label} className="border-t border-rule py-4.5">

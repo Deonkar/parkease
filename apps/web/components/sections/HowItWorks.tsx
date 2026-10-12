@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
+import { PhotoTile } from '@/components/ui/PhotoTile';
 import { withRupee } from '@/lib/rupee';
 
 /** Amounts the story quotes, passed in from lib/pricing so the client bundle skips contracts. */
@@ -107,9 +108,7 @@ export function HowItWorks({
             </div>
 
             <div className="screen" data-active={active === 1} aria-hidden={active !== 1}>
-              <div className="flex h-[168px] items-center justify-center bg-gradient-to-br from-midnight-raised to-floor px-3 text-center text-[13px] font-bold text-on-midnight-muted">
-                [Owner’s listing photo]
-              </div>
+              <PhotoTile label="Owner’s photos" className="h-[168px]" />
               <div className="flex flex-col gap-3.5 p-[18px]">
                 <div>
                   <p className="text-lg font-extrabold">Covered basement, 12th Main</p>
@@ -213,7 +212,7 @@ export function HowItWorks({
                 onClick={() => {
                   setActive(i);
                 }}
-                className={`flex cursor-pointer flex-col gap-3 text-left transition-colors duration-200 ${active === i ? 'text-ink' : 'text-slate'}`}
+                className={`flex cursor-pointer flex-col gap-3 text-left transition-colors duration-200 ${active === i ? 'text-ink' : 'text-ink min-[900px]:text-slate'}`}
               >
                 <span className="font-display text-[clamp(28px,2.8vw,38px)] leading-[0.95] font-black">
                   {step.title}

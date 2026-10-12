@@ -38,7 +38,7 @@ export const BLOG_POSTS = [
     slug: 'what-the-commission-pays-for',
     title: 'What the 15% commission pays for',
     description:
-      'Where the ParkEase commission goes: payments, weekly payouts, support, and the goodwill we pay drivers when an owner has to cancel a booking.',
+      'Where the ParkEase commission goes: payments, payouts, support, and the goodwill we pay drivers when an owner has to cancel a booking.',
     category: 'Owners',
     published: '2026-10-07',
     minutes: 4,

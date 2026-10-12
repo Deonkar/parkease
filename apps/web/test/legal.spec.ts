@@ -19,6 +19,10 @@ describe('legal documents', () => {
     expect(PAGES[page].path).toBe(`/legal/${doc}`);
   });
 
+  it.each(LEGAL_DOCS)('$doc: has no unfinished draft markers', ({ doc }) => {
+    expect(read(doc)).not.toMatch(/\[DRAFT|\[X\]|\[[A-Z ]+\]/);
+  });
+
   it('the refund policy quotes the contracts constants, not typed numbers', () => {
     const refunds = read('refunds');
     expect(refunds).toContain('{PRICING.refunds.processingFee}');
