@@ -1,0 +1,5 @@
+/* WCAG 1.4.1 (S-157, axe link-in-text-block): the attribution links sit in a line of text, so
+   colour alone must not be what marks them as links. */
+.maplibregl-ctrl-attrib a {
+  text-decoration: underline;
+}

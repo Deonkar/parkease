@@ -49,6 +49,7 @@ export function UsersPage() {
         />
         <Select
           allowClear
+          aria-label="Filter by role"
           placeholder="Role"
           style={{ width: 140 }}
           value={role}

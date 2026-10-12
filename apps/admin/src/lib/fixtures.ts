@@ -411,7 +411,16 @@ const GET: [RegExp, () => Fixture][] = [
   ],
 ];
 
+/** A space decision answers its result contract (S-142). */
+const SPACE_DECISION = /^\/admin\/spaces\/([^/]+)\/(approve|reject|request-changes)$/;
+const DECIDED = { approve: 'active', reject: 'rejected', 'request-changes': 'changes_requested' };
+
 export function fixtureFor(method: string, path: string): Fixture {
+  const decision = method === 'POST' ? SPACE_DECISION.exec(path) : null;
+  if (decision !== null) {
+    const [, spaceId, verb] = decision;
+    return { data: { id: spaceId, approvalStatus: DECIDED[verb as keyof typeof DECIDED] } };
+  }
   if (method !== 'GET') return { data: {} };
   const match = GET.find(([pattern]) => pattern.test(path));
   if (match === undefined) throw new Error(`No admin fixture for GET ${path}`);

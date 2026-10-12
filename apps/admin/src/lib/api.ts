@@ -8,6 +8,16 @@ import { currentToken, refreshOnce, signedOut } from './session';
 const API_BASE = `${import.meta.env.VITE_API_URL ?? ''}/api/v1`;
 export const FIXTURES = import.meta.env.VITE_ADMIN_FIXTURES === '1';
 
+/** Which state the fixtures serve: set by the screen-states e2e, never read outside fixtures. */
+function fixtureState(): 'loading' | 'error' | 'empty' | null {
+  try {
+    const value = sessionStorage.getItem('parkease.fixtureState');
+    return value === 'loading' || value === 'error' || value === 'empty' ? value : null;
+  } catch {
+    return null;
+  }
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -63,7 +73,16 @@ export async function request<S extends z.ZodTypeAny>(
 ): Promise<ApiResult<z.output<S>>> {
   const method = options.method ?? 'GET';
   if (FIXTURES) {
+    const state = fixtureState();
+    // Fixtures only (S-157): the screen-states e2e forces every read into each state it must draw.
+    if (method === 'GET' && state === 'loading') return new Promise<never>(() => undefined);
+    if (method === 'GET' && state === 'error') {
+      throw new ApiError(503, 'SERVICE_UNAVAILABLE', 'The service is unavailable.', 'fixture');
+    }
     const fixture = fixtureFor(method, path);
+    if (method === 'GET' && state === 'empty' && Array.isArray(fixture.data)) {
+      return { data: schema.parse([]) as z.output<S>, meta: { ...fixture.meta, total: 0 } };
+    }
     return { data: schema.parse(fixture.data) as z.output<S>, meta: fixture.meta };
   }
 
