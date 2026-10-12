@@ -78,11 +78,7 @@ describe('surge.recalculate — the Redis write', () => {
     expect(redis.counts.multi).toBe(1);
     expect(redis.counts.exec).toBe(1);
     expect(redis.sets).toHaveLength(3);
-    expect(redis.sets.map((s) => s.key)).toEqual([
-      'surge:tdr1v0',
-      'surge:tdr1v1',
-      'surge:tdr1v2',
-    ]);
+    expect(redis.sets.map((s) => s.key)).toEqual(['surge:tdr1v0', 'surge:tdr1v1', 'surge:tdr1v2']);
   });
 
   it('sets a 600 second TTL on every key', async () => {
@@ -204,14 +200,13 @@ describe('surge.recalculate — what each zone is priced at', () => {
     const first = fakeRedis();
     await recalculateSurge(depsWith(first.client), QUIET_WEDNESDAY);
     const second = fakeRedis();
-    await recalculateSurge(
-      depsWith(second.client),
-      new Date(QUIET_WEDNESDAY.getTime() + 60_000),
-    );
+    await recalculateSurge(depsWith(second.client), new Date(QUIET_WEDNESDAY.getTime() + 60_000));
 
-    const { calculatedAt: _a, ...pricedFirst } = snapshotAt(first.sets, 'tdr1v0');
-    const { calculatedAt: _b, ...pricedSecond } = snapshotAt(second.sets, 'tdr1v0');
-    expect(pricedSecond).toEqual(pricedFirst);
+    const pricedFirst = snapshotAt(first.sets, 'tdr1v0');
+    const pricedSecond = snapshotAt(second.sets, 'tdr1v0');
+    // Only the timestamp moves; every priced field is identical.
+    expect(pricedSecond).toEqual({ ...pricedFirst, calculatedAt: pricedSecond.calculatedAt });
+    expect(pricedSecond.calculatedAt).not.toBe(pricedFirst.calculatedAt);
   });
 
   it('writes a snapshot the API can parse back (R-VAL-01)', async () => {
@@ -244,9 +239,7 @@ describe('surge.recalculate — the IST clock', () => {
 
   it('matches a peak window on its IST day and clock time', () => {
     // 08:30 IST Wednesday, inside the 08:00-11:00 weekday window.
-    expect(isWithinPeakWindow(new Date('2026-09-16T03:00:00.000Z'), GLOBAL.peakWindows)).toBe(
-      true,
-    );
+    expect(isWithinPeakWindow(new Date('2026-09-16T03:00:00.000Z'), GLOBAL.peakWindows)).toBe(true);
     // 14:30 IST Wednesday, between the two windows.
     expect(isWithinPeakWindow(QUIET_WEDNESDAY, GLOBAL.peakWindows)).toBe(false);
     // 08:30 IST Saturday: the right clock time on a day the window excludes.
