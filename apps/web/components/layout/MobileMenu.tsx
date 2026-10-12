@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef } from 'react';
 
-import { MOBILE_NAV } from '@/lib/site';
+import { isCurrent, MOBILE_NAV } from '@/lib/site';
 
 /**
  * A native <details> menu, so it opens without JavaScript and is keyboard-operable for free.
@@ -65,22 +65,25 @@ export function MobileMenu() {
         aria-label="Menu"
         className="menu-panel absolute inset-x-0 top-full flex flex-col border-b border-midnight-rule bg-midnight px-6 pt-2 pb-7 shadow-[0_24px_40px_-20px_var(--pe-shadow)]"
       >
-        {MOBILE_NAV.map((link) => (
-          <Link
-            key={link.href}
-            href={link.href}
-            aria-current={pathname === link.href ? 'page' : undefined}
-            onClick={() => {
-              if (menu.current !== null) menu.current.open = false;
-            }}
-            className={`flex min-h-12 items-center justify-between border-b border-midnight-rule text-[19px] font-bold no-underline ${pathname === link.href ? 'text-sky' : 'text-on-midnight'}`}
-          >
-            {link.label}
-            {pathname === link.href && (
-              <span className="text-sm font-bold text-on-midnight-muted">You’re here</span>
-            )}
-          </Link>
-        ))}
+        {MOBILE_NAV.map((link) => {
+          const current = isCurrent(pathname, link.href);
+          return (
+            <Link
+              key={link.href}
+              href={link.href}
+              aria-current={current ? 'page' : undefined}
+              onClick={() => {
+                if (menu.current !== null) menu.current.open = false;
+              }}
+              className={`flex min-h-12 items-center justify-between border-b border-midnight-rule text-[19px] font-bold no-underline ${current ? 'text-sky' : 'text-on-midnight'}`}
+            >
+              {link.label}
+              {current && (
+                <span className="text-sm font-bold text-on-midnight-muted">You’re here</span>
+              )}
+            </Link>
+          );
+        })}
       </nav>
     </details>
   );

@@ -4,6 +4,8 @@ import {
   CARWASH_COMMISSION_RATE,
   COMMISSION_WAIVER_MONTHS,
   COMMISSION_WAIVER_SLOTS,
+  computeValetLegFee,
+  computeWashFee,
   GST_RATE,
   MINIMUM_PAYOUT_PAISE,
   OWNER_CANCEL_GOODWILL_PAISE,
@@ -16,6 +18,7 @@ import {
   VALET_PER_KM_PAISE,
 } from '@parkease/contracts/money';
 import { toPaise, toRate } from '@parkease/contracts/primitives';
+import { NO_SHOW_GRACE_MS } from '@parkease/contracts/valet';
 
 /**
  * Every number the site quotes, derived from @parkease/contracts so the marketing copy cannot
@@ -25,13 +28,6 @@ import { toPaise, toRate } from '@parkease/contracts/primitives';
 const pct = (rate: number): number => Math.round(rate * 100);
 const rupees = (paise: number): number => paise / 100;
 
-export function formatRupees(amount: number, decimals: 0 | 2 = 0): string {
-  return `₹${amount.toLocaleString('en-IN', {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  })}`;
-}
-
 /** Two hours at ₹40, at a normal hour: the worked example used on the site. */
 const EXAMPLE_HOURS = 2;
 const EXAMPLE_HOURLY_PAISE = 4_000;
@@ -40,9 +36,10 @@ const example = quote({
   surgeMultiplier: toRate(1),
 });
 
+/** A 3 km valet leg and a ₹399 premium wash, priced by the same functions the API uses. */
 const valetTripKm = 3;
-const valetTripPaise = VALET_BASE_FEE_PAISE + valetTripKm * VALET_PER_KM_PAISE;
-const washExamplePaise = 39_900;
+const valetTrip = computeValetLegFee(valetTripKm * 1_000, VALET_COMMISSION_RATE);
+const washExample = computeWashFee(toPaise(39_900), CARWASH_COMMISSION_RATE);
 
 export const PRICING = {
   commissionPercent: pct(PLATFORM_COMMISSION_RATE),
@@ -76,17 +73,16 @@ export const PRICING = {
     commissionPercent: pct(VALET_COMMISSION_RATE),
     keepsPercent: 100 - pct(VALET_COMMISSION_RATE),
     exampleKm: valetTripKm,
-    exampleFee: rupees(valetTripPaise),
-    exampleEarns: rupees(valetTripPaise - Math.round(valetTripPaise * VALET_COMMISSION_RATE)),
-    noShowGraceMinutes: 10,
+    exampleFee: rupees(valetTrip.feePaise),
+    exampleEarns: rupees(valetTrip.valetEarningsPaise),
+    noShowGraceMinutes: NO_SHOW_GRACE_MS / 60_000,
   },
   wash: {
     commissionPercent: pct(CARWASH_COMMISSION_RATE),
     keepsPercent: 100 - pct(CARWASH_COMMISSION_RATE),
-    examplePrice: rupees(washExamplePaise),
-    exampleEarns: Math.floor(
-      rupees(washExamplePaise - Math.round(washExamplePaise * CARWASH_COMMISSION_RATE)),
-    ),
+    examplePrice: rupees(washExample.pricePaise),
+    /** ₹319.20; quoted in whole rupees, as the task 20 pricing table does. */
+    exampleEarns: rupees(washExample.washerEarningsPaise),
   },
   refunds: {
     processingFee: rupees(REFUND_PROCESSING_FEE_PAISE),

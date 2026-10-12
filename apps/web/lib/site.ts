@@ -10,6 +10,11 @@ export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || 'https://parkease.i
 export const SITE_HOST = new URL(SITE_URL).host;
 export const SITE_NAME = 'ParkEase';
 
+/** "Pricing" becomes "Pricing — ParkEase": the layout's title template and every og:title. */
+export function withSiteName(title: string): string {
+  return `${title} — ${SITE_NAME}`;
+}
+
 /**
  * ParkEase is a portfolio project: the apps are not in the stores yet. Each store button links
  * only when its listing URL is configured, and otherwise says the app is coming soon, so the site
@@ -58,23 +63,50 @@ export interface NavLink {
   readonly label: string;
 }
 
+/** Every navigation link, once. The header, phone menu and footer pick from this. */
+const LINKS = {
+  findParking: { href: '/find-parking', label: 'Find parking' },
+  howItWorks: { href: '/how-it-works', label: 'How it works' },
+  valetAndWash: { href: '/valet', label: 'Valet & wash' },
+  valet: { href: '/valet', label: 'Valet' },
+  carWash: { href: '/car-wash', label: 'Car wash' },
+  pricing: { href: '/pricing', label: 'Pricing' },
+  listYourSpace: { href: '/earn', label: 'List your space' },
+  faq: { href: '/faq', label: 'FAQ' },
+  contact: { href: '/contact', label: 'Contact' },
+  about: { href: '/about', label: 'About' },
+  blog: { href: '/blog', label: 'Blog' },
+  workAsValet: { href: '/partners', label: 'Work as a valet' },
+  runCarWash: { href: '/partners#car-wash', label: 'Run a car wash' },
+  privacy: { href: '/legal/privacy', label: 'Privacy' },
+  terms: { href: '/legal/terms', label: 'Terms' },
+  refunds: { href: '/legal/refunds', label: 'Refunds' },
+  guidelines: { href: '/legal/guidelines', label: 'Guidelines' },
+  deleteAccount: { href: '/account/delete', label: 'Delete your account' },
+} as const satisfies Record<string, NavLink>;
+
+/** A link is current on its own page and on pages below it (/blog for /blog/a-post). */
+export function isCurrent(pathname: string, href: string): boolean {
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
 export const MAIN_NAV: readonly NavLink[] = [
-  { href: '/find-parking', label: 'Find parking' },
-  { href: '/valet', label: 'Valet & wash' },
-  { href: '/pricing', label: 'Pricing' },
-  { href: '/earn', label: 'List your space' },
-  { href: '/faq', label: 'FAQ' },
+  LINKS.findParking,
+  LINKS.valetAndWash,
+  LINKS.pricing,
+  LINKS.listYourSpace,
+  LINKS.faq,
 ];
 
 export const MOBILE_NAV: readonly NavLink[] = [
-  { href: '/find-parking', label: 'Find parking' },
-  { href: '/how-it-works', label: 'How it works' },
-  { href: '/valet', label: 'Valet' },
-  { href: '/car-wash', label: 'Car wash' },
-  { href: '/pricing', label: 'Pricing' },
-  { href: '/earn', label: 'List your space' },
-  { href: '/faq', label: 'FAQ' },
-  { href: '/contact', label: 'Contact' },
+  LINKS.findParking,
+  LINKS.howItWorks,
+  LINKS.valet,
+  LINKS.carWash,
+  LINKS.pricing,
+  LINKS.listYourSpace,
+  LINKS.faq,
+  LINKS.contact,
 ];
 
 export const FOOTER_NAV: readonly {
@@ -83,39 +115,15 @@ export const FOOTER_NAV: readonly {
 }[] = [
   {
     heading: 'Drivers',
-    links: [
-      { href: '/find-parking', label: 'Find parking' },
-      { href: '/how-it-works', label: 'How it works' },
-      { href: '/valet', label: 'Valet' },
-      { href: '/car-wash', label: 'Car wash' },
-      { href: '/pricing', label: 'Pricing' },
-    ],
+    links: [LINKS.findParking, LINKS.howItWorks, LINKS.valet, LINKS.carWash, LINKS.pricing],
   },
   {
     heading: 'Owners and partners',
-    links: [
-      { href: '/earn', label: 'List your space' },
-      { href: '/partners', label: 'Work as a valet' },
-      { href: '/partners#car-wash', label: 'Run a car wash' },
-    ],
+    links: [LINKS.listYourSpace, LINKS.workAsValet, LINKS.runCarWash],
   },
-  {
-    heading: 'Company',
-    links: [
-      { href: '/about', label: 'About' },
-      { href: '/contact', label: 'Contact' },
-      { href: '/blog', label: 'Blog' },
-      { href: '/faq', label: 'FAQ' },
-    ],
-  },
+  { heading: 'Company', links: [LINKS.about, LINKS.contact, LINKS.blog, LINKS.faq] },
   {
     heading: 'Legal',
-    links: [
-      { href: '/legal/privacy', label: 'Privacy' },
-      { href: '/legal/terms', label: 'Terms' },
-      { href: '/legal/refunds', label: 'Refunds' },
-      { href: '/legal/guidelines', label: 'Guidelines' },
-      { href: '/account/delete', label: 'Delete your account' },
-    ],
+    links: [LINKS.privacy, LINKS.terms, LINKS.refunds, LINKS.guidelines, LINKS.deleteAccount],
   },
 ];

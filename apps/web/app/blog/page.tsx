@@ -33,9 +33,7 @@ export default function BlogPage() {
               </span>
             </div>
             <div className="flex flex-col gap-4 p-8 md:p-12">
-              <span className="text-sm font-bold tracking-wide text-slate uppercase">
-                {featured.category}
-              </span>
+              <span className="eyebrow">{featured.category}</span>
               <h2 className="link-row-title type-card">{featured.title}</h2>
               <p className="text-lg leading-relaxed text-slate">{featured.description}</p>
               <span className="text-[15px] text-slate">

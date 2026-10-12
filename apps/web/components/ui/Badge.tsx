@@ -6,12 +6,11 @@ export function Badge({
   tone = 'neutral',
 }: {
   readonly children: ReactNode;
-  readonly tone?: 'neutral' | 'free' | 'warn';
+  readonly tone?: 'neutral' | 'free';
 }) {
   const tones = {
     neutral: 'bg-mist text-ink',
     free: 'bg-available-soft text-available-ink',
-    warn: 'bg-warn-soft text-warn-ink',
   } as const;
   return (
     <span

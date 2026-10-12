@@ -1,4 +1,5 @@
 import { PRICING } from '@/lib/pricing';
+import { formatRupees } from '@/lib/rupee';
 
 export interface FaqItem {
   readonly question: string;
@@ -15,7 +16,7 @@ export const DRIVER_FAQ: readonly FaqItem[] = [
   },
   {
     question: 'What do I actually pay?',
-    answer: `The owner’s hourly price, plus ${String(p.gstPercent)}% GST on the ParkEase fee. Two hours at ₹${String(p.example.hourly)} comes to ₹${p.example.driverTotal.toFixed(2)}. There is no platform fee for drivers, and every line is shown before you pay.`,
+    answer: `The owner’s hourly price, plus ${String(p.gstPercent)}% GST on the ParkEase fee. Two hours at ${formatRupees(p.example.hourly)} comes to ${formatRupees(p.example.driverTotal, 2)}. There is no platform fee for drivers, and every line is shown before you pay.`,
   },
   {
     question: 'Why does the price go up at some times?',
@@ -24,11 +25,11 @@ export const DRIVER_FAQ: readonly FaqItem[] = [
   },
   {
     question: 'What if I need to cancel?',
-    answer: `Cancel before your start time and you get everything back except a ₹${String(p.refunds.processingFee)} processing fee. Cancel within the first ${String(p.refunds.graceMinutes)} minutes and you get ${String(p.refunds.gracePercent)}% back. After that there is no refund, because the slot was held for you.`,
+    answer: `Cancel before your start time and you get everything back except a ${formatRupees(p.refunds.processingFee)} processing fee. Cancel within the first ${String(p.refunds.graceMinutes)} minutes and you get ${String(p.refunds.gracePercent)}% back. After that there is no refund, because the slot was held for you.`,
   },
   {
     question: 'What if the owner cancels on me?',
-    answer: `You get a full refund at any hour, plus ₹${String(p.refunds.ownerCancelGoodwill)} from ParkEase. It never comes out of anyone else’s money.`,
+    answer: `You get a full refund at any hour, plus ${formatRupees(p.refunds.ownerCancelGoodwill)} from ParkEase. It never comes out of anyone else’s money.`,
   },
   {
     question: 'How do I know a space is any good?',
@@ -49,7 +50,7 @@ export const OWNER_FAQ: readonly FaqItem[] = [
   },
   {
     question: 'When do I get paid?',
-    answer: `Weekly on Mondays or monthly on the 1st, whichever you choose, to the bank account you connected through Razorpay, once your balance is at least ₹${String(p.minimumPayout)}.`,
+    answer: `Weekly on Mondays or monthly on the 1st, whichever you choose, to the bank account you connected through Razorpay, once your balance is at least ${formatRupees(p.minimumPayout)}.`,
   },
   {
     question: 'Do busy-hour charges change what I earn?',
@@ -58,7 +59,7 @@ export const OWNER_FAQ: readonly FaqItem[] = [
   },
   {
     question: 'What if I have to cancel a booking?',
-    answer: `The driver gets a full refund and ₹${String(p.refunds.ownerCancelGoodwill)} from ParkEase. None of it is taken from your earnings.`,
+    answer: `The driver gets a full refund and ${formatRupees(p.refunds.ownerCancelGoodwill)} from ParkEase. None of it is taken from your earnings.`,
   },
 ];
 

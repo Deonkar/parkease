@@ -7,9 +7,11 @@ import { CityStats } from '@/components/sections/CityStats';
 import { CtaBand } from '@/components/sections/CtaBand';
 import { PageHero } from '@/components/sections/PageHero';
 import { SectionHeading } from '@/components/sections/SectionHeading';
+import { Breadcrumb } from '@/components/ui/Breadcrumb';
 import { cityDescription, cityTitle, findCity, LAUNCHED_CITIES, type CitySlug } from '@/lib/cities';
 import { PRICING } from '@/lib/pricing';
 import { openGraph } from '@/lib/seo';
+import { withSiteName } from '@/lib/site';
 
 interface CityParams {
   readonly city: CitySlug;
@@ -25,7 +27,10 @@ export function generateStaticParams(): CityParams[] {
  */
 export const dynamicParams = false;
 
-/** Rebuilt once a day so city copy can follow the data without a deploy. */
+/**
+ * ISR, as task 20 §20.1 specifies for city pages. Today the city data is compiled in, so each
+ * daily regeneration yields the same page; it starts to matter once cities come from the API.
+ */
 export const revalidate = 86_400;
 
 export async function generateMetadata({
@@ -43,7 +48,7 @@ export async function generateMetadata({
     // og:title and og:description are worded for sharing, as task 20 §20.4 specifies.
     openGraph: openGraph({
       path,
-      title: `Parking in ${city.name} — ParkEase`,
+      title: withSiteName(`Parking in ${city.name}`),
       description: `${city.vehicleCount} vehicles, not enough parking. ParkEase connects drivers with private parking spaces in ${city.name}.`,
     }),
   };
@@ -57,15 +62,10 @@ export default async function CityPage({ params }: { readonly params: Promise<Ci
     <>
       <PageHero
         before={
-          <nav aria-label="Breadcrumb" className="text-[15px] text-on-midnight-muted">
-            <Link
-              className="inline-block py-2.5 underline underline-offset-4 hover:text-on-midnight"
-              href="/find-parking"
-            >
-              Find parking
-            </Link>{' '}
-            / <span aria-current="page">{city.name}</span>
-          </nav>
+          <Breadcrumb
+            parent={{ href: '/find-parking', label: 'Find parking' }}
+            current={city.name}
+          />
         }
         lines={['Parking in', `${city.name}.`]}
         lead={`Private driveways, basements and lots across ${city.name}, bookable by the hour. See what’s free before you set off.`}
@@ -101,7 +101,7 @@ export default async function CityPage({ params }: { readonly params: Promise<Ci
             <li className="border-t border-rule py-5 text-lg">
               <strong>Drivers</strong>{' '}
               <span className="text-slate">book by the hour and see the full price first.</span>{' '}
-              <Link className="font-bold text-primary underline" href="/how-it-works">
+              <Link className="text-link" href="/how-it-works">
                 How it works
               </Link>
             </li>
@@ -112,7 +112,7 @@ export default async function CityPage({ params }: { readonly params: Promise<Ci
             <li className="border-t border-rule py-5 text-lg">
               <strong>Valets and wash partners</strong>{' '}
               <span className="text-slate">keep {PRICING.valet.keepsPercent}% of every job.</span>{' '}
-              <Link className="font-bold text-primary underline" href="/partners">
+              <Link className="text-link" href="/partners">
                 Work with us
               </Link>
             </li>

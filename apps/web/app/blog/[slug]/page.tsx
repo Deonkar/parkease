@@ -4,12 +4,14 @@ import { notFound } from 'next/navigation';
 
 import { CopyLinkButton } from '@/components/blog/CopyLinkButton';
 import { PostRow } from '@/components/blog/PostRow';
+import { SectionHeading } from '@/components/sections/SectionHeading';
+import { Breadcrumb } from '@/components/ui/Breadcrumb';
 import { JsonLd } from '@/components/ui/JsonLd';
 import { BLOG_POSTS, findPost, formatPostDate, type BlogSlug } from '@/lib/blog';
 import { blogPostingJsonLd } from '@/lib/jsonld';
 import { BLOG_CONTENT } from '@/lib/mdx';
-import { openGraph } from '@/lib/seo';
-import { SITE_NAME, SITE_URL } from '@/lib/site';
+import { pageMetadata } from '@/lib/seo';
+import { SITE_URL } from '@/lib/site';
 
 interface PostParams {
   readonly slug: BlogSlug;
@@ -28,18 +30,10 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const post = findPost((await params).slug);
   if (post === undefined) return {};
-  const path = `/blog/${post.slug}`;
-  return {
-    title: post.title,
-    description: post.description,
-    alternates: { canonical: path },
-    openGraph: openGraph({
-      path,
-      title: `${post.title} — ${SITE_NAME}`,
-      description: post.description,
-      article: { publishedTime: post.published },
-    }),
-  };
+  return pageMetadata(
+    { path: `/blog/${post.slug}`, title: post.title, description: post.description },
+    { publishedTime: post.published },
+  );
 }
 
 export default async function BlogPostPage({ params }: { readonly params: Promise<PostParams> }) {
@@ -56,15 +50,11 @@ export default async function BlogPostPage({ params }: { readonly params: Promis
       <article aria-labelledby="page-title">
         <header className="bg-midnight text-on-midnight">
           <div className="wrap flex max-w-[880px] flex-col gap-6 pt-14 pb-16 md:pt-16">
-            <nav aria-label="Breadcrumb" className="text-[15px] text-on-midnight-muted">
-              <Link
-                className="inline-block py-2.5 underline underline-offset-4 hover:text-on-midnight"
-                href="/blog"
-              >
-                Blog
-              </Link>{' '}
-              / <span>{post.category}</span>
-            </nav>
+            <Breadcrumb
+              parent={{ href: '/blog', label: 'Blog' }}
+              current={post.category}
+              isPage={false}
+            />
             <h1
               id="page-title"
               className="font-display text-[clamp(44px,6vw,80px)] leading-[0.92] font-black"
@@ -98,9 +88,7 @@ export default async function BlogPostPage({ params }: { readonly params: Promis
       </article>
       <section aria-labelledby="next-title" className="bg-paper">
         <div className="wrap flex max-w-[880px] flex-col gap-6 py-20">
-          <h2 id="next-title" className="type-section">
-            Read next
-          </h2>
+          <SectionHeading id="next-title">Read next</SectionHeading>
           <ul className="border-b border-rule">
             {next.map((p) => (
               <li key={p.slug}>

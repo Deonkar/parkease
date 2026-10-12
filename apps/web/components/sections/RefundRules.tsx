@@ -1,11 +1,11 @@
 import { PRICING } from '@/lib/pricing';
-import { withRupee } from '@/lib/rupee';
+import { formatRupees, withRupee } from '@/lib/rupee';
 
 export function RefundRules() {
   const r = PRICING.refunds;
   const rows = [
     {
-      figure: `All but ₹${String(r.processingFee)}`,
+      figure: `All but ${formatRupees(r.processingFee)}`,
       text: 'back if you cancel before your start time.',
     },
     {
@@ -14,8 +14,8 @@ export function RefundRules() {
     },
     { figure: 'Nothing', text: 'back after that. The slot was held for you.' },
     {
-      figure: `All + ₹${String(r.ownerCancelGoodwill)}`,
-      text: `back if the owner cancels, at any hour. The ₹${String(r.ownerCancelGoodwill)} comes from ParkEase.`,
+      figure: `All + ${formatRupees(r.ownerCancelGoodwill)}`,
+      text: `back if the owner cancels, at any hour. The ${formatRupees(r.ownerCancelGoodwill)} comes from ParkEase.`,
       highlight: true,
     },
   ];

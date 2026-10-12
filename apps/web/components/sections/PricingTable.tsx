@@ -1,4 +1,5 @@
-import { formatRupees, PRICING } from '@/lib/pricing';
+import { PRICING } from '@/lib/pricing';
+import { formatRupees } from '@/lib/rupee';
 
 interface Row {
   readonly label: string;

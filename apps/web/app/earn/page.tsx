@@ -81,7 +81,7 @@ export default function EarnPage() {
           />
           <p className="text-slate">
             Questions about payouts or cancellations?{' '}
-            <Link className="font-bold text-primary underline" href="/faq#owners">
+            <Link className="text-link" href="/faq#owners">
               Owner FAQ
             </Link>
           </p>

@@ -2,11 +2,14 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 import { CtaBand } from '@/components/sections/CtaBand';
+import { FactList } from '@/components/sections/FactList';
 import { PageHero } from '@/components/sections/PageHero';
 import { SectionHeading } from '@/components/sections/SectionHeading';
 import { Tabs } from '@/components/sections/Tabs';
+import { Badge } from '@/components/ui/Badge';
 import { PAGES } from '@/lib/pages';
 import { PRICING } from '@/lib/pricing';
+import { formatRupees } from '@/lib/rupee';
 import { pageMetadata } from '@/lib/seo';
 
 export const metadata: Metadata = pageMetadata(PAGES.howItWorks);
@@ -68,7 +71,7 @@ const OWNER: readonly Stage[] = [
   },
   {
     title: 'Get paid weekly or monthly',
-    body: `Your share lands in your bank ${PRICING.payouts.sentence}, once you’ve earned at least ₹${String(PRICING.minimumPayout)}.`,
+    body: `Your share lands in your bank ${PRICING.payouts.sentence}, once you’ve earned at least ${formatRupees(PRICING.minimumPayout)}.`,
     note: `${String(PRICING.commissionPercent)}% commission, or 0% for the first ${String(PRICING.waiverSlots)} owners for ${String(PRICING.waiverMonths)} months`,
   },
 ];
@@ -94,8 +97,8 @@ function Timeline({ stages }: { readonly stages: readonly Stage[] }) {
             </h2>
             <div className="flex flex-[1_1_380px] flex-col gap-2.5">
               <p className="max-w-[560px] text-lg leading-relaxed text-slate">{stage.body}</p>
-              <span className="self-start rounded-md bg-mist px-2.5 py-1.5 text-sm font-bold">
-                {stage.note}
+              <span className="self-start">
+                <Badge>{stage.note}</Badge>
               </span>
             </div>
           </li>
@@ -144,36 +147,40 @@ export default function HowItWorksPage() {
           <SectionHeading id="if-title" className="max-w-[420px] flex-[1_1_320px]">
             When things don’t go to plan
           </SectionHeading>
-          <dl className="flex-[1_1_560px] border-t-2 border-ink">
-            <div className="border-b border-rule py-6">
-              <dt className="mb-1.5 text-[19px] font-extrabold">The owner cancels on you</dt>
-              <dd className="text-[17px] leading-relaxed text-slate">
-                Every rupee back at any hour, plus ₹{PRICING.refunds.ownerCancelGoodwill} from
-                ParkEase. It never comes out of the owner’s earnings or yours.
-              </dd>
-            </div>
-            <div className="border-b border-rule py-6">
-              <dt className="mb-1.5 text-[19px] font-extrabold">You need to cancel</dt>
-              <dd className="text-[17px] leading-relaxed text-slate">
-                All but ₹{PRICING.refunds.processingFee} back before your start time,{' '}
-                {PRICING.refunds.gracePercent}% back in the first {PRICING.refunds.graceMinutes}{' '}
-                minutes.{' '}
-                <Link className="font-bold text-primary underline" href="/legal/refunds">
-                  Refund policy
-                </Link>
-              </dd>
-            </div>
-            <div className="py-6">
-              <dt className="mb-1.5 text-[19px] font-extrabold">It’s a busy hour</dt>
-              <dd className="text-[17px] leading-relaxed text-slate">
-                A busy-hour charge can apply when an area is nearly full. You see it before you
-                book, and owners never lose any of their price to it.{' '}
-                <Link className="font-bold text-primary underline" href="/pricing">
-                  Pricing
-                </Link>
-              </dd>
-            </div>
-          </dl>
+          <FactList
+            className="flex-[1_1_560px]"
+            items={[
+              {
+                term: 'The owner cancels on you',
+                detail: `Every rupee back at any hour, plus ${formatRupees(PRICING.refunds.ownerCancelGoodwill)} from ParkEase. It never comes out of the owner’s earnings or yours.`,
+              },
+              {
+                term: 'You need to cancel',
+                detail: (
+                  <>
+                    All but {formatRupees(PRICING.refunds.processingFee)} back before your start
+                    time, {PRICING.refunds.gracePercent}% back in the first{' '}
+                    {PRICING.refunds.graceMinutes} minutes.{' '}
+                    <Link className="text-link" href="/legal/refunds">
+                      Refund policy
+                    </Link>
+                  </>
+                ),
+              },
+              {
+                term: 'It’s a busy hour',
+                detail: (
+                  <>
+                    A busy-hour charge can apply when an area is nearly full. You see it before you
+                    book, and owners never lose any of their price to it.{' '}
+                    <Link className="text-link" href="/pricing">
+                      Pricing
+                    </Link>
+                  </>
+                ),
+              },
+            ]}
+          />
         </div>
       </section>
       <CtaBand title="Pick a side. Get the app." />

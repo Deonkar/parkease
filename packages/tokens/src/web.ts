@@ -12,13 +12,16 @@ import { colors } from './colors.js';
  * apps/web may not hardcode a hex value (task 20, "Tokens"), so everything the
  * site paints — including the map and the share image — lives here.
  */
+const PORCELAIN = '#F3F5F8';
+const INK = '#0A1424';
+
 export const webColors = {
   /** Page ground for reading sections. */
-  porcelain: '#F3F5F8',
+  porcelain: PORCELAIN,
   paper: colors.surface,
   /** Subtle panels on porcelain or paper. */
   mist: '#E8EDF3',
-  ink: '#0A1424',
+  ink: INK,
   /** Secondary text on porcelain and paper. 7.2:1 on porcelain. */
   slate: '#44546A',
   rule: '#D5DCE5',
@@ -28,7 +31,7 @@ export const webColors = {
   midnight: '#08111E',
   midnightRaised: '#111D30',
   /** Text on midnight. */
-  onMidnight: '#F3F5F8',
+  onMidnight: PORCELAIN,
   /** Secondary text on midnight. 8.4:1. */
   onMidnightMuted: '#A9B8CC',
   /** Hairlines on midnight, as an rgba so they sit on any dark surface. */
@@ -79,7 +82,7 @@ export const webColors = {
     park: '#E1E6EC',
     casing: '#D3DAE3',
     road: '#FFFFFF',
-    label: '#5D6B80',
+    label: colors.textTertiary,
   },
   mapDark: {
     land: '#0E1A2B',
@@ -91,7 +94,5 @@ export const webColors = {
     label: '#8C9DB5',
   },
   markerRing: 'rgba(56, 189, 248, 0.28)',
-  markerPin: '#0A1424',
+  markerPin: INK,
 } as const;
-
-export type WebColors = typeof webColors;

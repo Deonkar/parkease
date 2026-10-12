@@ -1,6 +1,7 @@
 import { webColors } from '@parkease/tokens';
 
-import { formatRupees, PRICING } from '@/lib/pricing';
+import { PRICING } from '@/lib/pricing';
+import { formatRupees } from '@/lib/rupee';
 
 const BAYS = 15;
 const FREE_INDEX = 7;

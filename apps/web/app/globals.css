@@ -17,18 +17,16 @@
   --color-on-midnight: var(--pe-on-midnight);
   --color-on-midnight-muted: var(--pe-on-midnight-muted);
   --color-midnight-rule: var(--pe-midnight-rule);
-  --color-sky: var(--pe-sky);
+  --color-sky: var(--pe-sky-on-midnight);
   --color-floor: var(--pe-floor);
   --color-floor-paint: var(--pe-floor-paint);
   --color-floor-stencil: var(--pe-floor-stencil);
   --color-free-lit: var(--pe-free-lit);
   --color-primary: var(--pe-primary);
-  --color-primary-hover: var(--pe-primary-hover);
   --color-on-primary: var(--pe-on-primary);
   --color-available: var(--pe-available);
   --color-available-soft: var(--pe-available-soft);
   --color-available-ink: var(--pe-available-ink);
-  --color-full: var(--pe-full);
   --color-warn-soft: var(--pe-warn-soft);
   --color-warn-ink: var(--pe-warn-ink);
 
@@ -181,7 +179,7 @@
   }
   @media (hover: hover) and (pointer: fine) {
     .btn-light:hover {
-      background: var(--pe-button-hover);
+      background: var(--pe-button-on-midnight-hover);
     }
     .btn-outline-light:hover {
       border-color: currentColor;
@@ -240,6 +238,21 @@
   }
   .faq[open] .faq-answer {
     animation: fade-up 260ms var(--ease-out-strong) both;
+  }
+
+  /* A link inside running text, on a light ground. */
+  .text-link {
+    color: var(--pe-primary);
+    font-weight: 700;
+    text-decoration: underline;
+  }
+  /* Small all-caps label above a title: post categories, "On this page". */
+  .eyebrow {
+    color: var(--pe-slate);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.025em;
+    text-transform: uppercase;
   }
 
   /* Prose for MDX: legal pages and blog posts */
@@ -315,9 +328,6 @@
 }
 .rise-line + .rise-line + .rise-line > span {
   animation-delay: 180ms;
-}
-.fade-in {
-  animation: fade 500ms ease-out 380ms both;
 }
 
 /* The one orchestrated moment: a car backs out of bay 16, the bay lights, the card lands. */
@@ -502,7 +512,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .rise-line > span,
-  .fade-in,
   .floor-leaving,
   .floor-paint,
   .floor-glow,

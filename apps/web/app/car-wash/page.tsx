@@ -8,7 +8,8 @@ import { SectionHeading } from '@/components/sections/SectionHeading';
 import { ServiceSwitch } from '@/components/sections/ServiceSwitch';
 import { WashProof } from '@/components/sections/WashProof';
 import { PAGES } from '@/lib/pages';
-import { formatRupees, PRICING } from '@/lib/pricing';
+import { PRICING } from '@/lib/pricing';
+import { formatRupees } from '@/lib/rupee';
 import { pageMetadata } from '@/lib/seo';
 
 export const metadata: Metadata = pageMetadata(PAGES.carWash);
@@ -79,7 +80,7 @@ export default function CarWashPage() {
           />
           <p className="text-slate">
             Run a car wash? Partners keep {PRICING.wash.keepsPercent}% of every job.{' '}
-            <Link className="font-bold text-primary underline" href="/partners#car-wash">
+            <Link className="text-link" href="/partners#car-wash">
               How partnering works
             </Link>
           </p>

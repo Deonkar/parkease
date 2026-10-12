@@ -1,5 +1,6 @@
 import Link from 'next/link';
 
+import { PageHero } from '@/components/sections/PageHero';
 import { formatPostDate } from '@/lib/blog';
 import { LEGAL_DOCS, LEGAL_STATUS, legalDoc } from '@/lib/legal';
 import { LEGAL_CONTENT, type LegalDoc } from '@/lib/mdx';
@@ -14,13 +15,9 @@ export async function LegalDocument({ doc }: { readonly doc: LegalDoc }) {
 
   return (
     <>
-      <section aria-labelledby="page-title" className="bg-midnight text-on-midnight">
-        <div className="wrap flex flex-col gap-10 pt-14 md:pt-16">
-          <h1 id="page-title" className="type-page">
-            <span className="rise-line">
-              <span>{page.title}</span>
-            </span>
-          </h1>
+      <PageHero
+        lines={[page.title]}
+        after={
           <nav aria-label="Legal documents" className="-mb-px flex gap-1 overflow-x-auto">
             {LEGAL_DOCS.map((d) => {
               const current = d.doc === doc;
@@ -40,8 +37,8 @@ export async function LegalDocument({ doc }: { readonly doc: LegalDoc }) {
               );
             })}
           </nav>
-        </div>
-      </section>
+        }
+      />
       <div className="wrap flex flex-wrap gap-x-20 gap-y-10 py-16 md:py-20">
         <aside className="flex flex-[1_1_240px] flex-col gap-6 md:max-w-[280px]">
           {LEGAL_STATUS.notice !== null && (
@@ -54,9 +51,7 @@ export async function LegalDocument({ doc }: { readonly doc: LegalDoc }) {
             <time dateTime={LEGAL_STATUS.updated}>{formatPostDate(LEGAL_STATUS.updated)}</time>
           </p>
           <nav aria-label="On this page" className="md:sticky md:top-28">
-            <p className="mb-2 text-sm font-bold tracking-wide text-slate uppercase">
-              On this page
-            </p>
+            <p className="eyebrow mb-2">On this page</p>
             <ul className="flex flex-col border-l-2 border-rule">
               {meta.sections.map((heading) => (
                 <li key={heading}>

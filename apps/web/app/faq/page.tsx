@@ -32,17 +32,17 @@ export default function FaqPage() {
       />
       <section aria-labelledby="drivers" className="pt-20">
         <div className="wrap max-w-[920px]">
-          <h2 id="drivers" className="type-section mb-6">
+          <SectionHeading id="drivers" className="mb-6">
             For drivers
-          </h2>
+          </SectionHeading>
           <FaqAccordion items={DRIVER_FAQ} />
         </div>
       </section>
       <section aria-labelledby="owners" className="pt-20 pb-28">
         <div className="wrap max-w-[920px]">
-          <h2 id="owners" className="type-section mb-6">
+          <SectionHeading id="owners" className="mb-6">
             For space owners
-          </h2>
+          </SectionHeading>
           <FaqAccordion items={OWNER_FAQ} />
         </div>
       </section>

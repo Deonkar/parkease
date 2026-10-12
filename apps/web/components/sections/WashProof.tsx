@@ -1,3 +1,4 @@
+import { Badge } from '@/components/ui/Badge';
 import { PhotoTile } from '@/components/ui/PhotoTile';
 
 /** The in-app wash record: the product's proof, shown without inventing a photo. */
@@ -14,8 +15,8 @@ export function WashProof() {
           <p className="text-[19px] font-extrabold">Premium wash</p>
           <p className="mt-0.5 text-[15px] text-slate">Bay 16, 12th Main, Indiranagar</p>
         </div>
-        <span className="rounded-md bg-mist px-2.5 py-1.5 text-sm font-bold whitespace-nowrap">
-          Finished 2:41pm
+        <span className="whitespace-nowrap">
+          <Badge>Finished 2:41pm</Badge>
         </span>
       </div>
       <div className="grid grid-cols-2 gap-3">

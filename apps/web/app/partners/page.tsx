@@ -1,11 +1,11 @@
 import type { Metadata } from 'next';
 
-import { AppStoreBadges } from '@/components/sections/AppStoreBadges';
+import { CtaBand } from '@/components/sections/CtaBand';
 import { PageHero } from '@/components/sections/PageHero';
 import { Tabs } from '@/components/sections/Tabs';
 import { PAGES } from '@/lib/pages';
-import { formatRupees, PRICING } from '@/lib/pricing';
-import { withRupee } from '@/lib/rupee';
+import { PRICING } from '@/lib/pricing';
+import { formatRupees, withRupee } from '@/lib/rupee';
 import { pageMetadata } from '@/lib/seo';
 
 export const metadata: Metadata = pageMetadata(PAGES.partners);
@@ -121,14 +121,7 @@ export default function PartnersPage() {
           />
         </div>
       </section>
-      <section aria-labelledby="join-title" className="bg-midnight text-on-midnight">
-        <div className="wrap flex flex-wrap items-end justify-between gap-x-12 gap-y-8 py-28">
-          <h2 id="join-title" className="type-cta flex-[1_1_560px]">
-            One app. Pick your role inside.
-          </h2>
-          <AppStoreBadges />
-        </div>
-      </section>
+      <CtaBand title="One app. Pick your role inside." />
     </>
   );
 }

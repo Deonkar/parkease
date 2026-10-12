@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 
+import { FactList } from '@/components/sections/FactList';
 import { PageHero } from '@/components/sections/PageHero';
 import { SectionHeading } from '@/components/sections/SectionHeading';
 import { PAGES } from '@/lib/pages';
@@ -51,26 +52,24 @@ export default function DeleteAccountPage() {
               Or write to {CONTACT.support} with the subject “Delete my ParkEase account”.
             </p>
           </div>
-          <dl className="flex-[1_1_360px] border-t-2 border-ink">
-            <div className="border-b border-rule py-5.5">
-              <dt className="mb-2 text-[19px] font-extrabold">What we delete</dt>
-              <dd className="leading-relaxed text-slate">
-                Your name, mobile number, vehicles, photos, listings and reviews.
-              </dd>
-            </div>
-            <div className="border-b border-rule py-5.5">
-              <dt className="mb-2 text-[19px] font-extrabold">What we have to keep</dt>
-              <dd className="leading-relaxed text-slate">
-                Booking and payment records, for as long as tax and accounting law requires.
-              </dd>
-            </div>
-            <div className="py-5.5">
-              <dt className="mb-2 text-[19px] font-extrabold">Bookings still to come</dt>
-              <dd className="leading-relaxed text-slate">
-                They are cancelled under the refund policy before the account is deleted.
-              </dd>
-            </div>
-          </dl>
+          <FactList
+            className="flex-[1_1_360px]"
+            items={[
+              {
+                term: 'What we delete',
+                detail: 'Your name, mobile number, vehicles, photos, listings and reviews.',
+              },
+              {
+                term: 'What we have to keep',
+                detail:
+                  'Booking and payment records, for as long as tax and accounting law requires.',
+              },
+              {
+                term: 'Bookings still to come',
+                detail: 'They are cancelled under the refund policy before the account is deleted.',
+              },
+            ]}
+          />
         </div>
       </section>
     </>

@@ -55,8 +55,11 @@ export function streetMapSvg({
 }: StreetMapOptions): string {
   const s = palette(theme);
   const font = escape(fontFamily).replace(/"/g, '&quot;');
-  const road = (d: string, stroke: string, width: number) =>
-    `<path d="${d}" fill="none" stroke="${stroke}" stroke-width="${String(width)}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  // Each road layer is defined once and drawn twice (casing, then fill) with <use>, so the
+  // geometry, most of the file, is not written out twice.
+  const roadId = (layer: string) => `${theme}-${layer}-roads`;
+  const road = (layer: string, stroke: string, width: number) =>
+    `<use href="#${roadId(layer)}" stroke="${stroke}" stroke-width="${String(width)}"/>`;
 
   const labels = MAP_LABELS.map(
     (l) =>
@@ -85,15 +88,20 @@ export function streetMapSvg({
 
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${MAP_VIEWBOX}" preserveAspectRatio="xMidYMid slice" aria-hidden="true" style="display:block;width:100%;height:100%">` +
-    `<defs><filter id="pin-shadow-${theme}" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="${webColors.pinShadow}"/></filter></defs>` +
+    `<defs><filter id="pin-shadow-${theme}" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="${webColors.pinShadow}"/></filter>` +
+    `<path id="${roadId('minor')}" d="${MINOR_ROADS}"/>` +
+    `<path id="${roadId('tertiary')}" d="${TERTIARY_ROADS}"/>` +
+    `<path id="${roadId('primary')}" d="${PRIMARY_ROADS}"/></defs>` +
     `<rect x="-200" y="-200" width="1600" height="1400" fill="${s.land}"/>` +
     `<path d="${PARKS}" fill="${s.park}"/>` +
-    road(MINOR_ROADS, s.casing, 9) +
-    road(TERTIARY_ROADS, s.casing, 15) +
-    road(PRIMARY_ROADS, s.casing, 22) +
-    road(MINOR_ROADS, s.minor, 6) +
-    road(TERTIARY_ROADS, s.tertiary, 11) +
-    road(PRIMARY_ROADS, s.primary, 17) +
+    `<g fill="none" stroke-linecap="round" stroke-linejoin="round">` +
+    road('minor', s.casing, 9) +
+    road('tertiary', s.casing, 15) +
+    road('primary', s.casing, 22) +
+    road('minor', s.minor, 6) +
+    road('tertiary', s.tertiary, 11) +
+    road('primary', s.primary, 17) +
+    `</g>` +
     labels +
     pins +
     `<g transform="translate(${String(MAP_DESTINATION.x)} ${String(MAP_DESTINATION.y)}) scale(${String(pinScale)})">` +

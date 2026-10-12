@@ -41,16 +41,20 @@ export function openGraph({
     : { ...shared, type: 'article', publishedTime: article.publishedTime };
 }
 
-/** Per-page metadata: title, description, canonical and Open Graph. */
-export function pageMetadata(page: PageMeta): Metadata {
+/** Per-page metadata: title, description, canonical and Open Graph. Pass `article` for posts. */
+export function pageMetadata(
+  page: PageMeta,
+  article?: { readonly publishedTime: string },
+): Metadata {
   return {
-    title: page.absolute ? { absolute: page.title } : page.title,
+    title: page.absolute === true ? { absolute: page.title } : page.title,
     description: page.description,
     alternates: { canonical: page.path },
     openGraph: openGraph({
       path: page.path,
       title: fullTitle(page),
       description: page.description,
+      ...(article === undefined ? {} : { article }),
     }),
   };
 }

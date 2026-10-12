@@ -8,7 +8,7 @@ import { Header } from '@/components/layout/Header';
 import { JsonLd } from '@/components/ui/JsonLd';
 import { organizationJsonLd } from '@/lib/jsonld';
 import { PAGES } from '@/lib/pages';
-import { SITE_NAME, SITE_URL } from '@/lib/site';
+import { SITE_NAME, SITE_URL, withSiteName } from '@/lib/site';
 import { themeCss } from '@/lib/theme';
 
 import './globals.css';
@@ -17,7 +17,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
     default: PAGES.home.title,
-    template: `%s — ${SITE_NAME}`,
+    template: withSiteName('%s'),
   },
   description: PAGES.home.description,
   applicationName: SITE_NAME,

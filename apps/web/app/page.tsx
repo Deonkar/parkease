@@ -11,9 +11,9 @@ import { JsonLd } from '@/components/ui/JsonLd';
 import { estimateMonthlyEarnings } from '@/lib/earnings';
 import { softwareApplicationJsonLd } from '@/lib/jsonld';
 import { PAGES } from '@/lib/pages';
-import { formatRupees, PRICING } from '@/lib/pricing';
+import { PRICING } from '@/lib/pricing';
 import { qrPatternPath } from '@/lib/qr';
-import { withRupee } from '@/lib/rupee';
+import { formatRupees, Rupees } from '@/lib/rupee';
 import { pageMetadata } from '@/lib/seo';
 
 export const metadata: Metadata = pageMetadata(PAGES.home);
@@ -86,11 +86,11 @@ export default function HomePage() {
           <figure className="flex min-w-0 flex-[0_1_400px] flex-col gap-2.5 rounded-[20px] bg-midnight p-6 text-on-midnight sm:p-8 shadow-[0_30px_60px_-30px_var(--pe-shadow)]">
             <span className="text-[15px] font-bold text-on-midnight-muted">Example month</span>
             <span className="type-figure text-[clamp(64px,24vw,96px)]">
-              {withRupee(formatRupees(example))}
+              <Rupees amount={example} />
             </span>
             <figcaption className="mt-1.5 border-t border-midnight-rule pt-3.5 text-[15px] leading-normal text-on-midnight-muted">
-              One slot at ₹{EXAMPLE.hourlyPrice} an hour, booked {EXAMPLE.hoursPerDay} hours a day,
-              after the {PRICING.commissionPercent}% ParkEase commission.
+              One slot at {formatRupees(EXAMPLE.hourlyPrice)} an hour, booked {EXAMPLE.hoursPerDay}{' '}
+              hours a day, after the {PRICING.commissionPercent}% ParkEase commission.
             </figcaption>
           </figure>
         </div>

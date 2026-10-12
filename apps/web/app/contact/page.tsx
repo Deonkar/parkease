@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 
+import { DetailList } from '@/components/sections/DetailList';
 import { PageHero } from '@/components/sections/PageHero';
 import { SectionHeading } from '@/components/sections/SectionHeading';
 import { PAGES } from '@/lib/pages';
@@ -41,10 +42,7 @@ export default function ContactPage() {
               <li key={route.who} className="flex flex-col gap-1.5 border-t-2 border-ink py-6">
                 <span className="text-[19px] font-extrabold">{route.who}</span>
                 <span className="text-slate">{route.about}</span>
-                <a
-                  className="text-[17px] font-bold text-primary underline"
-                  href={`mailto:${route.email}`}
-                >
+                <a className="text-link text-[17px]" href={`mailto:${route.email}`}>
                   {route.email}
                 </a>
               </li>
@@ -61,26 +59,21 @@ export default function ContactPage() {
               within 24 hours and resolve them within 15 days.
             </p>
           </div>
-          <dl className="grid flex-[1_1_520px] grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-x-10">
-            <div className="border-t border-rule py-4.5">
-              <dt className="text-sm text-slate">Name</dt>
-              <dd className="mt-1 text-lg font-bold">{COMPANY.grievanceOfficer}</dd>
-            </div>
-            <div className="border-t border-rule py-4.5">
-              <dt className="text-sm text-slate">Email</dt>
-              <dd className="mt-1 text-lg font-bold">
-                <a className="text-primary underline" href={`mailto:${CONTACT.grievance}`}>
-                  {CONTACT.grievance}
-                </a>
-              </dd>
-            </div>
-            <div className="border-t border-rule py-4.5 sm:col-span-2">
-              <dt className="text-sm text-slate">Based in</dt>
-              <dd className="mt-1 text-lg font-bold">
-                {COMPANY.legalName}, {COMPANY.address}
-              </dd>
-            </div>
-          </dl>
+          <DetailList
+            className="flex-[1_1_520px]"
+            items={[
+              { label: 'Name', value: COMPANY.grievanceOfficer },
+              {
+                label: 'Email',
+                value: (
+                  <a className="text-link" href={`mailto:${CONTACT.grievance}`}>
+                    {CONTACT.grievance}
+                  </a>
+                ),
+              },
+              { label: 'Based in', value: `${COMPANY.legalName}, ${COMPANY.address}`, wide: true },
+            ]}
+          />
         </div>
       </section>
     </>

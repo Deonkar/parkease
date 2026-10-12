@@ -6,8 +6,8 @@ import { PageHero } from '@/components/sections/PageHero';
 import { PricingTable } from '@/components/sections/PricingTable';
 import { SectionHeading } from '@/components/sections/SectionHeading';
 import { PAGES } from '@/lib/pages';
-import { formatRupees, PRICING } from '@/lib/pricing';
-import { withRupee } from '@/lib/rupee';
+import { PRICING } from '@/lib/pricing';
+import { formatRupees, Rupees } from '@/lib/rupee';
 import { pageMetadata } from '@/lib/seo';
 
 export const metadata: Metadata = pageMetadata(PAGES.pricing);
@@ -56,7 +56,7 @@ export default function PricingPage() {
                   className={`flex min-w-[88px] basis-0 flex-col justify-end rounded-[4px] px-3 py-3.5 first:rounded-l-[10px] last:rounded-r-[10px] ${s.className}`}
                 >
                   <span className={`type-figure ${s.size}`}>
-                    {withRupee(formatRupees(s.amount, s.amount % 1 === 0 ? 0 : 2))}
+                    <Rupees amount={s.amount} decimals={s.amount % 1 === 0 ? 0 : 2} />
                   </span>
                   <span className="text-[13px] font-bold">{s.label}</span>
                 </div>
@@ -75,7 +75,7 @@ export default function PricingPage() {
           <PricingTable />
           <p className="text-slate">
             Cancellations and refunds are covered in the{' '}
-            <Link className="font-bold text-primary underline" href="/legal/refunds">
+            <Link className="text-link" href="/legal/refunds">
               refund policy
             </Link>
             .

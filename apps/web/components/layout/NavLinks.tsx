@@ -3,14 +3,14 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-import { MAIN_NAV } from '@/lib/site';
+import { isCurrent, MAIN_NAV } from '@/lib/site';
 
 export function NavLinks() {
   const pathname = usePathname();
   return (
     <div className="hidden gap-6 text-base font-bold md:flex">
       {MAIN_NAV.map((link) => {
-        const current = pathname === link.href || pathname.startsWith(`${link.href}/`);
+        const current = isCurrent(pathname, link.href);
         return (
           <Link
             key={link.href}

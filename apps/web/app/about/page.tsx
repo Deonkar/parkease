@@ -1,10 +1,12 @@
 import type { Metadata } from 'next';
 
 import { CtaBand } from '@/components/sections/CtaBand';
+import { DetailList } from '@/components/sections/DetailList';
 import { PageHero } from '@/components/sections/PageHero';
 import { SectionHeading } from '@/components/sections/SectionHeading';
 import { PAGES } from '@/lib/pages';
 import { PRICING } from '@/lib/pricing';
+import { formatRupees } from '@/lib/rupee';
 import { pageMetadata } from '@/lib/seo';
 import { COMPANY, CONTACT } from '@/lib/site';
 
@@ -25,7 +27,7 @@ const PROMISES = [
   ],
   [
     'When plans fall through, we pay.',
-    `If an owner cancels, the driver gets everything back plus ₹${String(PRICING.refunds.ownerCancelGoodwill)} from ParkEase, not from the owner.`,
+    `If an owner cancels, the driver gets everything back plus ${formatRupees(PRICING.refunds.ownerCancelGoodwill)} from ParkEase, not from the owner.`,
   ],
 ] as const;
 
@@ -62,22 +64,17 @@ export default function AboutPage() {
             Who’s behind it
           </SectionHeading>
           <div className="flex flex-[1_1_560px] flex-col gap-10">
-            <dl className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-x-10">
-              {[
-                ['Who runs it', COMPANY.legalName],
-                ...(COMPANY.cin === null ? [] : [['CIN', COMPANY.cin]]),
-                ['Based in', COMPANY.address],
-                ['Grievance officer', COMPANY.grievanceOfficer],
-              ].map(([label, value]) => (
-                <div key={label} className="border-t border-rule py-4.5">
-                  <dt className="text-sm text-slate">{label}</dt>
-                  <dd className="mt-1 text-lg font-bold">{value}</dd>
-                </div>
-              ))}
-            </dl>
+            <DetailList
+              items={[
+                { label: 'Who runs it', value: COMPANY.legalName },
+                ...(COMPANY.cin === null ? [] : [{ label: 'CIN', value: COMPANY.cin }]),
+                { label: 'Based in', value: COMPANY.address },
+                { label: 'Grievance officer', value: COMPANY.grievanceOfficer },
+              ]}
+            />
             <p className="text-[17px] leading-relaxed">
               Writing about us? Email{' '}
-              <a className="font-bold text-primary underline" href={`mailto:${CONTACT.press}`}>
+              <a className="text-link" href={`mailto:${CONTACT.press}`}>
                 {CONTACT.press}
               </a>
               .

@@ -2,13 +2,14 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 import { CtaBand } from '@/components/sections/CtaBand';
+import { FactList } from '@/components/sections/FactList';
 import { NumberedSteps } from '@/components/sections/NumberedSteps';
 import { PageHero } from '@/components/sections/PageHero';
 import { SectionHeading } from '@/components/sections/SectionHeading';
 import { ServiceSwitch } from '@/components/sections/ServiceSwitch';
 import { PAGES } from '@/lib/pages';
-import { formatRupees, PRICING } from '@/lib/pricing';
-import { withRupee } from '@/lib/rupee';
+import { PRICING } from '@/lib/pricing';
+import { formatRupees, Rupees } from '@/lib/rupee';
 import { pageMetadata } from '@/lib/seo';
 
 export const metadata: Metadata = pageMetadata(PAGES.valet);
@@ -23,7 +24,9 @@ export default function ValetPage() {
         lead="Add a valet to any booking. They meet you where you stop, park at the bay you booked, and bring the car back when you ask for it."
         aside={
           <div className="flex flex-[0_1_320px] flex-col gap-1.5 rounded-[20px] bg-midnight-raised p-6.5 shadow-[inset_0_0_0_1px_var(--pe-midnight-rule)]">
-            <span className="type-figure text-6xl">{withRupee(formatRupees(v.base))}</span>
+            <span className="type-figure text-6xl">
+              <Rupees amount={v.base} />
+            </span>
             <span className="text-[17px] font-bold">
               plus {formatRupees(v.perKm)} a km, each way
             </span>
@@ -60,30 +63,30 @@ export default function ValetPage() {
           <SectionHeading id="know-title" className="max-w-[420px] flex-[1_1_320px]">
             Good to know
           </SectionHeading>
-          <dl className="flex-[1_1_560px] border-t-2 border-ink">
-            <div className="border-b border-rule py-6">
-              <dt className="mb-1.5 text-[19px] font-extrabold">Every valet is verified</dt>
-              <dd className="text-[17px] leading-relaxed text-slate">
-                Valets upload ID before they can take a job, and drivers rate every trip.
-              </dd>
-            </div>
-            <div className="border-b border-rule py-6">
-              <dt className="mb-1.5 text-[19px] font-extrabold">If you’re running late</dt>
-              <dd className="text-[17px] leading-relaxed text-slate">
-                The valet waits {v.noShowGraceMinutes} minutes. After that the{' '}
-                {formatRupees(v.base)} call-out is charged and the distance isn’t.
-              </dd>
-            </div>
-            <div className="py-6">
-              <dt className="mb-1.5 text-[19px] font-extrabold">Want to work as a valet?</dt>
-              <dd className="text-[17px] leading-relaxed text-slate">
-                Valets keep {v.keepsPercent}% of every trip and choose their own hours.{' '}
-                <Link className="font-bold text-primary underline" href="/partners">
-                  How partnering works
-                </Link>
-              </dd>
-            </div>
-          </dl>
+          <FactList
+            className="flex-[1_1_560px]"
+            items={[
+              {
+                term: 'Every valet is verified',
+                detail: 'Valets upload ID before they can take a job, and drivers rate every trip.',
+              },
+              {
+                term: 'If you’re running late',
+                detail: `The valet waits ${String(v.noShowGraceMinutes)} minutes. After that the ${formatRupees(v.base)} call-out is charged and the distance isn’t.`,
+              },
+              {
+                term: 'Want to work as a valet?',
+                detail: (
+                  <>
+                    Valets keep {v.keepsPercent}% of every trip and choose their own hours.{' '}
+                    <Link className="text-link" href="/partners">
+                      How partnering works
+                    </Link>
+                  </>
+                ),
+              },
+            ]}
+          />
         </div>
       </section>
       <CtaBand title="Add a valet to your next booking." />

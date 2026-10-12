@@ -1,3 +1,4 @@
+import { SectionHeading } from '@/components/sections/SectionHeading';
 import type { City } from '@/lib/cities';
 
 /** Neighbourhoods painted as a row of bays on the basement floor, bay numbers stencilled. */
@@ -5,9 +6,7 @@ export function CityNeighbourhoods({ city }: { readonly city: City }) {
   return (
     <section aria-labelledby="hoods-title" className="bg-floor text-on-midnight">
       <div className="wrap flex flex-col gap-3 pt-24 pb-12">
-        <h2 id="hoods-title" className="type-section">
-          Where people park
-        </h2>
+        <SectionHeading id="hoods-title">Where people park</SectionHeading>
         <p className="max-w-[520px] text-lg text-on-midnight-muted">
           Open the app near any of these and you’ll see the spaces free around you.
         </p>

@@ -1,4 +1,5 @@
 import { PRICING } from '@/lib/pricing';
+import { withSiteName } from '@/lib/site';
 
 /**
  * Every static page: its path, title and meta description. Metadata, the sitemap and the
@@ -7,7 +8,7 @@ import { PRICING } from '@/lib/pricing';
  */
 export interface PageMeta {
   readonly path: string;
-  /** Rendered through the layout's `%s — ParkEase` template unless `absolute` is set. */
+  /** Rendered through the layout's title template (withSiteName) unless `absolute` is set. */
   readonly title: string;
   readonly absolute?: boolean;
   readonly description: string;
@@ -121,5 +122,5 @@ export type PageKey = keyof typeof PAGES;
 
 /** The title as it appears in the browser tab, after the layout template. */
 export function fullTitle(page: PageMeta): string {
-  return page.absolute ? page.title : `${page.title} — ParkEase`;
+  return page.absolute ? page.title : withSiteName(page.title);
 }

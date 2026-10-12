@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import { PricingTable } from '@/components/sections/PricingTable';
 import { PRICING } from '@/lib/pricing';
+import { formatRupees } from '@/lib/rupee';
 
 const html = renderToStaticMarkup(createElement(PricingTable));
 const text = html.replace(/<[^>]+>/g, '|');
@@ -50,7 +51,7 @@ describe('pricing (ADR-009)', () => {
     expect(PRICING.valet.exampleFee).toBe(80);
     expect(PRICING.valet.exampleEarns).toBe(64);
     expect(PRICING.wash.examplePrice).toBe(399);
-    expect(PRICING.wash.exampleEarns).toBe(319);
+    expect(formatRupees(PRICING.wash.exampleEarns)).toBe('₹319');
   });
 
   it('prices the driver example from contracts', () => {

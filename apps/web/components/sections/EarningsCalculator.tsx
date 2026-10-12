@@ -3,7 +3,7 @@
 import { useId, useState } from 'react';
 
 import { estimateMonthlyEarnings } from '@/lib/earnings';
-import { withRupee } from '@/lib/rupee';
+import { formatRupees, withRupee, Rupees } from '@/lib/rupee';
 
 type Vehicle = 'car' | 'two_wheeler';
 
@@ -11,8 +11,6 @@ const RANGE = {
   car: { min: 10, max: 200, start: 30 },
   two_wheeler: { min: 5, max: 60, start: 15 },
 } as const;
-
-const inr = (n: number): string => `₹${n.toLocaleString('en-IN')}`;
 
 /**
  * `hourlyPrice × hoursPerDay × 30 × (1 − commission)` (task 20 §20.7). Defaults to ₹30 × 6 hours,
@@ -127,8 +125,8 @@ export function EarningsCalculator({
           'price',
           'Hourly price (₹)',
           hourlyPrice,
-          `₹${String(hourlyPrice)}/hr`,
-          `₹${String(hourlyPrice)} an hour`,
+          `${formatRupees(hourlyPrice)}/hr`,
+          `${formatRupees(hourlyPrice)} an hour`,
           RANGE[vehicle].min,
           RANGE[vehicle].max,
           5,
@@ -163,7 +161,7 @@ export function EarningsCalculator({
         <p aria-live="polite" aria-atomic="true" className="flex flex-col gap-4">
           <span className="font-bold text-on-midnight-muted">Estimated monthly earnings</span>
           <span data-estimate className="type-figure text-[clamp(64px,8vw,104px)] tabular-nums">
-            {withRupee(inr(monthly))}
+            <Rupees amount={monthly} />
           </span>
         </p>
         <span className="text-on-midnight-muted">
@@ -191,7 +189,7 @@ export function EarningsCalculator({
               You keep {waived ? 'all of it' : `${String(100 - percent)}%`}
             </span>
             <span className="text-on-midnight-muted">
-              {waived ? 'Commission waived' : `ParkEase keeps ${inr(gross - monthly)}`}
+              {waived ? 'Commission waived' : `ParkEase keeps ${formatRupees(gross - monthly)}`}
             </span>
           </div>
         </div>
@@ -208,7 +206,7 @@ export function EarningsCalculator({
         </label>
         <p className="border-t border-midnight-rule pt-3 text-sm leading-relaxed text-on-midnight-muted">
           Price × hours × 30 days. Excludes busy-hour charges, which drivers pay on top. Paid weekly
-          or monthly once you’ve earned ₹{minimumPayout}.
+          or monthly once you’ve earned {formatRupees(minimumPayout)}.
         </p>
       </div>
     </div>
