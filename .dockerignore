@@ -1,0 +1,12 @@
+**/node_modules
+**/dist
+**/.turbo
+**/*.tsbuildinfo
+.env*
+!.env.example
+.git
+graphify-out
+brag-output
+apps/mobile
+apps/admin
+apps/web
