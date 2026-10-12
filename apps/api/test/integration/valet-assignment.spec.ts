@@ -119,7 +119,7 @@ beforeAll(async () => {
     lng: ORIGIN.lng,
     pricing: HOURLY_ONLY,
     schedule: OPEN_ALWAYS,
-    slots: { car: 8 },
+    carSlots: 8,
   });
 }, 180_000);
 
@@ -233,7 +233,7 @@ describe('the rating floor', () => {
     expect(candidates).toHaveLength(2);
     expect(warn).toHaveBeenCalledTimes(1);
 
-    const [context, message] = warn.mock.calls[0] as [Record<string, unknown>, string];
+    const [context, message] = warn.mock.calls[0] as unknown as [Record<string, unknown>, string];
     expect(message).toBe('valet assignment fell back below the rating floor');
     expect(context['radiusM']).toBe(5000);
     expect(context['ratingFloorBp']).toBe(PARTNER_RATING_FLOOR_BP);

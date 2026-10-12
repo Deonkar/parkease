@@ -273,6 +273,9 @@ describe('the idempotency commit fence', () => {
     /** A webhook whose capture handler is overtaken by a redelivery while it runs. */
     const webhookWith = (confirm: () => Promise<unknown>) =>
       new WebhookService(
+        // db and outbox serve only the RazorpayX payout path, which these cases never reach.
+        {} as never,
+        {} as never,
         { verifyWebhookSignature: () => undefined } as never,
         service,
         { execute: confirm } as never,

@@ -120,15 +120,16 @@ describe('/me notifications over HTTP (task 19a)', () => {
       expect(await count()).toBe(3);
 
       expect((await send('POST', `/api/v1/me/notifications/${first}/read`)).status).toBe(204);
-      const [{ read_at: readAt }] = await h.sql<{ read_at: Date }[]>`
-        SELECT read_at FROM notifications WHERE id = ${first ?? ''}`.then(
-        (r) => r as { read_at: Date }[],
-      );
+      // The harness connection returns timestamptz as text.
+      const [firstRead] = await h.sql<{ read_at: string | null }[]>`
+        SELECT read_at FROM notifications WHERE id = ${first ?? ''}`;
+      const readAt = firstRead?.read_at;
+      expect(readAt).toEqual(expect.any(String));
       expect(await count()).toBe(2);
 
       expect((await send('POST', `/api/v1/me/notifications/${first}/read`)).status).toBe(204);
       const [again] = await h.sql<
-        { read_at: Date }[]
+        { read_at: string | null }[]
       >`SELECT read_at FROM notifications WHERE id = ${first ?? ''}`;
       expect(again?.read_at).toEqual(readAt);
     });

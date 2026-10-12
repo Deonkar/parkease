@@ -3,8 +3,10 @@
   "compilerOptions": {
     "rootDir": null,
     "outDir": null,
-    "noEmit": true
+    "noEmit": true,
+    // Check-only: not a project reference, so it need not list every file. The
+    // enum-drift integration test imports packages/testing by relative path.
+    "composite": false
   },
-  "include": ["src", "test"],
-  "exclude": ["test/**/*.integration.test.ts"]
+  "include": ["src", "test"]
 }
