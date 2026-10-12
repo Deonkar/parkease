@@ -318,6 +318,35 @@ describe('a GPS that never answers', () => {
     await expect(stopping).resolves.toEqual({ ok: true });
     expect(h.sent.at(-1)).toEqual({ isOnline: false, fix: undefined });
   });
+
+  it('stop() returns NOW, not after the stuck beat times out (S-67)', async () => {
+    // The test above advances past LOCATE_TIMEOUT_MS before it awaits, so it
+    // passes either way. This one never lets the GPS timeout fire: a partner
+    // switching off in a basement goes offline now, not in 15 seconds.
+    let locates = 0;
+    const h = harness([at(FIRST)]);
+    const deps: PresenceDeps = {
+      ...h.deps,
+      locate: () => {
+        locates += 1;
+        return locates === 1 ? Promise.resolve(at(FIRST)) : never();
+      },
+    };
+    const started = await startPresence(deps);
+    if (!started.ok) throw new Error('expected to start');
+    await vi.advanceTimersByTimeAsync(HEARTBEAT_INTERVAL_MS);
+    expect(locates).toBe(2);
+
+    let settled: unknown = 'pending';
+    void started.handle.stop().then((result) => {
+      settled = result;
+    });
+    // Microtasks only, and well short of the GPS timeout.
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(settled).toEqual({ ok: true });
+    expect(h.sent.at(-1)).toEqual({ isOnline: false, fix: undefined });
+  });
 });
 
 describe('ordering against a PATCH already on the wire', () => {
