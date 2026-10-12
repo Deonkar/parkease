@@ -2481,3 +2481,5 @@ Push registration and the tap-to-open path are unit-tested with mocked Expo modu
 
 - **Why deferred:** needs an Expo account and a device; the rest is polish on a working path.
 - **Done means:** `eas init` committed, one push received and tapped on a physical Android device for each of driver, owner and valet (cold start and foreground), a pre-prompt before the permission request, and a Settings link when permission is denied.
+
+| task-22 | `apps/*/Dockerfile` | Image runs under tsx with devDeps because packages export raw `.ts`. Slim image + `pnpm deploy --prod` needs packages to emit `dist`. Also unverified: healthcheck against live DB, worker-host ADR-010 amendment, CI docker push, everything in 22.8 that needs real accounts. |
