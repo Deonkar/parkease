@@ -13,6 +13,7 @@ import {
   encodeInstantCursor,
   instantText,
 } from '../../../platform/http/instant-cursor.js';
+import { parseOutgoing } from '../../../platform/http/outgoing-contract.js';
 
 type EntryView = z.input<typeof ledgerEntrySchema>;
 
@@ -79,8 +80,8 @@ export class LedgerExplorerQuery {
       items: pageRows.map((row) => ({
         id: row.id,
         txnId: row.txnId,
-        account: ledgerAccountSchema.parse(row.account),
-        direction: ledgerDirectionSchema.parse(row.direction),
+        account: parseOutgoing(ledgerAccountSchema, row.account, 'ledger account'),
+        direction: parseOutgoing(ledgerDirectionSchema, row.direction, 'ledger direction'),
         amountPaise: row.amountPaise,
         bookingId: row.bookingId,
         payoutId: row.payoutId,

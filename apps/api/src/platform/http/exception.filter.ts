@@ -92,7 +92,10 @@ function errorCodeFor(exception: HttpException): string {
       .toUpperCase()
       .replace(/\s+/g, '_');
   }
-  return 'ERROR';
+  // A bare `new NotFoundException()` carries no `error` field. Its status still names it, so a
+  // client matching on NOT_FOUND gets NOT_FOUND rather than a generic ERROR (S-35).
+  const named = HttpStatus[exception.getStatus()];
+  return named ?? 'ERROR';
 }
 
 function userMessageFor(exception: HttpException): string {

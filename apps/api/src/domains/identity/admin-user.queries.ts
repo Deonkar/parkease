@@ -6,6 +6,7 @@ import { userRoles, users } from '@parkease/db/schema';
 import { and, asc, desc, eq, exists, ilike, inArray, or, sql } from 'drizzle-orm';
 
 import { DB, type Database } from '../../platform/db/db.module.js';
+import { parseOutgoing } from '../../platform/http/outgoing-contract.js';
 
 /**
  * A full Indian mobile as the admin typed it (`98765 43210`, `9876543210`, `+91 98765 43210`),
@@ -115,15 +116,15 @@ export class AdminUserQueries {
       .orderBy(asc(userRoles.grantedAt), asc(userRoles.role));
 
     return rows.map((row) => ({
-      id: userIdSchema.parse(row.id),
+      id: parseOutgoing(userIdSchema, row.id, 'user id'),
       name: row.name,
       phone: maskPhone(row.phone),
-      status: userStatusSchema.parse(row.status),
+      status: parseOutgoing(userStatusSchema, row.status, 'user status'),
       roles: roleRows
         .filter((r) => r.userId === row.id)
         .map((r) => ({
-          role: roleSchema.parse(r.role),
-          status: roleStatusSchema.parse(r.status),
+          role: parseOutgoing(roleSchema, r.role, 'role'),
+          status: parseOutgoing(roleStatusSchema, r.status, 'role status'),
           grantedAt: r.grantedAt.toISOString(),
         })),
       createdAt: row.createdAt.toISOString(),

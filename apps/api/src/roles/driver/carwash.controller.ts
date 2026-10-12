@@ -26,6 +26,7 @@ import { CancelWashCommand } from '../../domains/carwash/commands/cancel-wash.co
 import { CreateWashOrderCommand } from '../../domains/carwash/commands/create-wash-order.command.js';
 import { RequestCarwashCommand } from '../../domains/carwash/commands/request-carwash.command.js';
 import { type AuthUser, CurrentUser } from '../../platform/auth/current-user.decorator.js';
+import { parseOutgoing } from '../../platform/http/outgoing-contract.js';
 import { Roles } from '../../platform/rbac/roles.decorator.js';
 
 /**
@@ -132,29 +133,33 @@ export class DriverCarwashController {
         ? null
         : computeWashFee(toPaise(job.pricePaise), toRate(Number(job.commissionRate)));
 
-    return driverWashJobSchema.parse({
-      id: job.id,
-      bookingId: job.bookingId,
-      status: job.status,
-      serviceName: job.serviceName,
-      vehicleType: job.vehicleType,
-      pricePaise: fee?.pricePaise ?? null,
-      gstPaise: fee?.gstPaise ?? null,
-      driverTotalPaise: fee?.driverTotalPaise ?? null,
-      offeredTo,
-      offerRadiusM: job.offerRadiusM,
-      offerRound: job.offerRound,
-      washer,
-      beforePhotoId: job.beforePhotoId,
-      afterPhotoId: job.afterPhotoId,
-      // Server-decided, so the app never renders a button the machine will
-      // refuse. The same table the command asserts against.
-      cancellable: nextCarwashStatus(parseCarwashJobStatus(job.status), 'cancel') !== null,
-      cancellationReason: job.cancellationReason,
-      requestedAt: job.createdAt.toISOString(),
-      acceptedAt: job.acceptedAt?.toISOString() ?? null,
-      startedAt: job.startedAt?.toISOString() ?? null,
-      completedAt: job.completedAt?.toISOString() ?? null,
-    });
+    return parseOutgoing(
+      driverWashJobSchema,
+      {
+        id: job.id,
+        bookingId: job.bookingId,
+        status: job.status,
+        serviceName: job.serviceName,
+        vehicleType: job.vehicleType,
+        pricePaise: fee?.pricePaise ?? null,
+        gstPaise: fee?.gstPaise ?? null,
+        driverTotalPaise: fee?.driverTotalPaise ?? null,
+        offeredTo,
+        offerRadiusM: job.offerRadiusM,
+        offerRound: job.offerRound,
+        washer,
+        beforePhotoId: job.beforePhotoId,
+        afterPhotoId: job.afterPhotoId,
+        // Server-decided, so the app never renders a button the machine will
+        // refuse. The same table the command asserts against.
+        cancellable: nextCarwashStatus(parseCarwashJobStatus(job.status), 'cancel') !== null,
+        cancellationReason: job.cancellationReason,
+        requestedAt: job.createdAt.toISOString(),
+        acceptedAt: job.acceptedAt?.toISOString() ?? null,
+        startedAt: job.startedAt?.toISOString() ?? null,
+        completedAt: job.completedAt?.toISOString() ?? null,
+      },
+      'driver wash job',
+    );
   }
 }

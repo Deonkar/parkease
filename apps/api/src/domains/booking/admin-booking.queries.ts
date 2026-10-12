@@ -18,6 +18,7 @@ import { alias } from 'drizzle-orm/pg-core';
 import type { z } from 'zod';
 
 import { DB, type Database } from '../../platform/db/db.module.js';
+import { parseOutgoing } from '../../platform/http/outgoing-contract.js';
 import {
   CAPTURED_PAYMENT_STATUSES,
   ORPHAN_CAPTURE_REFUND_REASON,
@@ -104,7 +105,7 @@ export class AdminBookingQueries {
     return {
       items: rows.map((row) => ({
         ...row,
-        status: bookingStatusSchema.parse(row.status),
+        status: parseOutgoing(bookingStatusSchema, row.status, 'booking status'),
         startsAt: row.startsAt.toISOString(),
         endsAt: row.endsAt.toISOString(),
       })),
@@ -189,7 +190,7 @@ export class AdminBookingQueries {
 
     return {
       id: booking.id,
-      status: bookingStatusSchema.parse(booking.status),
+      status: parseOutgoing(bookingStatusSchema, booking.status, 'booking status'),
       driver: { id: booking.driverId, name: row.driverName, phone: maskPhone(row.driverPhone) },
       space: { id: booking.spaceId, title: row.spaceTitle, ownerName: row.ownerName },
       startsAt: booking.startsAt.toISOString(),
@@ -201,8 +202,8 @@ export class AdminBookingQueries {
       ledger: ledgerRows.map((e) => ({
         id: e.id,
         txnId: e.txnId,
-        account: ledgerAccountSchema.parse(e.account),
-        direction: ledgerDirectionSchema.parse(e.direction),
+        account: parseOutgoing(ledgerAccountSchema, e.account, 'ledger account'),
+        direction: parseOutgoing(ledgerDirectionSchema, e.direction, 'ledger direction'),
         amountPaise: e.amountPaise,
         bookingId: e.bookingId,
         payoutId: e.payoutId,
@@ -211,14 +212,14 @@ export class AdminBookingQueries {
       })),
       payments: paymentRows.map((p) => ({
         id: p.id,
-        status: paymentStatusSchema.parse(p.status),
+        status: parseOutgoing(paymentStatusSchema, p.status, 'payment status'),
         amountPaise: p.capturedPaise ?? p.expectedTotalPaise,
         razorpayPaymentId: p.razorpayPaymentId,
       })),
       refunds: refundRows.map((r) => ({
         id: r.id,
         amountPaise: r.amountPaise,
-        status: refundStatusSchema.parse(r.status),
+        status: parseOutgoing(refundStatusSchema, r.status, 'refund status'),
         reason: r.reason,
         createdAt: r.createdAt.toISOString(),
       })),

@@ -18,6 +18,7 @@ import { and, count, eq, isNull } from 'drizzle-orm';
 
 import { DB, type Database } from '../../platform/db/db.module.js';
 import { withTransaction, type TxHandle } from '../../platform/db/transaction.js';
+import { parseOutgoing } from '../../platform/http/outgoing-contract.js';
 import { AuditService } from '../../platform/observability/audit.service.js';
 
 import { MissingSurgeConfigError, ZoneOverrideNotFoundError } from './errors.js';
@@ -81,15 +82,19 @@ type OverrideRow = typeof surgeZoneOverrides.$inferSelect;
  * the kind of edit this catches before it prices anything.
  */
 function toConfig(row: ConfigRow): SurgeConfig {
-  return surgeConfigSchema.parse({
-    maxMultiplierBp: row.maxMultiplierBp,
-    peakHourModifierBp: row.peakHourModifierBp,
-    weekendModifierBp: row.weekendModifierBp,
-    eventModifierBp: row.eventModifierBp,
-    occupancyWindowMinutes: row.occupancyWindowMinutes,
-    peakWindows: row.peakWindows,
-    tiers: row.tiers,
-  });
+  return parseOutgoing(
+    surgeConfigSchema,
+    {
+      maxMultiplierBp: row.maxMultiplierBp,
+      peakHourModifierBp: row.peakHourModifierBp,
+      weekendModifierBp: row.weekendModifierBp,
+      eventModifierBp: row.eventModifierBp,
+      occupancyWindowMinutes: row.occupancyWindowMinutes,
+      peakWindows: row.peakWindows,
+      tiers: row.tiers,
+    },
+    'surge config',
+  );
 }
 
 const toConfigRecord = (row: ConfigRow): SurgeConfigRecord => ({

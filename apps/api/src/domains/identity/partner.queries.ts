@@ -12,6 +12,7 @@ import { eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
 import { DB, type Database } from '../../platform/db/db.module.js';
+import { parseOutgoing } from '../../platform/http/outgoing-contract.js';
 
 /**
  * The upload ids an admin reviews, exactly as the profile stores them (Cloudinary's own `public_id`
@@ -95,9 +96,9 @@ export class PartnerQueries {
 
     return {
       items: [...rows].map((row) => {
-        const r = queueRowSchema.parse(row);
+        const r = parseOutgoing(queueRowSchema, row, 'queue row');
         return {
-          userId: userIdSchema.parse(r.user_id),
+          userId: parseOutgoing(userIdSchema, r.user_id, 'user id'),
           kind: r.kind,
           name: r.name,
           displayName: r.display_name,
@@ -106,7 +107,7 @@ export class PartnerQueries {
           requestedAt: new Date(r.requested_at).toISOString(),
         };
       }),
-      total: totalRowSchema.parse([...counts][0]).total,
+      total: parseOutgoing(totalRowSchema, [...counts][0], 'total row').total,
     };
   }
 
@@ -131,12 +132,16 @@ export class PartnerQueries {
     if (row === undefined) return undefined;
 
     return {
-      userId: userIdSchema.parse(row.userId),
+      userId: parseOutgoing(userIdSchema, row.userId, 'user id'),
       kind: 'valet',
       name: row.name,
       displayName: null,
       phone: maskPhone(row.phone),
-      verificationStatus: verificationStatusSchema.parse(row.status),
+      verificationStatus: parseOutgoing(
+        verificationStatusSchema,
+        row.status,
+        'verification status',
+      ),
       requestedAt: row.requestedAt.toISOString(),
       vehicleNumber: row.vehicleNumber,
       operatingHours: null,
@@ -163,12 +168,16 @@ export class PartnerQueries {
     if (row === undefined) return undefined;
 
     return {
-      userId: userIdSchema.parse(row.userId),
+      userId: parseOutgoing(userIdSchema, row.userId, 'user id'),
       kind: 'washer',
       name: row.name,
       displayName: row.businessName,
       phone: maskPhone(row.phone),
-      verificationStatus: verificationStatusSchema.parse(row.status),
+      verificationStatus: parseOutgoing(
+        verificationStatusSchema,
+        row.status,
+        'verification status',
+      ),
       requestedAt: row.requestedAt.toISOString(),
       vehicleNumber: null,
       operatingHours: row.operatingHours ?? null,

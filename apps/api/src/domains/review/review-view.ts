@@ -1,6 +1,8 @@
 import type { PublicReviewView, ReviewView } from '@parkease/contracts/driver';
 import { bookingIdSchema, reviewIdSchema } from '@parkease/contracts/primitives';
 
+import { parseOutgoing } from '../../platform/http/outgoing-contract.js';
+
 import type { ReviewRow } from './review.service.js';
 
 /**
@@ -21,8 +23,8 @@ export function reviewerDisplayName(name: string | null): string {
  */
 export function toReviewView({ review, reviewerName }: ReviewRow): ReviewView {
   return {
-    id: reviewIdSchema.parse(review.id),
-    bookingId: bookingIdSchema.parse(review.bookingId),
+    id: parseOutgoing(reviewIdSchema, review.id, 'review id'),
+    bookingId: parseOutgoing(bookingIdSchema, review.bookingId, 'booking id'),
     targetType: review.targetType as ReviewView['targetType'],
     targetId: review.targetId,
     rating: review.rating,

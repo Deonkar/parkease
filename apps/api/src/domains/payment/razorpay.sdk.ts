@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import Razorpay from 'razorpay';
 
 import { env } from '../../platform/config/env.schema.js';
+import { parseOutgoing } from '../../platform/http/outgoing-contract.js';
 import { GATEWAY_TIMEOUT_MS } from '../../platform/http/timeouts.js';
 
 import {
@@ -72,8 +73,10 @@ export class RazorpaySdkClient implements RazorpayClient {
     paymentId: string,
     reference: string,
   ): Promise<RazorpayRefund | null> {
-    const page = razorpayRefundListSchema.parse(
+    const page = parseOutgoing(
+      razorpayRefundListSchema,
       await this.client.payments.fetchMultipleRefund(paymentId),
+      'razorpay refund list',
     );
 
     const existing = page.items.find(

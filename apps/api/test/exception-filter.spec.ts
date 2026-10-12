@@ -42,6 +42,20 @@ describe('AllExceptionsFilter', () => {
     expect(call[0].error.code).toBe('SLOT_UNAVAILABLE');
   });
 
+  it('names a bare 404 NOT_FOUND from its status, never a generic ERROR (S-35)', () => {
+    filter.catch(new NotFoundException(), mockHost(sendFn));
+
+    const call = sendFn.mock.calls[0] as [{ error: { code: string } }];
+    expect(call[0].error.code).toBe('NOT_FOUND');
+  });
+
+  it('keeps a domain code where the exception names one', () => {
+    filter.catch(new NotFoundException({ error: 'WASHER_PROFILE_NOT_FOUND' }), mockHost(sendFn));
+
+    const call = sendFn.mock.calls[0] as [{ error: { code: string } }];
+    expect(call[0].error.code).toBe('WASHER_PROFILE_NOT_FOUND');
+  });
+
   it('maps PG 23505 to 409 ALREADY_EXISTS', () => {
     const err = Object.assign(new Error(), { code: '23505' });
     filter.catch(err, mockHost(sendFn));

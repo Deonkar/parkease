@@ -10,6 +10,7 @@ import { spacePhotos, spaces, users } from '@parkease/db/schema';
 import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 
 import { DB, type Database } from '../../platform/db/db.module.js';
+import { parseOutgoing } from '../../platform/http/outgoing-contract.js';
 
 /**
  * An owner who has never had a listing approved is the one an admin looks at hardest. `inactive`
@@ -125,14 +126,14 @@ export class AdminSpaceQueries {
 
 function toQueueItem(row: QueueRow): AdminSpaceQueueItem {
   return {
-    id: spaceIdSchema.parse(row.id),
+    id: parseOutgoing(spaceIdSchema, row.id, 'space id'),
     title: row.title,
     address: `${row.addressLine}, ${row.city}`,
-    ownerId: userIdSchema.parse(row.ownerId),
+    ownerId: parseOutgoing(userIdSchema, row.ownerId, 'user id'),
     ownerName: row.ownerName,
     ownerPhone: maskPhone(row.ownerPhone),
     isFirstListing: row.isFirstListing,
-    approvalStatus: approvalStatusSchema.parse(row.approvalStatus),
+    approvalStatus: parseOutgoing(approvalStatusSchema, row.approvalStatus, 'approval status'),
     submittedAt: (row.submittedAt ?? row.createdAt).toISOString(),
     reviewNotes: row.reviewNotes,
   };

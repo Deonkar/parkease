@@ -4,6 +4,7 @@ import { bookingIdSchema } from '@parkease/contracts/primitives';
 import { REVIEW_WINDOW_MS } from '../../../domains/review/eligibility.js';
 import { reviewerDisplayName } from '../../../domains/review/review-view.js';
 import type { PendingBooking } from '../../../domains/review/review.service.js';
+import { parseOutgoing } from '../../../platform/http/outgoing-contract.js';
 
 /** One booking the driver can still review, and which of its counterparties they already have. */
 export function toPendingReviewView({ participants, reviewed }: PendingBooking): PendingReview {
@@ -20,7 +21,7 @@ export function toPendingReviewView({ participants, reviewed }: PendingBooking):
     });
 
   return {
-    bookingId: bookingIdSchema.parse(booking.id),
+    bookingId: parseOutgoing(bookingIdSchema, booking.id, 'booking id'),
     spaceTitle: booking.spaceTitle,
     completedAt: completedAt.toISOString(),
     reviewableUntil: new Date(completedAt.getTime() + REVIEW_WINDOW_MS).toISOString(),

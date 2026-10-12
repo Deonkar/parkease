@@ -12,6 +12,7 @@ import {
 } from '@parkease/contracts/valet';
 
 import type { ValetJobRow } from '../../../domains/valet/valet.service.js';
+import { parseOutgoing } from '../../../platform/http/outgoing-contract.js';
 
 export interface DriverValetJobInput {
   readonly job: ValetJobRow;
@@ -37,45 +38,49 @@ const isCancellable = (status: ValetJobStatus): boolean =>
 export function toDriverValetJobView(input: DriverValetJobInput): DriverValetJob {
   const { job } = input;
 
-  return driverValetJobSchema.parse({
-    id: job.id,
-    bookingId: job.bookingId,
-    status: job.status,
-    pickupAddress: job.pickupAddress,
-    offerRadiusM: job.offerRadiusM,
-    offerRound: job.offerRound,
-    offeredTo: input.offeredTo,
-    outboundLeg: {
-      distanceM: job.distanceM,
-      feePaise: job.feePaise,
-      txnId: job.txnId,
+  return parseOutgoing(
+    driverValetJobSchema,
+    {
+      id: job.id,
+      bookingId: job.bookingId,
+      status: job.status,
+      pickupAddress: job.pickupAddress,
+      offerRadiusM: job.offerRadiusM,
+      offerRound: job.offerRound,
+      offeredTo: input.offeredTo,
+      outboundLeg: {
+        distanceM: job.distanceM,
+        feePaise: job.feePaise,
+        txnId: job.txnId,
+      },
+      returnLeg: {
+        distanceM: job.returnDistanceM,
+        feePaise: job.returnFeePaise,
+        txnId: job.returnTxnId,
+      },
+      returnDropLocation: job.returnDropLocation,
+      valet: input.valet,
+      /**
+       * A mode, never a number.
+       *
+       * Resolved upstream by `ContactChannelService`, which is the only thing that
+       * reads the masked-calling flag. Masked calling is what stops a number being
+       * exchanged at all (§11.9), so the flag being off does not fall back to
+       * showing one — it falls back to a platform-mediated thread carrying the job
+       * id, which support can use to reach either party. Neither variant of
+       * `ValetContact` can hold a phone number, so no valet or driver number
+       * appears in any response from this task, flag on or off (security.md §5.3).
+       */
+      contact: input.contact,
+      lastKnownLocation: input.lastKnownLocation,
+      cancellable: isCancellable(parseValetJobStatus(job.status)),
+      proofPhotoId: job.proofPhotoId,
+      cancellationReason: job.cancellationReason,
+      requestedAt: job.createdAt.toISOString(),
+      acceptedAt: job.acceptedAt?.toISOString() ?? null,
+      parkedAt: job.parkedAt?.toISOString() ?? null,
+      completedAt: job.completedAt?.toISOString() ?? null,
     },
-    returnLeg: {
-      distanceM: job.returnDistanceM,
-      feePaise: job.returnFeePaise,
-      txnId: job.returnTxnId,
-    },
-    returnDropLocation: job.returnDropLocation,
-    valet: input.valet,
-    /**
-     * A mode, never a number.
-     *
-     * Resolved upstream by `ContactChannelService`, which is the only thing that
-     * reads the masked-calling flag. Masked calling is what stops a number being
-     * exchanged at all (§11.9), so the flag being off does not fall back to
-     * showing one — it falls back to a platform-mediated thread carrying the job
-     * id, which support can use to reach either party. Neither variant of
-     * `ValetContact` can hold a phone number, so no valet or driver number
-     * appears in any response from this task, flag on or off (security.md §5.3).
-     */
-    contact: input.contact,
-    lastKnownLocation: input.lastKnownLocation,
-    cancellable: isCancellable(parseValetJobStatus(job.status)),
-    proofPhotoId: job.proofPhotoId,
-    cancellationReason: job.cancellationReason,
-    requestedAt: job.createdAt.toISOString(),
-    acceptedAt: job.acceptedAt?.toISOString() ?? null,
-    parkedAt: job.parkedAt?.toISOString() ?? null,
-    completedAt: job.completedAt?.toISOString() ?? null,
-  });
+    'driver valet job',
+  );
 }

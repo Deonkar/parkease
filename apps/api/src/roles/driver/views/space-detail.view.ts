@@ -7,6 +7,7 @@ import { spaceIdSchema } from '@parkease/contracts/primitives';
 import { surgeRateOf } from '../../../domains/pricing/surge-rate.js';
 import { toPublicReviewView } from '../../../domains/review/review-view.js';
 import type { ReviewRow, Summary } from '../../../domains/review/review.service.js';
+import { parseOutgoing } from '../../../platform/http/outgoing-contract.js';
 
 import { toRatingBadge } from './rating-badge.view.js';
 
@@ -68,7 +69,7 @@ export function toSpaceDetailView(input: SpaceDetailInput): SpaceDetail {
     // Branded at the boundary rather than carried through the cast below: the
     // id is the one field the cast cannot bridge, and parsing it here is what
     // keeps `as SpaceDetail` a shape assertion rather than a claim about data.
-    id: spaceIdSchema.parse(space.id),
+    id: parseOutgoing(spaceIdSchema, space.id, 'space id'),
     title: space.title,
     description: space.description,
     addressLine: space.addressLine,

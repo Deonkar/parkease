@@ -1195,5 +1195,7 @@ describe('the valet-side reads, positively', () => {
     });
 
     expect(res.status).toBe(404);
+    // A bare NotFoundException answers a code a client can match on (S-35).
+    expect((res.body as { error: { code: string } }).error.code).toBe('NOT_FOUND');
   });
 });
