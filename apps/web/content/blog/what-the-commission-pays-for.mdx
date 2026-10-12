@@ -1,0 +1,23 @@
+import { PRICING } from '@/lib/pricing';
+
+ParkEase keeps {PRICING.commissionPercent}% of the base price of each booking, once. Listing is free, and there is no monthly fee. Here is what that {PRICING.commissionPercent}% covers.
+
+## A worked example
+
+A driver books {PRICING.example.hours} hours at ₹{PRICING.example.hourly}. The base price is ₹{PRICING.example.base}. You earn ₹{PRICING.example.owner} and ParkEase keeps ₹{PRICING.example.parkease}. The driver also pays {PRICING.gstPercent}% GST on our fee, which is ₹{PRICING.example.gst.toFixed(2)}, so they pay ₹{PRICING.example.driverTotal.toFixed(2)} in total. Busy-hour charges, when they apply, are added on top for the driver and never come out of your price.
+
+## Payments and payouts
+
+Drivers pay by UPI, card or netbanking through Razorpay, and your share is paid into the bank account you connected {PRICING.payouts.sentence}, once your balance reaches ₹{PRICING.minimumPayout}. Your payout is your price less the commission. Nothing else is taken off it.
+
+## Cancellations that are not your fault, or the driver’s
+
+If you ever have to cancel a booking, the driver gets a full refund and ₹{PRICING.refunds.ownerCancelGoodwill} from ParkEase. That ₹{PRICING.refunds.ownerCancelGoodwill} is ours, not taken from your earnings.
+
+## Support, checks and reviews
+
+Someone answers when a driver cannot find the gate or a booking goes wrong. Reviews are limited to drivers who actually finished a booking, so your rating reflects real stays.
+
+## The first {PRICING.waiverSlots} owners
+
+The first {PRICING.waiverSlots} owners pay no commission for their first {PRICING.waiverMonths} months. [Start listing](/earn#start).

@@ -2482,4 +2482,36 @@ Push registration and the tap-to-open path are unit-tested with mocked Expo modu
 - **Why deferred:** needs an Expo account and a device; the rest is polish on a working path.
 - **Done means:** `eas init` committed, one push received and tapped on a physical Android device for each of driver, owner and valet (cold start and foreground), a pre-prompt before the permission request, and a Settings link when permission is denied.
 
+### S-148 — Task 20 web: optional cleanup from the simplify review
+
+- **Status:** `open`
+- **Found in:** task 20 (marketing site), `/simplify` review, 2026-10-12
+- **Surface:** `apps/web`
+
+Four tidiness items the review found and the task deliberately skipped. None changes what the site renders.
+
+1. **Timeline wrapper.** `app/how-it-works/page.tsx` wraps each `Timeline` tab panel in the same `rounded-t-3xl bg-porcelain px-6 py-16 text-ink md:px-12` div. `app/partners/page.tsx` repeats that wrapper for its panels. Move it into `Timeline` (or one shared panel component) so each tab is `content: <Timeline stages={…} />`.
+2. **`LeavingCar` re-draws `Car`.** `components/sections/ParkingFloor.tsx` repeats `Car`'s svg, viewBox, body and roof rects and drop shadow, and adds only the tail lights. The roof opacity has already drifted (0.05 against 0.045). `Car` should take `className` and `children`, so `LeavingCar` becomes `<Car color={carLeaving} className="floor-leaving …">{tailLights}</Car>`.
+3. **Story screens ship as JavaScript.** `components/sections/HowItWorks.tsx` is a client component, but its three phone screens are fixed markup; only `data-active`/`aria-hidden` depend on state. Render the screens on the server and pass them in as `screens: readonly [ReactNode, ReactNode, ReactNode]`, the way `map` already is. Map them through one `<Screen index active>` wrapper instead of repeating it three times. This shrinks the home page client chunk (about 7.8KB) and its hydration work.
+4. **Calculator `slider()` takes 9 positional arguments.** In `components/sections/EarningsCalculator.tsx`, `min`/`max`/`step` or the shown/spoken strings can be swapped without the compiler noticing. Use a `<RangeField label min max step value shown spoken onChange />` component with named props.
+
+- **Why deferred:** pure maintainability; the project owner chose to ship tests, security review and docs first.
+- **Done means:** all four applied; `pnpm turbo run lint typecheck test --filter=@parkease/web...`, `pnpm --filter @parkease/web test:e2e` and Lighthouse CI green; the home page chunk is smaller in `next build` output.
+
+### S-149 — Task 20 web: review findings consciously not taken
+
+- **Status:** `open`
+- **Found in:** task 20, `/code-review` and `/simplify`, 2026-10-12
+- **Surface:** `apps/web`
+
+1. **Find-parking map inlined twice.** The dark hero map's SVG (about 14KB after the `<use>` change) is in the HTML and again in the RSC payload. A force-static `indiranagar-dark.svg` route loaded as `<img fetchpriority="high">`, with the pin keyframes inside the SVG, would halve it. The cost: labels lose the page web font, and the pin animation must live in the SVG.
+2. **Share image on the edge runtime.** `app/opengraph-image.tsx` uses `runtime = 'edge'`, as task 20 §20.10 specifies, so it is not prerendered. It re-renders on each CDN miss and fetches the font a second way (`import.meta.url`, where the icons use `lib/og-font.ts`). Dropping edge would make it a build-time static file. That needs a spec decision.
+3. **City ISR with compiled-in data.** `app/[city]/page.tsx` keeps `revalidate = 86_400` per §20.1. Today it regenerates identical pages; it only matters once cities come from the API.
+4. **Legal contents list is hand-kept.** `lib/legal.ts` `sections` duplicate each MDX file's `##` headings, held together by `test/legal.spec.ts`. A small remark plugin exporting `headings` would remove both. The same applies to blog posts (`BLOG_POSTS` + `BLOG_CONTENT` + `.mdx` could become one `export const meta`).
+5. **Calculator float math.** `lib/earnings.ts` uses the spec's `Math.round(gross × (1 − rate)) × 30` in floating point, not contracts' paise/`mulRate` rounding. It agrees on every spec example; a paise-based version would guarantee agreement with what the API pays.
+6. **Theme names in three places.** `globals.css` `@theme` still maps `--color-*` to the generated `--pe-*` variables by hand. Emitting that block from `webColors` at build time would remove the last hand-kept copy.
+
+- **Why deferred:** each trades a spec instruction, a visual detail or new build tooling for a small gain; none is a defect.
+- **Done means:** each item either applied with tests green, or closed with a one-line reason in `learnings.md`.
+
 | task-22 | `apps/*/Dockerfile` | Image runs under tsx with devDeps because packages export raw `.ts`. Slim image + `pnpm deploy --prod` needs packages to emit `dist`. Also unverified: healthcheck against live DB, worker-host ADR-010 amendment, CI docker push, everything in 22.8 that needs real accounts. |

@@ -1,0 +1,23 @@
+{
+  "ci": {
+    "collect": {
+      "url": [
+        "http://localhost:3000/",
+        "http://localhost:3000/pricing",
+        "http://localhost:3000/bangalore"
+      ],
+      "startServerCommand": "pnpm --filter @parkease/web start",
+      "numberOfRuns": 3
+    },
+    "assert": {
+      "assertions": {
+        "categories:performance": ["error", { "minScore": 0.9 }],
+        "categories:seo": ["error", { "minScore": 0.9 }],
+        "categories:accessibility": ["warn", { "minScore": 0.9 }],
+        "first-contentful-paint": ["error", { "maxNumericValue": 2500 }],
+        "largest-contentful-paint": ["error", { "maxNumericValue": 2500 }],
+        "cumulative-layout-shift": ["error", { "maxNumericValue": 0.1 }]
+      }
+    }
+  }
+}

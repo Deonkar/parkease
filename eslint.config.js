@@ -142,6 +142,7 @@ export default tseslint.config(
       // a tsconfig project than the specs that import them.
       '**/test/**/*.ts',
       '**/drizzle.config.ts',
+      '**/postcss.config.mjs',
       // Playwright specs and config run under Playwright's own runner, outside any app tsconfig.
       '**/playwright.config.ts',
       '**/e2e/**/*.ts',
