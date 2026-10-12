@@ -214,7 +214,7 @@ const styles = StyleSheet.create({
   newBadge: {
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
-    borderRadius: radius.sm,
+    borderRadius: radius.chip,
     backgroundColor: colors.primarySoft,
   },
   newBadgeText: {
@@ -247,7 +247,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
-    borderRadius: radius.sm,
+    borderRadius: radius.chip,
     backgroundColor: colors.mutedSoft,
   },
   closedText: {

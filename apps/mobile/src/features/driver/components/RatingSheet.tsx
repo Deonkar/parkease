@@ -187,7 +187,7 @@ const styles = StyleSheet.create({
     minHeight: touchTarget,
     justifyContent: 'center',
     paddingHorizontal: spacing.md,
-    borderRadius: radius.sm,
+    borderRadius: radius.chip,
     borderWidth: 1,
     borderColor: colors.borderStrong,
   },

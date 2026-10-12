@@ -42,7 +42,7 @@ const styles = StyleSheet.create({
   newChip: {
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
-    borderRadius: radius.sm,
+    borderRadius: radius.chip,
     backgroundColor: colors.primarySoft,
   },
   newText: { fontSize: fontSize.xs, fontWeight: fontWeight.semibold, color: colors.primary },

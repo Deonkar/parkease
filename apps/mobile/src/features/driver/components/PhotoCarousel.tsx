@@ -1,6 +1,6 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import type { SpacePhoto } from '@parkease/contracts/driver';
-import { colors, duration, radius, spacing } from '@parkease/tokens';
+import { colors, duration, opacity, radius, spacing } from '@parkease/tokens';
 import { useState } from 'react';
 import { Image, StyleSheet, useWindowDimensions, View } from 'react-native';
 import PagerView from 'react-native-pager-view';
@@ -89,7 +89,7 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: radius.full,
     backgroundColor: colors.surface,
-    opacity: 0.5,
+    opacity: opacity.dimmed,
   },
   dotActive: {
     opacity: 1,

@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Role } from '@parkease/contracts/enums';
-import { colors, fontSize, spacing } from '@parkease/tokens';
+import { colors, fontSize, opacity, spacing } from '@parkease/tokens';
 import { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
   },
   cardDisabled: {
-    opacity: 0.5,
+    opacity: opacity.dimmed,
   },
   iconContainer: {
     width: 48,

@@ -94,7 +94,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     fontSize: fontSize.xs,
     fontWeight: fontWeight.semibold,
-    borderRadius: radius.sm,
+    borderRadius: radius.chip,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs / 2,
   },

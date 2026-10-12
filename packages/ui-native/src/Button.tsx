@@ -1,4 +1,4 @@
-import { colors, fontSize, spacing } from '@parkease/tokens';
+import { colors, fontSize, opacity, spacing } from '@parkease/tokens';
 import { ActivityIndicator, Pressable, StyleSheet, Text, type ViewStyle } from 'react-native';
 
 type Variant = 'primary' | 'secondary' | 'ghost';
@@ -66,14 +66,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   disabled: {
-    opacity: 0.5,
+    opacity: opacity.dimmed,
   },
   label: {
     fontSize: fontSize.base,
     fontWeight: '600',
   },
   labelDisabled: {
-    opacity: 0.7,
+    opacity: opacity.muted,
   },
 });
 

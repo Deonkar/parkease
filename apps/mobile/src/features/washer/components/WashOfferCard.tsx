@@ -181,7 +181,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.xs,
     backgroundColor: colors.surfaceTertiary,
-    borderRadius: radius.sm,
+    borderRadius: radius.chip,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
   },

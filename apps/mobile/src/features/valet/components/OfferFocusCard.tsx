@@ -111,7 +111,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.warningLight,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
-    borderRadius: radius.sm,
+    borderRadius: radius.chip,
     overflow: 'hidden',
   },
   address: {

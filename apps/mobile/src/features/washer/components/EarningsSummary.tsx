@@ -110,7 +110,7 @@ const styles = StyleSheet.create({
   },
   chip: {
     backgroundColor: colors.surfaceTertiary,
-    borderRadius: radius.sm,
+    borderRadius: radius.chip,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
   },
