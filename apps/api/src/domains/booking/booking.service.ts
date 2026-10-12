@@ -8,7 +8,7 @@ import type {
 } from '@parkease/contracts/enums';
 import type { Quote } from '@parkease/contracts/money';
 import type { OwnerBookingGroup } from '@parkease/contracts/owner';
-import { bookings, bookingSlots, spaces, users } from '@parkease/db/schema';
+import { bookings, bookingSlots, spaces, users, valetJobs, washJobs } from '@parkease/db/schema';
 import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
@@ -68,6 +68,34 @@ function decodeCursor(raw: string, filter: CursorFilter): BookingCursor | undefi
 @Injectable()
 export class BookingService {
   constructor(@Inject(DB) private readonly db: Database) {}
+
+  /**
+   * The valet and wash jobs on one booking (S-148). The caller has already checked the booking is
+   * the driver's own. Ids are UUIDv7, so id order is request order.
+   */
+  async addonsOf(bookingId: string): Promise<{
+    valetJobId: string | null;
+    washJobs: { id: string; paid: boolean }[];
+  }> {
+    const [valet] = await this.db
+      .select({ id: valetJobs.id })
+      .from(valetJobs)
+      .where(eq(valetJobs.bookingId, bookingId))
+      .orderBy(desc(valetJobs.id))
+      .limit(1);
+    const washes = await this.db
+      .select({
+        id: washJobs.id,
+        // Spelled out: inside a select list Drizzle renders a column unqualified, and a bare `id`
+        // in this subquery would resolve to the payment's own.
+        paid: sql<boolean>`exists (select 1 from payments p
+          where p.wash_job_id = wash_jobs.id and p.status = 'captured')`,
+      })
+      .from(washJobs)
+      .where(eq(washJobs.bookingId, bookingId))
+      .orderBy(asc(washJobs.id));
+    return { valetJobId: valet?.id ?? null, washJobs: washes };
+  }
 
   /**
    * The quote is written whole: base, surge premium, fee, GST, total and the

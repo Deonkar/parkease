@@ -1,4 +1,5 @@
 import { colors, fontSize, opacity, spacing } from '@parkease/tokens';
+import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, type ViewStyle } from 'react-native';
 
 type Variant = 'primary' | 'secondary' | 'ghost';
@@ -11,6 +12,14 @@ interface ButtonProps {
   readonly disabled?: boolean;
   readonly accessibilityLabel?: string;
   readonly style?: ViewStyle;
+  /**
+   * A leading icon, drawn before the label. A node rather than an icon name so
+   * the kit takes no icon-font dependency: the caller passes its own glyph, sized
+   * and coloured to the variant. Decorative — the label still names the action.
+   */
+  readonly icon?: ReactNode;
+  /** For Maestro and component tests. */
+  readonly testID?: string;
 }
 
 export function Button({
@@ -21,6 +30,8 @@ export function Button({
   disabled = false,
   accessibilityLabel,
   style,
+  icon,
+  testID,
 }: ButtonProps) {
   const isDisabled = disabled || loading;
   const variantStyle = variantStyles[variant];
@@ -29,6 +40,7 @@ export function Button({
     <Pressable
       onPress={onPress}
       disabled={isDisabled}
+      testID={testID}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={{ disabled: isDisabled }}
@@ -46,9 +58,12 @@ export function Button({
           color={variant === 'primary' ? colors.textInverse : colors.primary}
         />
       ) : (
-        <Text style={[styles.label, variantStyle.label, isDisabled && styles.labelDisabled]}>
-          {label}
-        </Text>
+        <>
+          {icon}
+          <Text style={[styles.label, variantStyle.label, isDisabled && styles.labelDisabled]}>
+            {label}
+          </Text>
+        </>
       )}
     </Pressable>
   );
@@ -64,6 +79,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'row',
+    gap: spacing.sm,
   },
   disabled: {
     opacity: opacity.dimmed,

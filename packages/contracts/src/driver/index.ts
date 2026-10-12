@@ -36,6 +36,8 @@ export {
   type DriverBooking,
   driverBookingsPageSchema,
   type DriverBookingsPage,
+  driverBookingAddonsSchema,
+  type DriverBookingAddons,
 } from './booking-detail.js';
 export {
   BOOKING_FILTER_VALUES,

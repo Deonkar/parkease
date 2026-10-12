@@ -42,6 +42,7 @@ export const RATE_LIMIT_POLICIES: Readonly<Record<string, RateLimitPolicy>> = {
   'POST /api/v1/driver/bookings': { limit: 10, windowSeconds: 60, keyBy: 'user' },
   'GET /api/v1/driver/bookings': { limit: 60, windowSeconds: 60, keyBy: 'user' },
   'GET /api/v1/driver/bookings/:id': { limit: 60, windowSeconds: 60, keyBy: 'user' },
+  'GET /api/v1/driver/bookings/:id/addons': { limit: 60, windowSeconds: 60, keyBy: 'user' },
   'POST /api/v1/driver/bookings/:id/cancel': { limit: 10, windowSeconds: 60, keyBy: 'user' },
   'POST /api/v1/driver/bookings/:id/extend': { limit: 10, windowSeconds: 60, keyBy: 'user' },
   'POST /api/v1/driver/bookings/:id/check-in': { limit: 10, windowSeconds: 60, keyBy: 'user' },

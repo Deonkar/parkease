@@ -69,3 +69,15 @@ export const driverBookingsPageSchema = z.object({
 });
 
 export type DriverBookingsPage = z.infer<typeof driverBookingsPageSchema>;
+
+/**
+ * The valet and wash jobs hanging off one booking (S-148): the app's handle on them after a
+ * reinstall or on a second phone. `valetJobId` is the newest valet request; washes oldest first.
+ * `paid` is a captured wash payment, so a paid wash never offers Pay again.
+ */
+export const driverBookingAddonsSchema = z.object({
+  valetJobId: z.string().uuid().nullable(),
+  washJobs: z.array(z.object({ id: z.string().uuid(), paid: z.boolean() })),
+});
+
+export type DriverBookingAddons = z.infer<typeof driverBookingAddonsSchema>;

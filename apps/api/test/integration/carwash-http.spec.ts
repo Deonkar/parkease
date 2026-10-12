@@ -306,6 +306,43 @@ describe('POST /driver/carwash/requests — the precondition', () => {
   });
 });
 
+/** S-148: the app finds a booking's jobs from the server, not from what one phone remembered. */
+describe('GET /driver/bookings/:id/addons', () => {
+  const addons = (bookingId: string) =>
+    http.request({ method: 'GET', url: `/api/v1/driver/bookings/${bookingId}/addons` });
+
+  it('lists the washes on the booking in request order, paid once a payment is captured', async () => {
+    await seedWasher();
+    const bookingId = await seedBookingWithStatus('active');
+    const first = dataOf<{ id: string }>((await requestWash(bookingId)).body).id;
+    const second = dataOf<{ id: string }>((await requestWash(bookingId, 'interior_only')).body).id;
+    await h.sql`
+      INSERT INTO payments (booking_id, user_id, razorpay_order_id, expected_total_paise,
+                            captured_paise, status, captured_at, purpose, wash_job_id)
+      VALUES (${bookingId}, ${h.driverId}, ${`order_${first.slice(-12)}`}, 59900, 59900,
+              'captured', now(), 'carwash', ${first})`;
+
+    asUser(h.driverId, ['driver']);
+    const res = await addons(bookingId);
+
+    expect(res.status).toBe(200);
+    expect(dataOf(res.body)).toEqual({
+      valetJobId: null,
+      washJobs: [
+        { id: first, paid: true },
+        { id: second, paid: false },
+      ],
+    });
+  });
+
+  it("answers 404 for somebody else's booking, never its jobs (R-SEC-04)", async () => {
+    const bookingId = await seedBookingWithStatus('active');
+    asUser(await seedUser(h, 'driver'), ['driver']);
+
+    expect((await addons(bookingId)).status).toBe(404);
+  });
+});
+
 describe('POST /washer/jobs/:id/accept — first accept wins', () => {
   it('lets exactly one of three partners win', async () => {
     const washers = [await seedWasher(), await seedWasher(), await seedWasher()];

@@ -9,10 +9,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatDateIST, formatTimeIST } from '@/lib/format';
 import { warn } from '@/lib/log';
 
+import { AddonsCard } from '../../../src/features/driver/components/AddonsCard';
 import { BookingQr } from '../../../src/features/driver/components/BookingQr';
 import { BookingStatusChip } from '../../../src/features/driver/components/BookingStatusChip';
 import { PriceBreakdown } from '../../../src/features/driver/components/PriceBreakdown';
 import { RatingSheet } from '../../../src/features/driver/components/RatingSheet';
+import { useBookingAddons } from '../../../src/features/driver/hooks/useAddons';
 import {
   useBooking,
   useCancelBooking,
@@ -37,6 +39,7 @@ export default function BookingDetailScreen() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [extendRecovery, setExtendRecovery] = useState(false);
   const [rating, setRating] = useState(false);
+  const addons = useBookingAddons(id);
   // Only a completed booking inside its seven days is in here; the server decides both.
   const pendingReviews = usePendingReviews();
   const toRate = pendingReviews.data?.find((p) => p.bookingId === id);
@@ -156,6 +159,32 @@ export default function BookingDetailScreen() {
             <StarRating stars={0} size={20} />
           </Pressable>
         )}
+
+        {/*
+          Valet and wash hang off the booking they belong to. The job ids come
+          from this device's own record (`addon-store.ts`): the API has no route
+          that lists a booking's jobs.
+        */}
+        <AddonsCard
+          bookingStatus={booking.status}
+          valetJobId={addons.data?.valetJobId ?? null}
+          washJobIds={addons.data?.washJobIds ?? []}
+          onRequestValet={() => {
+            router.push({ pathname: '/(driver)/valet/request', params: { bookingId: booking.id } });
+          }}
+          onOpenValet={(jobId) => {
+            router.push({ pathname: '/(driver)/valet/[jobId]', params: { jobId } });
+          }}
+          onRequestWash={() => {
+            router.push({
+              pathname: '/(driver)/wash/request',
+              params: { bookingId: booking.id, vehicleType: booking.vehicleType },
+            });
+          }}
+          onOpenWash={(jobId) => {
+            router.push({ pathname: '/(driver)/wash/[jobId]', params: { jobId } });
+          }}
+        />
 
         <View style={styles.card}>
           {/*

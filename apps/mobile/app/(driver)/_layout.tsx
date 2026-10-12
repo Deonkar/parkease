@@ -108,6 +108,11 @@ export default function DriverLayout() {
         options={{ href: null, tabBarStyle: { display: 'none' } }}
       />
       <Tabs.Screen name="bookings/[id]" options={{ href: null }} />
+      {/* Valet and wash add-ons, reached from a booking. */}
+      <Tabs.Screen name="valet/request" options={{ href: null }} />
+      <Tabs.Screen name="valet/[jobId]" options={{ href: null }} />
+      <Tabs.Screen name="wash/request" options={{ href: null }} />
+      <Tabs.Screen name="wash/[jobId]" options={{ href: null }} />
     </Tabs>
   );
 }

@@ -12,6 +12,8 @@ import {
   cancelBookingSchema,
   createBookingSchema,
   type DriverBooking,
+  type DriverBookingAddons,
+  driverBookingAddonsSchema,
   type DriverBookingsPage,
   extendBookingSchema,
   listBookingsQuerySchema,
@@ -25,6 +27,7 @@ import { CreateBookingCommand } from '../../domains/booking/commands/create-book
 import { ExtendBookingCommand } from '../../domains/booking/commands/extend-booking.command.js';
 import { type AuthUser, CurrentUser } from '../../platform/auth/current-user.decorator.js';
 import { env } from '../../platform/config/env.schema.js';
+import { parseOutgoing } from '../../platform/http/outgoing-contract.js';
 import { Roles } from '../../platform/rbac/roles.decorator.js';
 
 import { toDriverBookingView } from './views/booking.view.js';
@@ -102,6 +105,20 @@ export class DriverBookingsController {
     if (row === undefined) throw new NotFoundException('That booking does not exist.');
 
     return toDriverBookingView(row.booking, row.space, row.slotIndex, env.BOOKING_QR_SECRET);
+  }
+
+  @Get(':id/addons')
+  async addons(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<DriverBookingAddons> {
+    const owned = await this.bookings.findOwnedByDriver(id, user.id);
+    if (owned === undefined) throw new NotFoundException('That booking does not exist.');
+    return parseOutgoing(
+      driverBookingAddonsSchema,
+      await this.bookings.addonsOf(owned.id),
+      'driver booking addons',
+    );
   }
 
   @Post(':id/cancel')
