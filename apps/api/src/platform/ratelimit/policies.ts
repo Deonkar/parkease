@@ -76,6 +76,8 @@ export const RATE_LIMIT_POLICIES: Readonly<Record<string, RateLimitPolicy>> = {
   'DELETE /api/v1/me/push-tokens': { limit: 10, windowSeconds: 60, keyBy: 'user' },
   'POST /api/v1/driver/payments/orders': { limit: 10, windowSeconds: 60, keyBy: 'user' },
   'POST /api/v1/driver/payments/verify': { limit: 10, windowSeconds: 60, keyBy: 'user' },
+  // An uptime probe's route (S-156): one monitor, every minute or so, from a fixed IP.
+  'GET /api/v1/health/pipeline': { limit: 60, windowSeconds: 60, keyBy: 'ip' },
   // Razorpay's own range, per security.md §4.3. Keyed by IP because there is no
   // user to key by, and `failClosed` is deliberately absent: dropping a capture
   // event because Redis blinked is worse than serving it.

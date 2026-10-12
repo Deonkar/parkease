@@ -23,3 +23,5 @@ export {
 } from './rating-aggregate.js';
 
 export { sumPaise } from './sum-paise.js';
+
+export { OUTBOX_LAG_BUDGET_SECONDS, OUTBOX_LAG_SECONDS } from './outbox-lag.js';

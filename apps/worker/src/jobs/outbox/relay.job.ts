@@ -1,4 +1,5 @@
 import { EVENT_NOTIFICATIONS } from '@parkease/contracts/shared';
+import { OUTBOX_LAG_BUDGET_SECONDS, OUTBOX_LAG_SECONDS } from '@parkease/db/queries';
 import { outboxMessages } from '@parkease/db/schema';
 import { eq, sql } from 'drizzle-orm';
 
@@ -10,7 +11,7 @@ const BATCH_SIZE = 100;
 export const MAX_ATTEMPTS = 10;
 
 /** prd.md §12: a message waits at most this long between being ready and being dispatched. */
-export const OUTBOX_LAG_BUDGET_SECONDS = 30;
+export { OUTBOX_LAG_BUDGET_SECONDS } from '@parkease/db/queries';
 
 /**
  * One pass stops taking new batches after this long, so a deep backlog cannot pin the worker. The
@@ -62,11 +63,7 @@ export async function relayOutbox(deps: JobDeps): Promise<RelayPass> {
  * ready, so it does not count: that wait is deliberate.
  */
 export async function outboxLagSeconds(deps: JobDeps): Promise<number> {
-  const [row] = await deps.db.execute<{ lag: number | null }>(sql`
-    SELECT extract(epoch FROM now() - min(available_at))::float8 AS lag
-    FROM outbox_messages
-    WHERE status = 'pending' AND available_at <= now()
-  `);
+  const [row] = await deps.db.execute<{ lag: number | null }>(OUTBOX_LAG_SECONDS);
   return Math.max(0, row?.lag ?? 0);
 }
 
