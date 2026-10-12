@@ -15,3 +15,4 @@ export {
   type Spring,
 } from './motion.js';
 export { touchTarget, layout, type Layout } from './layout.js';
+export { webColors, type WebColors } from './web.js';

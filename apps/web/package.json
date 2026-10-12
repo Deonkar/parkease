@@ -11,6 +11,9 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@mdx-js/loader": "3.1.1",
+    "@mdx-js/react": "3.1.1",
+    "@next/mdx": "15.5.27",
     "@parkease/contracts": "workspace:*",
     "@parkease/tokens": "workspace:*",
     "next": "15.5.27",
@@ -19,8 +22,11 @@
   },
   "devDependencies": {
     "@parkease/config": "workspace:*",
+    "@tailwindcss/postcss": "4.3.3",
+    "@types/mdx": "2.0.14",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.6",
+    "tailwindcss": "4.3.3",
     "typescript": "5.7.2",
     "vitest": "3.2.7"
   }

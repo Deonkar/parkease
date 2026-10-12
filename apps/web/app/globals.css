@@ -1,0 +1,508 @@
+@import 'tailwindcss';
+
+/*
+ * Colours are custom properties generated from @parkease/tokens (lib/theme.ts) and injected by
+ * the root layout. This file maps them into Tailwind and never names a colour itself.
+ */
+@theme inline {
+  --color-porcelain: var(--pe-porcelain);
+  --color-paper: var(--pe-paper);
+  --color-mist: var(--pe-mist);
+  --color-ink: var(--pe-ink);
+  --color-slate: var(--pe-slate);
+  --color-rule: var(--pe-rule);
+  --color-field: var(--pe-field);
+  --color-midnight: var(--pe-midnight);
+  --color-midnight-raised: var(--pe-midnight-raised);
+  --color-on-midnight: var(--pe-on-midnight);
+  --color-on-midnight-muted: var(--pe-on-midnight-muted);
+  --color-midnight-rule: var(--pe-midnight-rule);
+  --color-sky: var(--pe-sky);
+  --color-floor: var(--pe-floor);
+  --color-floor-paint: var(--pe-floor-paint);
+  --color-floor-stencil: var(--pe-floor-stencil);
+  --color-free-lit: var(--pe-free-lit);
+  --color-primary: var(--pe-primary);
+  --color-primary-hover: var(--pe-primary-hover);
+  --color-on-primary: var(--pe-on-primary);
+  --color-available: var(--pe-available);
+  --color-available-soft: var(--pe-available-soft);
+  --color-available-ink: var(--pe-available-ink);
+  --color-full: var(--pe-full);
+  --color-warn-soft: var(--pe-warn-soft);
+  --color-warn-ink: var(--pe-warn-ink);
+
+  --font-display: var(--font-big-shoulders), system-ui, sans-serif;
+  --font-stencil: var(--font-stencil-face), var(--font-big-shoulders), system-ui, sans-serif;
+  --font-sans: var(--font-atkinson), system-ui, sans-serif;
+
+  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-padding-top: 88px;
+  }
+  body {
+    background: var(--pe-porcelain);
+    color: var(--pe-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  :focus-visible {
+    outline: 3px solid var(--pe-focus);
+    outline-offset: 3px;
+  }
+}
+
+@layer components {
+  .wrap {
+    margin-inline: auto;
+    max-width: 1240px;
+    padding-inline: 24px;
+  }
+
+  /* Type: one display size per page carries the weight. */
+  .type-home {
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: clamp(64px, 9.6vw, 144px);
+    line-height: 0.84;
+    letter-spacing: -0.01em;
+  }
+  .type-page {
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: clamp(48px, 6.6vw, 96px);
+    line-height: 0.88;
+  }
+  .type-section {
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: clamp(34px, 4.2vw, 60px);
+    line-height: 0.95;
+  }
+  .type-cta {
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: clamp(40px, 5.4vw, 80px);
+    line-height: 0.88;
+  }
+  .type-card {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 30px;
+    line-height: 1;
+  }
+  .type-figure {
+    font-family: var(--font-display);
+    font-weight: 900;
+    line-height: 0.85;
+  }
+
+  /* Buttons: press feedback on every pressable; hover only for fine pointers. */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 52px;
+    padding: 0 22px;
+    border-radius: 10px;
+    font-weight: 700;
+    font-size: 17px;
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      transform 160ms var(--ease-out-strong),
+      background-color 160ms ease,
+      border-color 160ms ease;
+  }
+  .btn:active {
+    transform: scale(0.97);
+  }
+  .btn-sm {
+    min-height: 44px;
+    padding: 0 18px;
+    font-size: 16px;
+  }
+  .btn-light {
+    background: var(--pe-porcelain);
+    color: var(--pe-midnight);
+  }
+  .btn-outline-light {
+    border: 1.5px solid var(--pe-midnight-rule);
+    color: var(--pe-on-midnight);
+  }
+  .btn-primary {
+    background: var(--pe-primary);
+    color: var(--pe-on-primary);
+  }
+  .btn-ink {
+    background: var(--pe-ink);
+    color: var(--pe-paper);
+  }
+  .btn-disabled {
+    border: 1.5px dashed var(--pe-midnight-rule);
+    color: var(--pe-on-midnight-muted);
+    cursor: default;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .btn-light:hover {
+      background: var(--pe-button-hover);
+    }
+    .btn-outline-light:hover {
+      border-color: currentColor;
+    }
+    .btn-primary:hover {
+      background: var(--pe-primary-hover);
+    }
+    .link-row:hover .link-row-title {
+      text-decoration: underline;
+      text-decoration-thickness: 2px;
+      text-underline-offset: 6px;
+    }
+  }
+
+  .kerb {
+    height: 12px;
+    background: repeating-linear-gradient(
+      90deg,
+      var(--pe-on-midnight) 0 56px,
+      var(--pe-midnight) 56px 112px
+    );
+    opacity: 0.9;
+  }
+
+  /* Phone menu: a native <details>, so it works with JavaScript off. */
+  .menu > summary {
+    list-style: none;
+  }
+  .menu > summary::-webkit-details-marker {
+    display: none;
+  }
+  .menu[open] .menu-panel {
+    animation: menu-in 280ms var(--ease-drawer) both;
+  }
+  .menu .icon-close,
+  .menu[open] .icon-open {
+    display: none;
+  }
+  .menu[open] .icon-close {
+    display: block;
+  }
+
+  /* FAQ accordions */
+  .faq > summary {
+    list-style: none;
+    cursor: pointer;
+  }
+  .faq > summary::-webkit-details-marker {
+    display: none;
+  }
+  .faq .chevron {
+    transition: transform 220ms var(--ease-out-strong);
+  }
+  .faq[open] .chevron {
+    transform: rotate(45deg);
+  }
+  .faq[open] .faq-answer {
+    animation: fade-up 260ms var(--ease-out-strong) both;
+  }
+
+  /* Prose for MDX: legal pages and blog posts */
+  .prose-pe {
+    font-size: 18px;
+    line-height: 1.7;
+  }
+  .prose-pe > * + * {
+    margin-top: 18px;
+  }
+  .prose-pe h2 {
+    margin-top: 48px;
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: 36px;
+    line-height: 1;
+    scroll-margin-top: 96px;
+  }
+  .prose-pe h3 {
+    margin-top: 32px;
+    font-weight: 800;
+    font-size: 20px;
+  }
+  .prose-pe ul {
+    list-style: disc;
+    padding-left: 22px;
+  }
+  .prose-pe li + li {
+    margin-top: 8px;
+  }
+  .prose-pe a {
+    color: var(--pe-primary);
+    font-weight: 700;
+    text-decoration: underline;
+  }
+  .prose-pe strong {
+    font-weight: 800;
+  }
+}
+
+/* Reading progress on blog posts: hidden unless scroll-driven animations are supported. */
+.read-progress {
+  display: none;
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 60;
+  height: 3px;
+  background: var(--pe-primary);
+  transform-origin: 0 50%;
+}
+
+/* ---------- Motion ---------- */
+
+/* The hero headline rises line by line, once. */
+.rise-line {
+  display: block;
+  overflow: hidden;
+  padding-bottom: 0.04em;
+}
+.rise-line > span {
+  display: block;
+  animation: rise 820ms var(--ease-out-strong) both;
+}
+.rise-line + .rise-line > span {
+  animation-delay: 90ms;
+}
+.rise-line + .rise-line + .rise-line > span {
+  animation-delay: 180ms;
+}
+.fade-in {
+  animation: fade 500ms ease-out 380ms both;
+}
+
+/* The one orchestrated moment: a car backs out of bay 16, the bay lights, the card lands. */
+.floor-leaving {
+  opacity: 0;
+  transform: translateY(-122%);
+  animation: leave 1250ms var(--ease-in-out-strong) 1000ms both;
+}
+.floor-paint {
+  animation: paint 480ms var(--ease-out-strong) 2150ms both;
+}
+.floor-glow {
+  animation: fade 900ms ease-out 2400ms both;
+}
+.floor-card {
+  animation: pop 340ms var(--ease-out-strong) 2550ms both;
+}
+
+/* Story screens swap with a blurred crossfade; exit is faster than enter. */
+.screen {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transform: translateY(14px) scale(0.98);
+  filter: blur(6px);
+  pointer-events: none;
+  transition:
+    opacity 160ms ease-in,
+    transform 160ms ease-in,
+    filter 160ms ease-in;
+}
+.screen[data-active='true'] {
+  opacity: 1;
+  transform: none;
+  filter: blur(0);
+  pointer-events: auto;
+  transition:
+    opacity 300ms ease-out 60ms,
+    transform 420ms var(--ease-out-strong) 60ms,
+    filter 300ms ease-out 60ms;
+}
+.rail-fill {
+  transform-origin: 50% 0;
+  transition: transform 480ms var(--ease-in-out-strong);
+}
+.tab-indicator {
+  transition: transform 320ms var(--ease-in-out-strong);
+}
+.panel {
+  grid-area: 1 / 1;
+}
+.panel[data-active='true'] {
+  animation: fade-up 360ms var(--ease-out-strong) both;
+}
+.panel[data-active='false'] {
+  visibility: hidden;
+  opacity: 0;
+}
+.share-bar {
+  transform-origin: 100% 50%;
+  transition: transform 480ms var(--ease-in-out-strong);
+}
+.map-pin {
+  animation: drop 420ms var(--ease-out-strong) both;
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+}
+
+@media (min-width: 900px) {
+  .story-sticky {
+    position: sticky;
+    top: 100px;
+  }
+  .story-step {
+    min-height: 240px;
+  }
+}
+
+/* Scroll-linked where supported; static everywhere else. */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .floor-drift {
+      animation: drift linear both;
+      animation-timeline: view();
+      animation-range: exit 0% exit 100%;
+    }
+  }
+}
+@supports (animation-timeline: scroll()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .read-progress {
+      display: block;
+      animation: grow-x linear both;
+      animation-timeline: scroll(root);
+    }
+  }
+}
+
+@keyframes rise {
+  from {
+    transform: translateY(108%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes leave {
+  0% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  72% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-122%);
+    opacity: 0;
+  }
+}
+@keyframes paint {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes drop {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes drift {
+  to {
+    transform: translateX(-5%);
+  }
+}
+@keyframes grow-x {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise-line > span,
+  .fade-in,
+  .floor-leaving,
+  .floor-paint,
+  .floor-glow,
+  .floor-card,
+  .map-pin,
+  .panel[data-active='true'],
+  .faq[open] .faq-answer,
+  .menu[open] .menu-panel {
+    animation: none;
+  }
+  .btn:active {
+    transform: none;
+  }
+  .screen,
+  .screen[data-active='true'] {
+    transform: none;
+    filter: none;
+    transition: opacity 150ms ease;
+  }
+  .rail-fill,
+  .tab-indicator,
+  .share-bar,
+  .faq .chevron {
+    transition: none;
+  }
+}
