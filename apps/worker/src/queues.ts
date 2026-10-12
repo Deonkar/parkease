@@ -6,6 +6,7 @@ import {
 import type PgBoss from 'pg-boss';
 
 import { NOTIFICATION_FETCH_RECEIPTS_JOB } from './jobs/notification/fetch-receipts.job.js';
+import { PAYMENT_REVERSE_TRANSFER_JOB } from './jobs/payment/payload.js';
 import {
   PAYOUT_RECONCILE_JOB,
   PAYOUT_RUN_WEEKLY_JOB,
@@ -35,6 +36,7 @@ export const QUEUES = [
   'booking.remind',
   'payment.issue-refund',
   'payment.orphan-capture',
+  PAYMENT_REVERSE_TRANSFER_JOB,
   VALET_ACCEPT_TIMEOUT_JOB,
   VALET_NO_SHOW_JOB,
   CARWASH_ACCEPT_TIMEOUT_JOB,

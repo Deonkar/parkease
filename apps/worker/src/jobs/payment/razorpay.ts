@@ -52,11 +52,20 @@ export const REFUND_REFERENCE_NOTE = 'parkeaseRefundId';
  */
 let client: Razorpay | undefined;
 
+/** Mirrors the API's `GATEWAY_TIMEOUT_MS`: one gateway call never outlives this. */
+const GATEWAY_TIMEOUT_MS = 10_000;
+
 const sdk = (): Razorpay => {
-  client ??= new Razorpay({
-    key_id: env.RAZORPAY_KEY_ID,
-    key_secret: env.RAZORPAY_KEY_SECRET,
-  });
+  if (client === undefined) {
+    client = new Razorpay({
+      key_id: env.RAZORPAY_KEY_ID,
+      key_secret: env.RAZORPAY_KEY_SECRET,
+    });
+    // The SDK's axios instance has no timeout of its own: a hung gateway would hold the job,
+    // and its row lock window, open forever (S-64). Mirrors the API's client.
+    (client.api as unknown as { rq: { defaults: { timeout: number } } }).rq.defaults.timeout =
+      GATEWAY_TIMEOUT_MS;
+  }
   return client;
 };
 
@@ -162,5 +171,60 @@ export const razorpayRefunds: RefundGateway = {
     );
 
     return { id: refund.id, amountPaise: refund.amount, status: refund.status };
+  },
+};
+
+const reversalSchema = z.object({
+  id: z.string().min(1),
+  amount: gatewayPaise,
+  notes: z.union([z.record(z.unknown()), z.array(z.unknown())]).nullish(),
+});
+
+const reversalListSchema = z.object({ items: z.array(reversalSchema) });
+
+export interface WorkerReversal {
+  readonly id: string;
+  readonly amountPaise: number;
+}
+
+/** Takes a refund's partner share back from the Route transfer that paid it (S-98). */
+export interface ReversalGateway {
+  /** The transfers made from one payment, so the job can find the one to reverse. */
+  transfersFor(razorpayPaymentId: string): Promise<readonly RouteTransfer[]>;
+  /** A reversal already made for this refund: a run that died after the call adopts it. */
+  findByReference(transferId: string, reference: string): Promise<WorkerReversal | null>;
+  reverse(input: {
+    transferId: string;
+    amountPaise: number;
+    reference: string;
+  }): Promise<WorkerReversal>;
+}
+
+const reference = (notes: unknown): unknown =>
+  notes !== null && typeof notes === 'object' && !Array.isArray(notes)
+    ? (notes as Record<string, unknown>)[REFUND_REFERENCE_NOTE]
+    : undefined;
+
+export const razorpayReversals: ReversalGateway = {
+  transfersFor: (razorpayPaymentId) => razorpayTransfers.forPayment(razorpayPaymentId),
+
+  async findByReference(transferId, ref) {
+    // The SDK has no method for this list; its own request client reaches it with the same auth.
+    const page = reversalListSchema.parse(
+      await sdk().api.get({ url: `/transfers/${encodeURIComponent(transferId)}/reversals` }),
+    );
+    const existing = page.items.find((r) => reference(r.notes) === ref);
+    return existing === undefined ? null : { id: existing.id, amountPaise: existing.amount };
+  },
+
+  async reverse({ transferId, amountPaise, reference: ref }) {
+    const reversal = reversalSchema.parse(
+      await sdk().transfers.reverse(transferId, {
+        amount: amountPaise,
+        // Razorpay accepts notes on a reversal; the SDK's type lists only the amount.
+        ...({ notes: { [REFUND_REFERENCE_NOTE]: ref } } as object),
+      } as { amount: number }),
+    );
+    return { id: reversal.id, amountPaise: reversal.amount };
   },
 };

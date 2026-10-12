@@ -582,3 +582,30 @@ export function payoutEntries(
     ],
   };
 }
+
+/**
+ * A refund's take-back from the partner's Route transfer arrived (S-98). The refund's own posting
+ * debited `owner_payable` for the partner's share, leaving them owing it, because Route had
+ * already paid them; the reversal brings that money back to us, so their payable returns to zero
+ * and the driver's money is held again, ready for the refund to send.
+ */
+export function routeReversalEntries(
+  amountPaise: number,
+  counterpartyUserId: string,
+): readonly LedgerEntryDraft[] {
+  const description = 'route transfer reversed for a refund';
+  return [
+    ...leg(Account.OWNER_PAYABLE, 'credit', amountPaise, description, counterpartyUserId),
+    ...leg(Account.DRIVER_RECEIVABLE, 'debit', amountPaise, description),
+  ];
+}
+
+/**
+ * The partner's share a refund posting takes back: the sum of its `owner_payable` debits (S-98).
+ * Read from the posting, never recomputed from a rate.
+ */
+export function partnerShareOf(entries: readonly LedgerEntryDraft[]): number {
+  return entries
+    .filter((e) => e.account === Account.OWNER_PAYABLE && e.direction === 'debit')
+    .reduce((sum, e) => sum + e.amountPaise, 0);
+}

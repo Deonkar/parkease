@@ -347,10 +347,26 @@ export class PaymentService {
     }
   }
 
+  /**
+   * Records a refund to send. `routeTransferPaise` (the payment's) and `partnerSharePaise` (the
+   * `owner_payable` debits of this refund's posting) are required so no refund path can forget the
+   * partner's share (S-98): when Route already paid the partner, that share is taken back from the
+   * transfer before the driver is refunded, never more than the transfer carried.
+   */
   async insertRefund(
     tx: TxHandle,
-    input: { readonly paymentId: string; readonly amountPaise: number; readonly reason: string },
+    input: {
+      readonly paymentId: string;
+      readonly amountPaise: number;
+      readonly reason: string;
+      readonly routeTransferPaise: number | null;
+      readonly partnerSharePaise: number;
+    },
   ) {
+    const routeReversalPaise =
+      input.routeTransferPaise === null || input.partnerSharePaise <= 0
+        ? null
+        : Math.min(input.partnerSharePaise, input.routeTransferPaise);
     const [row] = await tx
       .insert(refunds)
       .values({
@@ -358,6 +374,7 @@ export class PaymentService {
         amountPaise: input.amountPaise,
         reason: input.reason,
         status: 'pending',
+        routeReversalPaise,
       })
       .returning();
 

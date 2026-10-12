@@ -1,5 +1,5 @@
 import { LedgerAccount } from '@parkease/contracts/enums';
-import type { LedgerEntryDraft } from '@parkease/contracts/money';
+import { type LedgerEntryDraft, routeDischargeEntries } from '@parkease/contracts/money';
 import { outboxMessages, payments, refunds } from '@parkease/db/schema';
 import { and, eq } from 'drizzle-orm';
 
@@ -74,6 +74,18 @@ export async function reconcileOrphanCapture(deps: JobDeps, raw: unknown): Promi
       entries,
     });
 
+    // Route paid the owner their share as this captured, whatever became of the booking. Record
+    // that discharge like a live capture does (stamped with the driver, ADR-030), so the owner owes
+    // it back, and have the refund take it back from the transfer (S-98).
+    const transferPaise = payment.routeTransferPaise;
+    if (transferPaise !== null) {
+      await postLedger(tx, {
+        bookingId: payload.bookingId,
+        paymentId: payment.id,
+        entries: routeDischargeEntries(transferPaise, payment.userId),
+      });
+    }
+
     const [refund] = await tx
       .insert(refunds)
       .values({
@@ -81,6 +93,7 @@ export async function reconcileOrphanCapture(deps: JobDeps, raw: unknown): Promi
         amountPaise: payload.capturedPaise,
         reason: 'orphan_capture',
         status: 'pending',
+        routeReversalPaise: transferPaise,
       })
       .returning({ id: refunds.id });
 

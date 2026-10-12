@@ -621,6 +621,31 @@ describe('razorpay webhook over HTTP', () => {
       expect(row?.n).toBe('1');
     });
 
+    it('a refund after capture records the owner share to take back from the transfer (S-98)', async () => {
+      const booking = await bookWithTransfer(null);
+      await h.sql`UPDATE payments SET route_transfer_paise = ${booking.ownerEarningsPaise}
+                  WHERE booking_id = ${booking.id}`;
+      razorpay.fetchOrder.mockResolvedValue(ok(booking.totalPaise));
+      await capture(booking.totalPaise, 'evt_reverse');
+
+      await stack.cancel.execute({
+        bookingId: booking.id,
+        reason: 'plans changed',
+        by: { kind: 'driver', driverId: h.driverId },
+      });
+
+      const [refund] = await h.sql<{ share: string | null }[]>`
+        SELECT route_reversal_paise::text AS share FROM refunds`;
+      const [owed] = await h.sql<{ debits: string }[]>`
+        SELECT sum(amount_paise)::text AS debits FROM ledger_entries
+        WHERE account = 'owner_payable' AND direction = 'debit'
+          AND txn_id IN (SELECT txn_id FROM ledger_entries WHERE account = 'refunds_payable')`;
+      // Exactly what the refund's posting took off the owner, and never more than Route paid them.
+      expect(refund?.share).toBe(owed?.debits);
+      expect(Number(refund?.share)).toBeGreaterThan(0);
+      expect(Number(refund?.share)).toBeLessThanOrEqual(booking.ownerEarningsPaise);
+    });
+
     it('the order endpoint records the transfer it attached, which capture then discharges', async () => {
       // Every discharge test above writes route_transfer_paise by hand; this is
       // the one proof that the real order path writes it at all.
@@ -685,9 +710,23 @@ describe('razorpay webhook over HTTP', () => {
                 ${job?.id ?? ''}, 31920)
       `;
       razorpay.fetchOrder.mockResolvedValue(ok(50_000));
+      const [before] = await h.sql<{ status: string }[]>`
+        SELECT status FROM bookings WHERE id = ${booking.id}`;
 
       await capture(50_000, 'evt_wash_1');
       await capture(50_000, 'evt_wash_2');
+
+      // S-22: a wash capture marks its own payment captured and leaves the parking booking alone
+      // (read as a booking capture, it would have been an orphan and auto-refunded).
+      const [payment] = await h.sql<{ status: string }[]>`
+        SELECT status FROM payments WHERE razorpay_order_id = ${ORDER_ID}`;
+      expect(payment?.status).toBe('captured');
+      const [after] = await h.sql<{ status: string }[]>`
+        SELECT status FROM bookings WHERE id = ${booking.id}`;
+      expect(after?.status).toBe(before?.status);
+      expect(
+        await h.sql`SELECT 1 FROM outbox_messages WHERE type = 'payment.issue-refund'`,
+      ).toHaveLength(0);
 
       const rows = await h.sql<
         { account: string; direction: string; amount: string; cp: string | null }[]

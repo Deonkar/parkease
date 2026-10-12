@@ -9,8 +9,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 
 import type { JobDeps } from '../../src/deps.js';
 import { issueRefund } from '../../src/jobs/payment/issue-refund.job.js';
-import type { RefundGateway } from '../../src/jobs/payment/razorpay.js';
+import type { RefundGateway, ReversalGateway } from '../../src/jobs/payment/razorpay.js';
 import { reconcileOrphanCapture } from '../../src/jobs/payment/reconcile-orphan.job.js';
+import { reverseTransfer } from '../../src/jobs/payment/reverse-transfer.job.js';
 
 let pg: PgTestContext;
 let deps: JobDeps;
@@ -332,5 +333,167 @@ describe('payment.orphan-capture', () => {
     expect(row?.status).toBe('refunded');
     expect(row?.razorpay_payment_id).toBe('pay_abc123');
     expect(row?.captured_paise).toBe('6162');
+  });
+});
+
+/**
+ * S-98: Route paid the owner their share at capture, so a refund afterwards must take that share
+ * back from the transfer, or we refund the driver from our own balance while the owner keeps it.
+ */
+describe('payment.reverse-transfer', () => {
+  function reversalDouble(overrides: Partial<ReversalGateway> = {}): ReversalGateway {
+    return {
+      transfersFor: vi
+        .fn()
+        .mockResolvedValue([{ id: 'trf_owner1', amountPaise: 5100, status: 'processed' }]),
+      findByReference: vi.fn().mockResolvedValue(null),
+      reverse: vi
+        .fn()
+        .mockImplementation(({ amountPaise }: { amountPaise: number }) =>
+          Promise.resolve({ id: `rvrsl_${String(Math.random()).slice(2, 12)}`, amountPaise }),
+        ),
+      ...overrides,
+    } as ReversalGateway;
+  }
+
+  async function seedReversibleRefund(reversalPaise: number | null) {
+    const seeded = await seedCapturedBooking();
+    await pg.sql`UPDATE payments SET route_transfer_paise = 5100 WHERE id = ${seeded.paymentId}`;
+    const [refund] = await pg.sql<{ id: string }[]>`
+      INSERT INTO refunds (payment_id, amount_paise, reason, status, route_reversal_paise)
+      VALUES (${seeded.paymentId}, 5162, 'before_start', 'pending', ${reversalPaise})
+      RETURNING id
+    `;
+    if (refund === undefined) throw new Error('failed to seed refund');
+    return { ...seeded, refundId: refund.id };
+  }
+
+  const issue = (s: { refundId: string; paymentId: string; bookingId: string }) =>
+    issueRefund(
+      deps,
+      { ...s, razorpayPaymentId: 'pay_abc123', amountPaise: 5162 },
+      gatewayDouble(),
+    );
+
+  it('is chained after the driver refund only when a share is owed back', async () => {
+    const owed = await seedReversibleRefund(4500);
+    const none = await seedReversibleRefund(null);
+
+    await issue(owed);
+    await issue(none);
+
+    const queued = await pg.sql<{ payload: { refundId: string } }[]>`
+      SELECT payload FROM outbox_messages WHERE type = 'payment.reverse-transfer'
+    `;
+    expect(queued.map((m) => m.payload.refundId)).toEqual([owed.refundId]);
+  });
+
+  it("reverses the share, records the id and returns the owner's payable to zero", async () => {
+    const s = await seedReversibleRefund(4500);
+    // What the refund's own posting left behind: the owner owes back their share.
+    await pg.sql`
+      INSERT INTO ledger_entries (txn_id, account, direction, amount_paise, description,
+                                  booking_id, counterparty_user_id)
+      VALUES (gen_random_uuid(), 'owner_payable', 'debit', 4500, 'refund share', ${s.bookingId},
+              ${s.driverId})
+    `;
+    const gateway = reversalDouble();
+
+    await reverseTransfer(deps, { refundId: s.refundId }, gateway);
+
+    expect(gateway.reverse).toHaveBeenCalledWith({
+      transferId: 'trf_owner1',
+      amountPaise: 4500,
+      reference: s.refundId,
+    });
+    const [refund] = await pg.sql<{ route_reversal_id: string | null }[]>`
+      SELECT route_reversal_id FROM refunds WHERE id = ${s.refundId}
+    `;
+    expect(refund?.route_reversal_id).toMatch(/^rvrsl_/);
+
+    const posted = await pg.sql<{ account: string; direction: string; amount_paise: string }[]>`
+      SELECT account, direction, amount_paise::text AS amount_paise FROM ledger_entries
+      WHERE payment_id = ${s.paymentId} ORDER BY account
+    `;
+    expect(posted).toEqual([
+      { account: 'driver_receivable', direction: 'debit', amount_paise: '4500' },
+      { account: 'owner_payable', direction: 'credit', amount_paise: '4500' },
+    ]);
+    const [payable] = await pg.sql<{ net: string }[]>`
+      SELECT coalesce(sum(CASE direction WHEN 'credit' THEN amount_paise ELSE -amount_paise END),
+                      0)::text AS net
+      FROM ledger_entries WHERE account = 'owner_payable' AND counterparty_user_id = ${s.driverId}
+    `;
+    expect(payable?.net).toBe('0');
+  });
+
+  it('never reverses twice, however often it is delivered', async () => {
+    const s = await seedReversibleRefund(4500);
+    const gateway = reversalDouble();
+
+    await reverseTransfer(deps, { refundId: s.refundId }, gateway);
+    await reverseTransfer(deps, { refundId: s.refundId }, gateway);
+
+    expect(gateway.reverse).toHaveBeenCalledTimes(1);
+    const [count] = await pg.sql<{ n: string }[]>`
+      SELECT count(*)::text AS n FROM ledger_entries WHERE payment_id = ${s.paymentId}
+    `;
+    expect(count?.n).toBe('2');
+  });
+
+  it('adopts a reversal a run made before dying, rather than making a second', async () => {
+    const s = await seedReversibleRefund(4500);
+    const gateway = reversalDouble({
+      findByReference: vi.fn().mockResolvedValue({ id: 'rvrsl_earlier', amountPaise: 4500 }),
+    });
+
+    await reverseTransfer(deps, { refundId: s.refundId }, gateway);
+
+    expect(gateway.reverse).not.toHaveBeenCalled();
+    const [refund] = await pg.sql<{ route_reversal_id: string | null }[]>`
+      SELECT route_reversal_id FROM refunds WHERE id = ${s.refundId}
+    `;
+    expect(refund?.route_reversal_id).toBe('rvrsl_earlier');
+  });
+
+  it('leaves the refund owed and throws when Razorpay refuses, so pg-boss retries', async () => {
+    const s = await seedReversibleRefund(4500);
+    const gateway = reversalDouble({
+      reverse: vi.fn().mockRejectedValue(new Error('insufficient balance in linked account')),
+    });
+
+    await expect(reverseTransfer(deps, { refundId: s.refundId }, gateway)).rejects.toThrow(
+      /insufficient balance/,
+    );
+    const [refund] = await pg.sql<{ route_reversal_id: string | null }[]>`
+      SELECT route_reversal_id FROM refunds WHERE id = ${s.refundId}
+    `;
+    expect(refund?.route_reversal_id).toBeNull();
+  });
+
+  it('an orphaned capture records the discharge and owes the whole transfer back', async () => {
+    const { bookingId, paymentId } = await seedCapturedBooking();
+    await pg.sql`UPDATE payments SET route_transfer_paise = 5100 WHERE id = ${paymentId}`;
+    await pg.sql`UPDATE bookings SET status = 'cancelled' WHERE id = ${bookingId}`;
+
+    await reconcileOrphanCapture(deps, {
+      bookingId,
+      paymentId,
+      razorpayPaymentId: 'pay_abc123',
+      capturedPaise: 6162,
+      bookingStatus: 'cancelled',
+    });
+
+    const [refund] = await pg.sql<{ route_reversal_paise: string | null }[]>`
+      SELECT route_reversal_paise::text AS route_reversal_paise FROM refunds
+      WHERE payment_id = ${paymentId}
+    `;
+    expect(refund?.route_reversal_paise).toBe('5100');
+    const [balance] = await pg.sql<{ debits: string; credits: string }[]>`
+      SELECT sum(amount_paise) FILTER (WHERE direction = 'debit')::text AS debits,
+             sum(amount_paise) FILTER (WHERE direction = 'credit')::text AS credits
+      FROM ledger_entries WHERE booking_id = ${bookingId}
+    `;
+    expect(balance?.debits).toBe(balance?.credits);
   });
 });

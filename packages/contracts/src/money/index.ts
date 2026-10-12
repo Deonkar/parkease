@@ -84,7 +84,9 @@ export {
   draftsFromLedgerRows,
   type PayoutPosting,
   payoutEntries,
+  partnerShareOf,
   routeDischargeEntries,
+  routeReversalEntries,
   settlementClearedEntries,
 } from './ledger-entries.js';
 

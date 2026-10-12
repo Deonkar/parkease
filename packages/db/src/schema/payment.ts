@@ -121,6 +121,13 @@ export const refunds = pgTable(
       .references(() => payments.id),
     razorpayRefundId: text('razorpay_refund_id'),
     amountPaise: paise('amount_paise').notNull(),
+    /**
+     * The partner's share of this refund, to take back from their Route transfer before the
+     * driver is refunded (S-98). NULL when the payment carried no transfer.
+     */
+    routeReversalPaise: paise('route_reversal_paise'),
+    /** Razorpay's `rvrsl_…` once the reversal is made: a retry never reverses twice. */
+    routeReversalId: text('route_reversal_id'),
     reason: text('reason'),
     status: text('status').notNull().default('pending'),
     processedAt: timestamp('processed_at', { withTimezone: true }),

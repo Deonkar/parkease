@@ -74,8 +74,7 @@ async function payOne(deps: JobDeps, userId: string, period: string, now: Date):
       })
       .from(bankDetails)
       .where(eq(bankDetails.userId, userId));
-    const fundAccountId = bank?.fundAccountId;
-    if (fundAccountId == null) {
+    if (bank?.fundAccountId == null) {
       logger.warn({ userId, period }, 'payout skipped: no bank details on file');
       return;
     }
@@ -104,7 +103,7 @@ async function payOne(deps: JobDeps, userId: string, period: string, now: Date):
         txnId,
         // Pinned: `payout.send` pays exactly this account, and fails the payout
         // rather than redirect it if the details change before it goes.
-        razorpayxFundAccountId: fundAccountId,
+        razorpayxFundAccountId: bank.fundAccountId,
         // Which account, as it is now: a later bank change never renames this payout (S-113).
         destinationLast4: bank.last4,
         status: 'pending',
@@ -117,7 +116,7 @@ async function payOne(deps: JobDeps, userId: string, period: string, now: Date):
     await postLedger(tx, { txnId, payoutId: payout.id, entries: posting.entries });
     // Details changed under 48h ago (S-100): the payout is owed and recorded now, and the money
     // waits for the hold, so a change the holder did not make can be reported before it moves.
-    const held = bank?.heldUntil != null && bank.heldUntil > now ? bank.heldUntil : null;
+    const held = bank.heldUntil != null && bank.heldUntil > now ? bank.heldUntil : null;
     await tx.insert(outboxMessages).values({
       type: PAYOUT_SEND_JOB,
       payload: { payoutId: payout.id },

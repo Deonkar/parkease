@@ -20,7 +20,9 @@ import {
 } from './jobs/notification/fetch-receipts.job.js';
 import { relayOutbox } from './jobs/outbox/relay.job.js';
 import { issueRefund } from './jobs/payment/issue-refund.job.js';
+import { PAYMENT_REVERSE_TRANSFER_JOB } from './jobs/payment/payload.js';
 import { reconcileOrphanCapture } from './jobs/payment/reconcile-orphan.job.js';
+import { reverseTransfer } from './jobs/payment/reverse-transfer.job.js';
 import {
   PAYOUT_RECONCILE_JOB,
   PAYOUT_RUN_WEEKLY_JOB,
@@ -73,6 +75,9 @@ export async function registerHandlers(boss: PgBoss, deps: JobDeps): Promise<voi
   });
   await boss.work<unknown>('payment.orphan-capture', { batchSize: 1 }, async (jobs) => {
     for (const job of jobs) await reconcileOrphanCapture(deps, job.data);
+  });
+  await boss.work<unknown>(PAYMENT_REVERSE_TRANSFER_JOB, { batchSize: 1 }, async (jobs) => {
+    for (const job of jobs) await reverseTransfer(deps, job.data);
   });
 
   // One at a time, like the booking jobs. No-show takes a row lock on valet_jobs and posts money,

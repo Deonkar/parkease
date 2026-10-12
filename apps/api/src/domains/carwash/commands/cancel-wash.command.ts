@@ -1,5 +1,10 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { computeWashFee, reverseEntries, washEntries } from '@parkease/contracts/money';
+import {
+  computeWashFee,
+  reverseEntries,
+  washEntries,
+  partnerShareOf,
+} from '@parkease/contracts/money';
 import type { Paise } from '@parkease/contracts/primitives';
 import { toRate } from '@parkease/contracts/primitives';
 import { uuidv7 } from '@parkease/db';
@@ -59,13 +64,14 @@ export class CancelWashCommand {
       if (job.txnId !== null && job.pricePaise !== null && job.washerUserId !== null) {
         const fee = computeWashFee(job.pricePaise as Paise, toRate(Number(job.commissionRate)));
 
+        const reversal = reverseEntries(
+          washEntries(fee, job.washerUserId, 'car wash service'),
+          'car wash cancellation reversal',
+        );
         await this.ledger.post(tx, {
           txnId: uuidv7(),
           bookingId: job.bookingId,
-          entries: reverseEntries(
-            washEntries(fee, job.washerUserId, 'car wash service'),
-            'car wash cancellation reversal',
-          ),
+          entries: reversal,
         });
 
         /**
@@ -89,6 +95,8 @@ export class CancelWashCommand {
             paymentId: captured.id,
             amountPaise: fee.driverTotalPaise,
             reason: 'carwash_cancelled',
+            routeTransferPaise: captured.routeTransferPaise,
+            partnerSharePaise: partnerShareOf(reversal),
           });
 
           // `.returning()` gave nothing back, which means the insert did not
