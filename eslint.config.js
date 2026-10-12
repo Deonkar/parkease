@@ -125,6 +125,17 @@ export default tseslint.config(
       'no-console': 'error',
       '@typescript-eslint/no-floating-promises': 'error',
       '@typescript-eslint/no-explicit-any': 'error',
+      // A switch over a union must name every member (or end in assertNever), and a
+      // switch over a non-union must say what happens to the rest. Exhaustiveness is
+      // a rule, not a convention (suggestedtask S-65).
+      '@typescript-eslint/switch-exhaustiveness-check': [
+        'error',
+        {
+          allowDefaultCaseForExhaustiveSwitch: true,
+          considerDefaultExhaustiveForUnions: false,
+          requireDefaultForNonUnion: true,
+        },
+      ],
     },
   },
   {

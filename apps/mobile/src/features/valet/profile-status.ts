@@ -12,6 +12,7 @@ import {
   type BannerTone,
   type VerificationBanner,
 } from '@/features/shared/verification';
+import { assertNever } from '@/lib/assert-never';
 
 export type { BannerTone, VerificationBanner };
 
@@ -42,9 +43,10 @@ export interface VerificationView {
  * person behind someone's steering wheel. Unknown means not permitted.
  */
 export function describeVerification(status: string): VerificationView {
-  const canAccept = canAcceptWork(verificationStateFor(status));
+  const state = verificationStateFor(status);
+  const canAccept = canAcceptWork(state);
 
-  switch (verificationStateFor(status)) {
+  switch (state) {
     case 'verified':
       return { canAccept, banner: null };
 
@@ -81,7 +83,7 @@ export function describeVerification(status: string): VerificationView {
         },
       };
 
-    default:
+    case 'unknown':
       return {
         canAccept,
         banner: {
@@ -91,6 +93,9 @@ export function describeVerification(status: string): VerificationView {
           action: 'Contact support',
         },
       };
+
+    default:
+      return assertNever(state);
   }
 }
 
