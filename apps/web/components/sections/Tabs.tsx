@@ -61,7 +61,7 @@ export function Tabs({
           </button>
         ))}
       </div>
-      <div className="grid">
+      <div>
         {items.map((item, i) => (
           <div
             key={item.id}

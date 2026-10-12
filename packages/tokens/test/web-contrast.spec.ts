@@ -34,6 +34,7 @@ describe('web palette — text clears AA (4.5:1)', () => {
     ['availableInk on availableSoft', c.availableInk, c.availableSoft],
     ['warnInk on warnSoft', c.warnInk, c.warnSoft],
     ['freeLit on floor (large stencil text)', c.freeLit, c.floor],
+    ['midnight label on field (pricing GST segment)', c.midnight, c.field],
     ['map label on light land', c.mapLight.label, c.mapLight.land],
     ['map label on dark land', c.mapDark.label, c.mapDark.land],
   ])('%s', (_label, fg, bg) => {
@@ -45,7 +46,7 @@ describe('web palette — non-text clears 3:1', () => {
   it.each([
     ['focus ring on porcelain', c.focus, c.porcelain],
     ['focus ring on midnight', c.focus, c.midnight],
-    ['field border on paper', c.slate, c.paper],
+    ['slate input border on paper', c.slate, c.paper],
     ['stencilled bay numbers on floor (large text)', c.floorStencil, c.floor],
   ])('%s', (_label, fg, bg) => {
     expect(contrast(fg, bg)).toBeGreaterThanOrEqual(3);

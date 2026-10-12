@@ -33,7 +33,12 @@ export function formatRupees(amount: number, decimals: 0 | 2 = 0): string {
 }
 
 /** Two hours at ₹40, at a normal hour: the worked example used on the site. */
-const example = quote({ basePaise: toPaise(8_000), surgeMultiplier: toRate(1) });
+const EXAMPLE_HOURS = 2;
+const EXAMPLE_HOURLY_PAISE = 4_000;
+const example = quote({
+  basePaise: toPaise(EXAMPLE_HOURS * EXAMPLE_HOURLY_PAISE),
+  surgeMultiplier: toRate(1),
+});
 
 const valetTripKm = 3;
 const valetTripPaise = VALET_BASE_FEE_PAISE + valetTripKm * VALET_PER_KM_PAISE;
@@ -57,8 +62,8 @@ export const PRICING = {
     sentence: 'every Monday, or on the 1st of the month if you prefer',
   },
   example: {
-    hours: 2,
-    hourly: 40,
+    hours: EXAMPLE_HOURS,
+    hourly: rupees(EXAMPLE_HOURLY_PAISE),
     base: rupees(example.basePaise),
     gst: rupees(example.gstPaise),
     driverTotal: rupees(example.driverTotalPaise),

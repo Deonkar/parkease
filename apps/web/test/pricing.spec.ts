@@ -37,6 +37,10 @@ describe('pricing (ADR-009)', () => {
     expect(owners).toContain('₹100');
   });
 
+  it('valets and wash partners keep the same share, which the partners page quotes once', () => {
+    expect(PRICING.valet.keepsPercent).toBe(PRICING.wash.keepsPercent);
+  });
+
   it('lists valet and car wash commission as 20%', () => {
     expect(ledger('For valet partners')).toContain('20% of valet fee');
     expect(ledger('For car wash partners')).toContain('20% of service price');

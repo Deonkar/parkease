@@ -1,4 +1,13 @@
-export const SITE_URL = 'https://parkease.in';
+/**
+ * The canonical origin for metadata, the sitemap and robots.txt. Set NEXT_PUBLIC_SITE_URL when
+ * the site is deployed anywhere other than parkease.in, so search engines are not pointed at a
+ * domain the deployment does not serve.
+ */
+export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || 'https://parkease.in').replace(
+  /\/$/,
+  '',
+);
+export const SITE_HOST = new URL(SITE_URL).host;
 export const SITE_NAME = 'ParkEase';
 
 /**
@@ -7,8 +16,8 @@ export const SITE_NAME = 'ParkEase';
  * never sends anyone to a listing that does not exist.
  */
 export const STORE_LINKS = {
-  android: process.env.NEXT_PUBLIC_PLAY_STORE_URL ?? null,
-  ios: process.env.NEXT_PUBLIC_APP_STORE_URL ?? null,
+  android: process.env.NEXT_PUBLIC_PLAY_STORE_URL || null,
+  ios: process.env.NEXT_PUBLIC_APP_STORE_URL || null,
 } as const;
 
 /** Shown in the footer while the project is a showcase rather than a live service. */

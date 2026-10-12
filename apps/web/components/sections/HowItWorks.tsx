@@ -68,10 +68,9 @@ export function HowItWorks({
   return (
     <div className="flex flex-wrap items-start gap-x-22 gap-y-10">
       <div className="story-sticky mx-auto w-full max-w-[360px] flex-[0_1_360px]">
-        <div
-          aria-live="polite"
-          className="relative h-[640px] w-full rounded-[44px] bg-midnight p-2.5 shadow-[0_40px_80px_-30px_var(--pe-shadow)]"
-        >
+        {/* Not a live region: the step list carries the story, and announcing each screen as
+            scrolling swaps it would interrupt whatever the reader was in the middle of. */}
+        <div className="relative h-[640px] w-full rounded-[44px] bg-midnight p-2.5 shadow-[0_40px_80px_-30px_var(--pe-shadow)]">
           <div className="relative size-full overflow-hidden rounded-[35px] bg-porcelain text-ink">
             <div className="screen" data-active={active === 0} aria-hidden={active !== 0}>
               <div className="absolute inset-0">{map}</div>

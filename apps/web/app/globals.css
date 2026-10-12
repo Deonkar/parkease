@@ -366,15 +366,8 @@
 .tab-indicator {
   transition: transform 240ms var(--ease-in-out-strong);
 }
-.panel {
-  grid-area: 1 / 1;
-}
 .panel[data-active='true'] {
   animation: fade-up 360ms var(--ease-out-strong) both;
-}
-.panel[data-active='false'] {
-  visibility: hidden;
-  opacity: 0;
 }
 .share-bar {
   transform-origin: 100% 50%;

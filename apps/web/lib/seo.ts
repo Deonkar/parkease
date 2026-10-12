@@ -15,22 +15,42 @@ export const OG_IMAGE = {
   type: 'image/png',
 } as const;
 
-/**
- * Per-page metadata: title, description, canonical and Open Graph.
- */
+/** One Open Graph block for every page, so locale, site name and image cannot drift apart. */
+export function openGraph({
+  path,
+  title,
+  description,
+  article,
+}: {
+  readonly path: string;
+  readonly title: string;
+  readonly description: string;
+  /** ISO date; makes the page an article. */
+  readonly article?: { readonly publishedTime: string };
+}): NonNullable<Metadata['openGraph']> {
+  const shared = {
+    locale: 'en_IN',
+    siteName: SITE_NAME,
+    url: path,
+    title,
+    description,
+    images: [OG_IMAGE],
+  };
+  return article === undefined
+    ? { ...shared, type: 'website' }
+    : { ...shared, type: 'article', publishedTime: article.publishedTime };
+}
+
+/** Per-page metadata: title, description, canonical and Open Graph. */
 export function pageMetadata(page: PageMeta): Metadata {
   return {
     title: page.absolute ? { absolute: page.title } : page.title,
     description: page.description,
     alternates: { canonical: page.path },
-    openGraph: {
-      type: 'website',
-      locale: 'en_IN',
-      siteName: SITE_NAME,
-      url: page.path,
+    openGraph: openGraph({
+      path: page.path,
       title: fullTitle(page),
       description: page.description,
-      images: [OG_IMAGE],
-    },
+    }),
   };
 }

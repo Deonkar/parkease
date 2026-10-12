@@ -9,7 +9,7 @@ import { PageHero } from '@/components/sections/PageHero';
 import { SectionHeading } from '@/components/sections/SectionHeading';
 import { cityDescription, cityTitle, findCity, LAUNCHED_CITIES, type CitySlug } from '@/lib/cities';
 import { PRICING } from '@/lib/pricing';
-import { OG_IMAGE } from '@/lib/seo';
+import { openGraph } from '@/lib/seo';
 
 interface CityParams {
   readonly city: CitySlug;
@@ -40,15 +40,12 @@ export async function generateMetadata({
     title: cityTitle(city),
     description: cityDescription(city),
     alternates: { canonical: path },
-    openGraph: {
-      type: 'website',
-      locale: 'en_IN',
-      siteName: 'ParkEase',
-      url: path,
+    // og:title and og:description are worded for sharing, as task 20 §20.4 specifies.
+    openGraph: openGraph({
+      path,
       title: `Parking in ${city.name} — ParkEase`,
       description: `${city.vehicleCount} vehicles, not enough parking. ParkEase connects drivers with private parking spaces in ${city.name}.`,
-      images: [OG_IMAGE],
-    },
+    }),
   };
 }
 

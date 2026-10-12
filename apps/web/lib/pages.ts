@@ -1,3 +1,5 @@
+import { PRICING } from '@/lib/pricing';
+
 /**
  * Every static page: its path, title and meta description. Metadata, the sitemap and the
  * build-output checks all read from here, so a page cannot ship without a unique title and a
@@ -28,8 +30,7 @@ export const PAGES = {
   earn: {
     path: '/earn',
     title: 'Earn From Your Parking Space',
-    description:
-      'List a driveway, basement bay or private lot on ParkEase. Set your own price and hours, keep 85% of every booking and get paid weekly.',
+    description: `List a driveway, basement bay or private lot on ParkEase. Set your own price and hours, keep ${String(PRICING.ownerKeepsPercent)}% of every booking and get paid weekly or monthly.`,
   },
   findParking: {
     path: '/find-parking',
@@ -82,8 +83,7 @@ export const PAGES = {
   partners: {
     path: '/partners',
     title: 'Work as a Valet or Car Wash Partner',
-    description:
-      'Join ParkEase as a valet or car wash partner. Registration is free, you choose your own hours, and you keep 80% of every job you complete.',
+    description: `Join ParkEase as a valet or car wash partner. Registration is free, you choose your own hours, and you keep ${String(PRICING.valet.keepsPercent)}% of every job you complete.`,
   },
   deleteAccount: {
     path: '/account/delete',

@@ -8,7 +8,7 @@
  *   pnpm --filter @parkease/web verify          # BASE_URL defaults to http://localhost:3000
  */
 const BASE = (process.env.BASE_URL ?? 'http://localhost:3000').replace(/\/$/, '');
-const SITE = 'https://parkease.in';
+const SITE = (process.env.NEXT_PUBLIC_SITE_URL || 'https://parkease.in').replace(/\/$/, '');
 
 const failures = [];
 const fail = (where, message) => failures.push(`${where}: ${message}`);
@@ -92,6 +92,15 @@ for (const url of urls) {
   const canonical = html.match(/<link[^>]*rel="canonical"[^>]*href="([^"]+)"/)?.[1];
   if (canonical !== url) fail(path, `canonical is ${canonical ?? 'missing'}`);
   if (!/<html[^>]*lang="en-IN"/.test(html)) fail(path, 'html lang is not en-IN');
+
+  // A link target holding an unevaluated {expression} (an MDX link URL, say) or a mailto with no
+  // address is a broken link, however good the page looks.
+  for (const [, href] of html.matchAll(/<a[^>]*href="([^"]*)"/g)) {
+    if (/[{}]|%7B|%7D/i.test(href)) fail(path, `link target is not a URL: ${href}`);
+    if (href.startsWith('mailto:') && !href.slice(7).split('?')[0].includes('@')) {
+      fail(path, `mailto has no address: ${href}`);
+    }
+  }
 
   const h1s = html.match(/<h1[\s>]/g)?.length ?? 0;
   if (h1s !== 1) fail(path, `${h1s} <h1> elements`);

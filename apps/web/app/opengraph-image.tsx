@@ -1,6 +1,9 @@
 import { webColors } from '@parkease/tokens';
 import { ImageResponse } from 'next/og';
 
+import { BrandMark } from '@/lib/brand-mark';
+import { SITE_HOST } from '@/lib/site';
+
 export const runtime = 'edge';
 export const alt =
   'ParkEase. Stop circling the block. A row of parking bays at night with one bay lit green as free.';
@@ -11,7 +14,11 @@ const BAYS = 10;
 const FREE_BAY = 5;
 const DISPLAY = 'Big Shoulders';
 
-/** The share image: the headline over the basement floor, one bay lit as free. */
+/**
+ * The share image: the headline over the basement floor, one bay lit as free. Edge runtime as
+ * task 20 §20.10 specifies; ImageResponse sends an immutable cache header, so it renders once
+ * per deploy at the CDN rather than per visit.
+ */
 export default async function OpengraphImage() {
   const font = await fetch(new URL('../assets/BigShoulders-Black.ttf', import.meta.url)).then(
     (res) => res.arrayBuffer(),
@@ -40,21 +47,8 @@ export default async function OpengraphImage() {
             gap: 16,
           }}
         >
-          <div
-            style={{
-              width: 56,
-              height: 56,
-              borderRadius: 11,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: webColors.primary,
-              color: webColors.onPrimary,
-              boxShadow: `inset 0 0 0 3px ${webColors.onPrimary}`,
-              fontSize: 42,
-            }}
-          >
-            P
+          <div style={{ width: 56, height: 56, display: 'flex' }}>
+            <BrandMark size={56} font={DISPLAY} />
           </div>
           <div style={{ fontSize: 46 }}>ParkEase</div>
         </div>
@@ -67,7 +61,7 @@ export default async function OpengraphImage() {
             color: webColors.onMidnightMuted,
           }}
         >
-          parkease.in
+          {SITE_HOST}
         </div>
         <div
           style={{
