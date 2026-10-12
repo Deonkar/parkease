@@ -11,7 +11,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { JobDeps } from '../../src/deps.js';
 import { registerHandlers } from '../../src/handlers.js';
 import { MAX_ATTEMPTS, relayOutbox } from '../../src/jobs/outbox/relay.job.js';
-import { ensureQueues, QUEUES } from '../../src/queues.js';
+import { DEAD_LETTER_QUEUES, ensureQueues, QUEUES } from '../../src/queues.js';
 import { registerSchedule } from '../../src/schedule.js';
 
 /**
@@ -46,7 +46,7 @@ describe('pg-boss queues (S-104)', () => {
     await stopPgContainer(pg);
   });
 
-  it('creates every queue the worker uses, and doing it again changes nothing', async () => {
+  it('creates every queue the worker uses and its dead-letter queue, and again changes nothing', async () => {
     await ensureQueues(boss);
     await ensureQueues(boss);
 
@@ -55,7 +55,7 @@ describe('pg-boss queues (S-104)', () => {
       .map((q) => q.name)
       .filter((name) => !name.startsWith('__pgboss__'))
       .sort();
-    expect(created).toEqual([...QUEUES].sort());
+    expect(created).toEqual([...QUEUES, ...DEAD_LETTER_QUEUES].sort());
   });
 
   it('registers every handler and every schedule against real queues', async () => {
@@ -71,6 +71,8 @@ describe('pg-boss queues (S-104)', () => {
     await ensureQueues(boss);
 
     for (const name of QUEUES) {
+      // A stately sweep holds one queued job at most, and a cron tick may already have sent it.
+      await boss.purgeQueue(name);
       expect(await boss.send(name, {}), name).toEqual(expect.any(String));
     }
   });
@@ -89,7 +91,7 @@ describe('pg-boss queues (S-104)', () => {
     expect(row?.status).toBe('dispatched');
     const jobs = await pg.sql<{ n: number }[]>`
       SELECT count(*)::int AS n FROM pgboss.job
-      WHERE name = 'booking.expire-unpaid' AND singleton_key = ${message?.id ?? ''}`;
+      WHERE name = 'booking.expire-unpaid' AND id = ${message?.id ?? ''}`;
     expect(jobs).toEqual([{ n: 1 }]);
   });
 
@@ -105,7 +107,7 @@ describe('pg-boss queues (S-104)', () => {
 
     const [job] = await pg.sql<{ data: { userId: string; template: string } }[]>`
       SELECT data FROM pgboss.job
-      WHERE name = 'notification.dispatch' AND singleton_key = ${message?.id ?? ''}`;
+      WHERE name = 'notification.dispatch' AND id = ${message?.id ?? ''}`;
     expect(job?.data).toMatchObject({ userId: driverId, template: 'booking.confirmed' });
   });
 
@@ -181,10 +183,14 @@ describe('pg-boss queues (S-104)', () => {
     await ensureQueues(boss);
     const id = await enqueue('booking.complete');
     // The job landed on an earlier relay whose transaction then rolled back.
-    await boss.send('booking.complete', {}, { singletonKey: id });
+    await boss.send('booking.complete', {}, { id });
 
     await relayOutbox(deps);
 
     expect(await outboxRow(id)).toMatchObject({ status: 'dispatched' });
+    // Exactly once: the job id is the message id, and pg-boss will not insert it twice.
+    expect(
+      await pg.sql`SELECT count(*)::int AS n FROM pgboss.job WHERE name = 'booking.complete' AND id = ${id}`,
+    ).toEqual([{ n: 1 }]);
   });
 });

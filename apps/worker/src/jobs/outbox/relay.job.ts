@@ -4,7 +4,7 @@ import { eq, sql } from 'drizzle-orm';
 
 import type { JobDeps } from '../../deps.js';
 import { logger } from '../../logger.js';
-import { outboxRoute } from '../../queues.js';
+import { outboxRoute, relaySendOptions } from '../../queues.js';
 
 const BATCH_SIZE = 100;
 export const MAX_ATTEMPTS = 10;
@@ -72,7 +72,7 @@ export async function outboxLagSeconds(deps: JobDeps): Promise<number> {
 
 /**
  * Runs a relay pass every `intervalMs` until stopped. Several workers can pump at once:
- * `FOR UPDATE SKIP LOCKED` hands each batch to one of them, and the singleton key stops a
+ * `FOR UPDATE SKIP LOCKED` hands each batch to one of them, and the job id (the message id) stops a
  * duplicate job if a pass rolls back after a send.
  *
  * The minute cron job stays registered as the safety net for a pump that has died.
@@ -131,7 +131,7 @@ async function relayBatch(deps: JobDeps): Promise<number> {
 
     for (const message of batch) {
       // A domain event that also tells someone something is sent on as a notification job
-      // (task 19); the outbox message id stays the pg-boss singleton key, so a retry sends once.
+      // (task 19); the outbox message id stays the pg-boss job id, so a retry sends once.
       const eventMap = Object.hasOwn(EVENT_NOTIFICATIONS, message.type)
         ? EVENT_NOTIFICATIONS[message.type]
         : undefined;
@@ -161,18 +161,21 @@ async function relayBatch(deps: JobDeps): Promise<number> {
         if (route === 'unknown') {
           throw new Error(`no queue for message type ${message.type}`);
         }
-        const jobId = await deps.boss.send(sendType, sendPayload, {
-          singletonKey: message.id,
-          retryLimit: 5,
-          retryBackoff: true,
-        });
-        // null is either the singletonKey duplicate of a send that already landed (fine), or a job
-        // pg-boss silently did not create because its queue is gone (not fine). Only the job table
-        // tells them apart.
+        // Job id = message id, the queue's tier priority, the entity as singleton key; retries,
+        // expiry and dead-lettering come from the queue (queues.ts).
+        const jobId = await deps.boss.send(
+          sendType,
+          sendPayload,
+          relaySendOptions(sendType, message.id, sendPayload),
+        );
+        // null is either the duplicate of a send that already landed (fine), or a job pg-boss
+        // silently did not create because its queue is gone (not fine). Only the job table — or
+        // its archive, for one that finished long ago — tells them apart.
         if (jobId === null) {
           const [existing] = await tx.execute<{ id: string }>(sql`
-            SELECT id FROM pgboss.job
-            WHERE name = ${sendType} AND singleton_key = ${message.id}
+            SELECT id FROM pgboss.job WHERE name = ${sendType} AND id = ${message.id}::uuid
+            UNION ALL
+            SELECT id FROM pgboss.archive WHERE name = ${sendType} AND id = ${message.id}::uuid
             LIMIT 1`);
           if (existing === undefined) {
             throw new Error(`pg-boss created no job for ${message.type}; is its queue missing?`);

@@ -40,92 +40,142 @@ import {
 import { recalculateSurge, SURGE_RECALCULATE } from './jobs/surge/recalculate.job.js';
 import { acceptTimeout } from './jobs/valet/accept-timeout.job.js';
 import { noShow } from './jobs/valet/no-show.job.js';
+import { logger } from './logger.js';
+import { QUEUE_REGISTRY, type QueueDefinition, type QueueName, workOptions } from './queues.js';
+
+export type JobBatch = PgBoss.JobWithMetadata<unknown>[];
+export type JobHandler = (deps: JobDeps, jobs: JobBatch) => Promise<unknown>;
+
+/** A payload job, one at a time through the batch pg-boss hands over. */
+const each =
+  (run: (deps: JobDeps, data: unknown) => Promise<unknown>): JobHandler =>
+  async (deps, jobs) => {
+    for (const job of jobs) await run(deps, job.data);
+  };
+
+/** A payload-free sweep: it works from current state, so there is nothing to pass or validate. */
+const sweep =
+  (run: (deps: JobDeps) => Promise<unknown>): JobHandler =>
+  (deps) =>
+    run(deps);
 
 /**
- * Booking jobs are handled one at a time rather than in a batch: each takes a
- * FOR UPDATE row lock, and batching them would hold several at once inside a
- * single handler for no gain. Every handler is idempotent, because pg-boss
- * delivery is at-least-once (R-ASYNC-03).
+ * One handler per registry queue — `satisfies` makes a registry entry without a handler, or a
+ * handler without a registry entry, a compile error. Capacity (batch size, loops, polling) comes
+ * from the queue's tier in `queues.ts`, not from here.
+ *
+ * Payload jobs are handled one at a time rather than in a batch (`batchSize: 1` on their tiers):
+ * each takes a FOR UPDATE row lock, and batching would hold several at once inside one handler for
+ * no gain. Every handler is idempotent, because pg-boss delivery is at-least-once (R-ASYNC-03).
  */
-export async function registerHandlers(boss: PgBoss, deps: JobDeps): Promise<void> {
-  await boss.work('outbox.relay', { pollingIntervalSeconds: 1 }, () => relayOutbox(deps));
-  await boss.work<unknown>('notification.dispatch', { batchSize: 50 }, (jobs) =>
-    dispatchNotifications(deps, jobs),
-  );
-  await boss.work(NOTIFICATION_FETCH_RECEIPTS_JOB, {}, () => fetchReceipts(deps));
-  await boss.work('ledger.assert-balance', {}, () => assertLedgerBalance(deps));
-  await boss.work('idempotency.prune', {}, () => pruneIdempotencyKeys(deps));
+export const HANDLERS = {
+  'outbox.relay': sweep(relayOutbox),
+  // Batched: a batch of 50 pushes is one Expo call. Retrying the batch is safe (dispatch.job.ts).
+  'notification.dispatch': (deps, jobs) => dispatchNotifications(deps, jobs),
+  [NOTIFICATION_FETCH_RECEIPTS_JOB]: sweep(fetchReceipts),
+  'ledger.assert-balance': sweep(assertLedgerBalance),
+  'idempotency.prune': sweep(pruneIdempotencyKeys),
+  [SURGE_RECALCULATE]: sweep(recalculateSurge),
 
-  // Cron-driven and payload-free: it recomputes every zone from current state,
-  // so there is nothing for a caller to pass and nothing to validate.
-  await boss.work(SURGE_RECALCULATE, {}, () => recalculateSurge(deps));
+  'booking.expire-unpaid': each(expireUnpaid),
+  'booking.complete': each(completeBooking),
+  'booking.remind': each(remindBooking),
 
-  await boss.work<unknown>('booking.expire-unpaid', { batchSize: 1 }, async (jobs) => {
-    for (const job of jobs) await expireUnpaid(deps, job.data);
-  });
-  await boss.work<unknown>('booking.complete', { batchSize: 1 }, async (jobs) => {
-    for (const job of jobs) await completeBooking(deps, job.data);
-  });
-  await boss.work<unknown>('booking.remind', { batchSize: 1 }, async (jobs) => {
-    for (const job of jobs) await remindBooking(deps, job.data);
-  });
+  // A refund is the one thing in this system that cannot be undone if done twice; each of these
+  // locks its row and checks the gateway before acting.
+  'payment.issue-refund': each(issueRefund),
+  'payment.orphan-capture': each(reconcileOrphanCapture),
+  [PAYMENT_REVERSE_TRANSFER_JOB]: each(reverseTransfer),
 
-  // One at a time, like the booking jobs: each takes a FOR UPDATE row lock, and
-  // a refund is the one thing in this system that cannot be undone if done twice.
-  await boss.work<unknown>('payment.issue-refund', { batchSize: 1 }, async (jobs) => {
-    for (const job of jobs) await issueRefund(deps, job.data);
-  });
-  await boss.work<unknown>('payment.orphan-capture', { batchSize: 1 }, async (jobs) => {
-    for (const job of jobs) await reconcileOrphanCapture(deps, job.data);
-  });
-  await boss.work<unknown>(PAYOUT_APPLY_STATUS_JOB, { batchSize: 1 }, async (jobs) => {
-    for (const job of jobs) await applyPayoutStatusJob(deps, job.data);
-  });
-  await boss.work<unknown>(PAYMENT_REVERSE_TRANSFER_JOB, { batchSize: 1 }, async (jobs) => {
-    for (const job of jobs) await reverseTransfer(deps, job.data);
-  });
+  // No-show takes a row lock on valet_jobs and posts money; accept-timeout pins the status and
+  // round it read in each write instead (S-18), so an accept that lands mid-search wins. The queue
+  // names come from contracts, so the API's enqueue and this registration cannot drift apart.
+  [VALET_ACCEPT_TIMEOUT_JOB]: each(acceptTimeout),
+  [VALET_NO_SHOW_JOB]: each(noShow),
 
-  // One at a time, like the booking jobs. No-show takes a row lock on valet_jobs and posts money,
-  // the one thing that must not run twice; accept-timeout pins the status and round it read in
-  // each write instead (S-18), so an accept that lands mid-search wins.
-  // The queue names come from contracts, so the enqueue in the API and the work
-  // registration here cannot drift into a job nobody picks up.
-  await boss.work<unknown>(VALET_ACCEPT_TIMEOUT_JOB, { batchSize: 1 }, async (jobs) => {
-    for (const job of jobs) await acceptTimeout(deps, job.data);
-  });
-  await boss.work<unknown>(VALET_NO_SHOW_JOB, { batchSize: 1 }, async (jobs) => {
-    for (const job of jobs) await noShow(deps, job.data);
-  });
+  // Two deliveries of the same carwash round racing would double-offer. Serialising redeliveries
+  // does not serialise this handler against an accept arriving through the API in another
+  // transaction; that race is answered where it has to be — the handler pins the status and the
+  // round in its own UPDATE's WHERE, so an accept landing mid-search wins and the widening becomes
+  // a logged no-op.
+  [CARWASH_ACCEPT_TIMEOUT_JOB]: each(carwashAcceptTimeout),
+  [CARWASH_COMPLETE_REMINDER_JOB]: each(washCompleteReminder),
 
-  // One at a time, for the same reason as valet's: two deliveries of the same
-  // round racing each other would double-offer.
-  //
-  // Note what `batchSize: 1` does NOT do. It serialises redeliveries of the
-  // same pg-boss job; it does not serialise this handler against an accept
-  // arriving through the API in a different transaction. That race is answered
-  // where it has to be — the handler pins the status and the round in its own
-  // UPDATE's WHERE, so an accept landing mid-search wins and the widening
-  // becomes a logged no-op.
-  //
-  // The queue names come from contracts, so the enqueue in the API and the
-  // registration here cannot drift into a job nobody picks up.
-  await boss.work<unknown>(CARWASH_ACCEPT_TIMEOUT_JOB, { batchSize: 1 }, async (jobs) => {
-    for (const job of jobs) await carwashAcceptTimeout(deps, job.data);
-  });
-  await boss.work<unknown>(CARWASH_COMPLETE_REMINDER_JOB, { batchSize: 1 }, async (jobs) => {
-    for (const job of jobs) await washCompleteReminder(deps, job.data);
-  });
-
-  // Task 16a. The weekly run is cron-driven and payload-free; each payee it
-  // pays commits a `payout.send` with its payout row. Send is one at a time:
-  // it is the call that moves money, and a claim per row is what keeps a bank
-  // change from cancelling a payout already on its way.
-  await boss.work(PAYOUT_RUN_WEEKLY_JOB, {}, () => runWeeklyPayouts(deps));
-  await boss.work(PAYOUT_RECONCILE_JOB, {}, () => reconcilePayouts(deps));
-  await boss.work<unknown>(PAYOUT_SEND_JOB, { batchSize: 1 }, async (jobs) => {
-    for (const job of jobs) await sendPayout(deps, job.data);
-  });
+  // Task 16a. The weekly run is cron-driven and payload-free; each payee it pays commits a
+  // `payout.send` with its payout row. Send is the call that moves money, and a claim per row is
+  // what keeps a bank change from cancelling a payout already on its way.
+  [PAYOUT_RUN_WEEKLY_JOB]: sweep(runWeeklyPayouts),
+  [PAYOUT_RECONCILE_JOB]: sweep(reconcilePayouts),
+  [PAYOUT_SEND_JOB]: each(sendPayout),
+  // S-102: a RazorpayX webhook's status, applied with the same transitions reconcile uses.
+  [PAYOUT_APPLY_STATUS_JOB]: each(applyPayoutStatusJob),
 
   // Task 17a. Cron-driven and payload-free, like the payout run.
-  await boss.work(REVIEW_RECOMPUTE_AGGREGATES_JOB, {}, () => recomputeAgeingAggregates(deps));
+  [REVIEW_RECOMPUTE_AGGREGATES_JOB]: sweep(recomputeAgeingAggregates),
+} satisfies Record<QueueName, JobHandler>;
+
+export type Handlers = Readonly<Record<QueueName, JobHandler>>;
+
+/**
+ * Wraps a handler with the structured log every job gets: queue, tier, job id and attempt number.
+ * A failure is rethrown so pg-boss retries it; the attempt that exhausts the retry limit logs at
+ * error, since its job is about to land in the dead-letter queue.
+ */
+export function instrument(
+  q: QueueDefinition,
+  handler: JobHandler,
+  deps: JobDeps,
+): PgBoss.WorkWithMetadataHandler<unknown> {
+  return async (jobs) => {
+    const first = jobs[0];
+    const context = {
+      queue: q.name,
+      tier: q.tier,
+      ...(jobs.length === 1 ? { jobId: first?.id } : { jobIds: jobs.map((j) => j.id) }),
+      attempt: Math.max(...jobs.map((j) => j.retryCount + 1)),
+      retryLimit: first?.retryLimit,
+    };
+    const started = performance.now();
+    try {
+      const result = await handler(deps, jobs);
+      logger.debug(
+        { ...context, durationMs: Math.round(performance.now() - started) },
+        'job completed',
+      );
+      return result;
+    } catch (error) {
+      const lastAttempt = jobs.some((j) => j.retryCount >= j.retryLimit);
+      const failure = {
+        ...context,
+        err: error,
+        durationMs: Math.round(performance.now() - started),
+      };
+      if (lastAttempt) {
+        logger.error(
+          { ...failure, deadLetter: q.deadLetter },
+          'job failed its last attempt; it moves to the dead-letter queue',
+        );
+      } else {
+        logger.warn(failure, 'job failed; pg-boss retries it with backoff');
+      }
+      throw error;
+    }
+  };
+}
+
+/**
+ * Registers `concurrency` worker loops on every registry queue, with its tier's batch size and
+ * polling interval. `handlers` is replaceable so a test can drive real pg-boss with stubs.
+ */
+export async function registerHandlers(
+  boss: PgBoss,
+  deps: JobDeps,
+  handlers: Handlers = HANDLERS,
+): Promise<void> {
+  for (const q of QUEUE_REGISTRY) {
+    const handler = instrument(q, handlers[q.name], deps);
+    for (let loop = 0; loop < q.worker.concurrency; loop += 1) {
+      await boss.work<unknown>(q.name, workOptions(q), handler);
+    }
+  }
 }

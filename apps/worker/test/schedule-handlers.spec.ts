@@ -127,7 +127,8 @@ describe('worker schedule and handler coverage', () => {
     } as never);
 
     // A handler on a queue nobody creates never receives a job; a queue nobody works fills up.
-    expect([...worked].sort()).toEqual([...QUEUES].sort());
+    // Several loops may work one queue (its tier's concurrency); the set of queues is what counts.
+    expect([...new Set(worked)].sort()).toEqual([...QUEUES].sort());
     for (const name of scheduled) expect(QUEUES).toContain(name);
   });
 });
