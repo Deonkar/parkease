@@ -1,20 +1,31 @@
-import { QueryClient } from '@tanstack/react-query';
+import { QueryClient, type DefaultOptions } from '@tanstack/react-query';
 
-export const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: (failureCount, error) => {
-        if (failureCount >= 2) return false;
-        if (typeof error === 'object' && 'response' in error) {
-          const status = (error as { response?: { status?: number } }).response?.status;
-          if (status !== undefined && status >= 400 && status < 500) return false;
-        }
-        return true;
-      },
-      staleTime: 30_000,
-    },
-    mutations: {
-      retry: false,
-    },
+import { classifyFailure } from '@/features/shared/api/failure';
+
+/** How many times a failed query is retried before its error state shows. */
+const MAX_QUERY_RETRIES = 2;
+
+/**
+ * Retry only what a retry can fix (S-76). The shared classifier (G1) is the one
+ * place a failure is read: a transport failure, a 5xx, a 408 or a 429 is
+ * `unreachable` and worth another try. A definite 4xx is final, and so is a 2xx
+ * this build cannot parse (a `ZodError`, `outdated`): fetching the same
+ * unreadable body twice more only holds the skeleton on screen before "Update
+ * the app" shows.
+ */
+export function shouldRetryQuery(failureCount: number, error: unknown): boolean {
+  if (failureCount >= MAX_QUERY_RETRIES) return false;
+  return classifyFailure(error) === 'unreachable';
+}
+
+export const queryDefaults = {
+  queries: {
+    retry: shouldRetryQuery,
+    staleTime: 30_000,
   },
-});
+  mutations: {
+    retry: false,
+  },
+} satisfies DefaultOptions;
+
+export const queryClient = new QueryClient({ defaultOptions: queryDefaults });
