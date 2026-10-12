@@ -26,17 +26,9 @@ jobs:
       - run: pnpm turbo run lint typecheck test --filter=@parkease/web...
       - run: pnpm --filter @parkease/web build
 
-      # Every page in the sitemap: status, unique title, 100–160 char description, canonical,
-      # Open Graph, JSON-LD without review markup, one h1. Plus robots.txt, the share image and
-      # 404s for unknown city slugs (task 20 test requirements). Port 3100 leaves 3000 to LHCI.
-      - name: Verify pages, metadata and structured data
-        run: |
-          pnpm --filter @parkease/web exec next start --port 3100 &
-          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:3100/ && break; sleep 1; done
-          BASE_URL=http://localhost:3100 pnpm --filter @parkease/web verify
-
-      # Calculator, tabs, phone menu, keyboard, FAQ, copy link and reduced motion, then axe and
-      # horizontal overflow on every page, at desktop and phone sizes.
+      # SEO (metadata, JSON-LD, sitemap, robots, share image, 404s), then calculator, tabs, menu,
+      # keyboard and reduced motion, then axe and horizontal overflow on every page, at desktop
+      # and phone sizes.
       - name: Install Playwright's Chromium
         run: pnpm --filter @parkease/web exec playwright install --with-deps chromium
       - name: Browser tests

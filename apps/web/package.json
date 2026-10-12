@@ -9,7 +9,6 @@
     "typecheck": "tsc --noEmit",
     "lint": "next lint",
     "test": "vitest run --passWithNoTests",
-    "verify": "node scripts/verify-site.mjs",
     "test:e2e": "playwright test"
   },
   "dependencies": {

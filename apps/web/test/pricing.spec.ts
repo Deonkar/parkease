@@ -7,13 +7,13 @@ import { PRICING } from '@/lib/pricing';
 import { formatRupees } from '@/lib/rupee';
 
 const html = renderToStaticMarkup(createElement(PricingTable));
-const text = html.replace(/<[^>]+>/g, '|');
-
-/** The cells of one ledger, from its heading to the next. */
+/** The rows under one ledger's <h3>, as "label|value" text, up to the next ledger's heading. */
 function ledger(title: string): string {
-  const start = text.indexOf(title);
-  const next = text.indexOf('For ', start + title.length);
-  return text.slice(start, next === -1 ? undefined : next);
+  const section = html
+    .split('<h3')
+    .find((part) => part.startsWith(` class="type-card`) && part.includes(`>${title}</h3>`));
+  if (section === undefined) throw new Error(`No ledger headed "${title}"`);
+  return section.replace(/<[^>]+>/g, '|');
 }
 
 describe('pricing (ADR-009)', () => {
