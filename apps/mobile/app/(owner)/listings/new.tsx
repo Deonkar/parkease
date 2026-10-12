@@ -416,6 +416,7 @@ function SlotCounter({
       <Text style={styles.counterLabel}>{label}</Text>
       <View style={styles.counterControls}>
         <Pressable
+          accessibilityRole="button"
           style={styles.counterButton}
           onPress={onDecrement}
           accessibilityLabel={`Decrease ${label}`}
@@ -426,6 +427,7 @@ function SlotCounter({
           {String(count)}
         </Text>
         <Pressable
+          accessibilityRole="button"
           style={styles.counterButton}
           onPress={onIncrement}
           accessibilityLabel={`Increase ${label}`}
@@ -536,6 +538,7 @@ function ScheduleStep({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft
     <View>
       <Text style={styles.sectionTitle}>Availability</Text>
       <Pressable
+        accessibilityLabel="Open 24 hours"
         style={[styles.scheduleOption, is24x7 && styles.scheduleOptionSelected]}
         onPress={() => {
           patch({ schedule: { is24x7: true } });
@@ -546,6 +549,7 @@ function ScheduleStep({ draft, patch }: { draft: Draft; patch: (p: Partial<Draft
         <Text style={styles.scheduleOptionText}>Available 24/7</Text>
       </Pressable>
       <Pressable
+        accessibilityLabel="Set opening hours"
         style={[styles.scheduleOption, !is24x7 && styles.scheduleOptionSelected]}
         onPress={() => {
           patch({

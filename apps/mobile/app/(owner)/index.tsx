@@ -146,6 +146,7 @@ export default function OwnerDashboardScreen() {
           Statement
         </Text>
         <Pressable
+          accessibilityLabel="See all earnings"
           accessibilityRole="link"
           onPress={() => {
             router.push('/(owner)/earnings');

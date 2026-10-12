@@ -43,6 +43,7 @@ export function OwnerReviewsSection({ spaceId }: { readonly spaceId: string }) {
   if (reviews.isError && reviews.data === undefined) {
     return (
       <Pressable
+        accessibilityLabel="Retry loading reviews"
         accessibilityRole="button"
         onPress={() => void reviews.refetch()}
         style={styles.retry}
@@ -98,6 +99,7 @@ export function OwnerReviewsSection({ spaceId }: { readonly spaceId: string }) {
       {reviews.isError ? (
         // A failed "Show more" or refresh keeps what is on screen and says so (BookingGroup's rule).
         <Pressable
+          accessibilityLabel="Retry loading more reviews"
           accessibilityRole="button"
           onPress={() => void reviews.refetch()}
           style={styles.retry}

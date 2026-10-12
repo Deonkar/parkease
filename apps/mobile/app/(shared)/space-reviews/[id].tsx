@@ -93,6 +93,7 @@ export default function SpaceReviewsScreen() {
                   <Skeleton width="100%" height={88} style={styles.more} />
                 ) : reviews.isError ? (
                   <Pressable
+                    accessibilityLabel="Retry loading more reviews"
                     accessibilityRole="button"
                     onPress={() => void reviews.fetchNextPage()}
                     style={styles.retry}

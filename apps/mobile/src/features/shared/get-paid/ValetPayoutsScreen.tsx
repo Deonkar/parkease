@@ -114,6 +114,7 @@ export function ValetPayoutsScreen() {
         // Not "Add your bank account": a failed read is not an empty one, and offering to add
         // would invite a valet who has a bank on file to overwrite it (R-FAIL-01).
         <Pressable
+          accessibilityLabel="Retry loading your bank account"
           testID="bank-retry"
           accessibilityRole="button"
           onPress={() => void bank.refetch()}
@@ -183,6 +184,7 @@ export function ValetPayoutsScreen() {
           ListFooterComponent={
             payouts.isFetchNextPageError ? (
               <Pressable
+                accessibilityLabel="Retry loading more payouts"
                 testID="payouts-more-retry"
                 accessibilityRole="button"
                 onPress={() => void payouts.fetchNextPage()}

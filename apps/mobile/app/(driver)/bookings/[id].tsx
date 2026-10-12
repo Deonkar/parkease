@@ -216,6 +216,7 @@ export default function BookingDetailScreen() {
 
         {canExtend ? (
           <Pressable
+            accessibilityLabel="Extend by 1 hour"
             onPress={() => {
               runAction(extend, new Date(endsAt.getTime() + EXTEND_BY_MS).toISOString(), () => {
                 setExtendRecovery(true);
@@ -241,6 +242,7 @@ export default function BookingDetailScreen() {
         */}
         {canCancel ? (
           <Pressable
+            accessibilityLabel="Cancel this booking"
             onPress={() => {
               Alert.alert(
                 'Cancel this booking?',

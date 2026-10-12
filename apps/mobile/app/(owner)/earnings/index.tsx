@@ -135,6 +135,7 @@ export default function OwnerEarningsScreen() {
     <View style={styles.columnInset}>
       {transactions.isFetchNextPageError ? (
         <Pressable
+          accessibilityLabel="Retry loading more transactions"
           accessibilityRole="button"
           onPress={() => void transactions.fetchNextPage()}
           style={styles.loadMoreRetry}

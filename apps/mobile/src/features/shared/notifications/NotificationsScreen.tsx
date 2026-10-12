@@ -175,6 +175,7 @@ export function NotificationsScreen({ tab = false }: { readonly tab?: boolean })
           ListFooterComponent={
             feed.isFetchNextPageError ? (
               <Pressable
+                accessibilityLabel="Retry loading more notifications"
                 testID="notifications-more-retry"
                 accessibilityRole="button"
                 onPress={() => void feed.fetchNextPage()}
