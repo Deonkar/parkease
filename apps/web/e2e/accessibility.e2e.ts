@@ -39,11 +39,17 @@ for (const path of PAGES) {
     ).toEqual([]);
   });
 
-  test(`no horizontal scroll: ${path}`, async ({ page }) => {
+  test(`no horizontal scroll: ${path}`, async ({ page, isMobile }) => {
     await page.goto(path);
-    const overflow = await page.evaluate(
-      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-    );
-    expect(overflow).toBeLessThanOrEqual(0);
+    const overflow = () =>
+      page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+    expect(await overflow()).toBeLessThanOrEqual(0);
+    if (isMobile) {
+      // The narrowest phones in use are 320 CSS px wide.
+      await page.setViewportSize({ width: 320, height: 640 });
+      expect(await overflow()).toBeLessThanOrEqual(0);
+    }
   });
 }

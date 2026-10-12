@@ -35,7 +35,7 @@ export function Footer() {
               <Link
                 key={link.href + link.label}
                 href={link.href}
-                className="block py-1.5 text-on-midnight-muted no-underline hover:text-on-midnight"
+                className="flex min-h-11 items-center text-on-midnight-muted no-underline hover:text-on-midnight md:min-h-9"
               >
                 {link.label}
               </Link>
@@ -46,13 +46,13 @@ export function Footer() {
       <div className="wrap flex flex-wrap justify-between gap-x-6 gap-y-3 border-t border-midnight-rule pt-5 pb-8">
         <span>© {new Date().getFullYear()} ParkEase</span>
         <span className="basis-full text-sm sm:order-last">{PROJECT_NOTE}</span>
-        <span className="flex flex-wrap gap-x-5 gap-y-1.5">
+        <span className="flex flex-wrap items-center gap-x-5">
           Parking in
           {LAUNCHED_CITIES.map((city) => (
             <Link
               key={city.slug}
               href={`/${city.slug}`}
-              className="font-bold text-on-midnight no-underline"
+              className="inline-flex min-h-11 items-center font-bold text-on-midnight no-underline"
             >
               {city.name}
             </Link>

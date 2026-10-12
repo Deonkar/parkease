@@ -50,8 +50,14 @@ describe('EarningsCalculator', () => {
     expect(html).toContain('After 15% ParkEase commission.');
   });
 
-  it('announces updates through aria-live', () => {
-    const live = /aria-live="polite"[^>]*>((?:<span[^>]*>[^<]*<\/span>|[^<])*)<\/span>/.exec(html);
-    expect(text(live?.[1] ?? '')).toBe('₹4,590');
+  it('announces the estimate with its label, as one update', () => {
+    const live = /<p aria-live="polite" aria-atomic="true"[^>]*>(.*?)<\/p>/.exec(html);
+    expect(text(live?.[1] ?? '')).toBe('Estimated monthly earnings₹4,590');
+  });
+
+  it('gives each slider a spoken value', () => {
+    expect(html).toContain('aria-valuetext="₹30 an hour"');
+    expect(html).toContain('aria-valuetext="6 hours a day"');
+    expect(html).toContain('aria-valuetext="1 slot"');
   });
 });

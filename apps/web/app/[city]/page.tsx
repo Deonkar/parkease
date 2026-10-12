@@ -62,7 +62,7 @@ export default async function CityPage({ params }: { readonly params: Promise<Ci
         before={
           <nav aria-label="Breadcrumb" className="text-[15px] text-on-midnight-muted">
             <Link
-              className="underline underline-offset-4 hover:text-on-midnight"
+              className="inline-block py-2.5 underline underline-offset-4 hover:text-on-midnight"
               href="/find-parking"
             >
               Find parking

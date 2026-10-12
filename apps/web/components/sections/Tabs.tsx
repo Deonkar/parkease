@@ -55,7 +55,7 @@ export function Tabs({
             onClick={() => {
               setActive(i);
             }}
-            className={`relative h-[52px] flex-1 cursor-pointer px-2 text-[15px] leading-tight font-bold transition-colors sm:text-[17px] ${active === i ? 'text-midnight' : 'text-on-midnight-muted'}`}
+            className={`press relative h-[52px] flex-1 cursor-pointer px-2 text-[15px] leading-tight font-bold sm:text-[17px] ${active === i ? 'text-midnight' : 'text-on-midnight-muted'}`}
           >
             {item.label}
           </button>

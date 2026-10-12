@@ -83,9 +83,11 @@ export default function HomePage() {
               See what you’d earn
             </Link>
           </div>
-          <figure className="flex flex-[0_1_400px] flex-col gap-2.5 rounded-[20px] bg-midnight p-8 text-on-midnight shadow-[0_30px_60px_-30px_var(--pe-shadow)]">
+          <figure className="flex min-w-0 flex-[0_1_400px] flex-col gap-2.5 rounded-[20px] bg-midnight p-6 text-on-midnight sm:p-8 shadow-[0_30px_60px_-30px_var(--pe-shadow)]">
             <span className="text-[15px] font-bold text-on-midnight-muted">Example month</span>
-            <span className="type-figure text-8xl">{withRupee(formatRupees(example))}</span>
+            <span className="type-figure text-[clamp(64px,24vw,96px)]">
+              {withRupee(formatRupees(example))}
+            </span>
             <figcaption className="mt-1.5 border-t border-midnight-rule pt-3.5 text-[15px] leading-normal text-on-midnight-muted">
               One slot at ₹{EXAMPLE.hourlyPrice} an hour, booked {EXAMPLE.hoursPerDay} hours a day,
               after the {PRICING.commissionPercent}% ParkEase commission.

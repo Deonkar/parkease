@@ -3,10 +3,18 @@ import { expect, test } from '@playwright/test';
 test.describe('earnings calculator', () => {
   test('defaults to ₹4,590 and updates as the sliders move', async ({ page }) => {
     await page.goto('/earn');
-    const estimate = page.locator('[aria-live="polite"]').filter({ hasText: '₹' }).first();
+    const estimate = page.locator('[data-estimate]');
     await expect(estimate).toHaveText('₹4,590');
     await expect(page.getByText('After 15% ParkEase commission.')).toBeVisible();
 
+    await expect(page.locator('[aria-live="polite"]').filter({ has: estimate })).toHaveAttribute(
+      'aria-atomic',
+      'true',
+    );
+    await expect(page.getByLabel('Hourly price (₹)')).toHaveAttribute(
+      'aria-valuetext',
+      '₹30 an hour',
+    );
     await page.getByLabel('Hourly price (₹)').fill('50');
     await page.getByLabel('Hours rented per day').fill('8');
     await expect(estimate).toHaveText('₹10,200');
@@ -14,7 +22,7 @@ test.describe('earnings calculator', () => {
 
   test('the launch waiver is opt-in and removes the commission', async ({ page }) => {
     await page.goto('/earn');
-    const estimate = page.locator('[aria-live="polite"]').filter({ hasText: '₹' }).first();
+    const estimate = page.locator('[data-estimate]');
     await page.getByRole('checkbox').check();
     await expect(estimate).toHaveText('₹5,400');
     await expect(page.getByText(/No commission during your first 3 months/)).toBeVisible();
@@ -107,6 +115,11 @@ test.describe('navigation', () => {
     await expect(page).toHaveURL(/\/pricing$/);
     await expect(page.getByRole('heading', { level: 1 })).toContainText('Transparent pricing');
     await expect(menu).toBeHidden();
+    await page.locator('summary[aria-label="Menu"]').click();
+    await expect(menu.getByRole('link', { name: /Pricing/ })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
   });
 
   test('Escape closes the phone menu and returns focus to its button', async ({

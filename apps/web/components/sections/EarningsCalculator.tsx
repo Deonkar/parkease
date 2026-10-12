@@ -56,6 +56,7 @@ export function EarningsCalculator({
     label: string,
     value: number,
     shown: string,
+    spoken: string,
     min: number,
     max: number,
     step: number,
@@ -66,7 +67,12 @@ export function EarningsCalculator({
         <label htmlFor={`${id}-${key}`} className="font-bold">
           {label}
         </label>
-        <output htmlFor={`${id}-${key}`} className="type-figure text-4xl">
+        {/* The slider speaks its own value; a live <output> would announce every change twice. */}
+        <output
+          htmlFor={`${id}-${key}`}
+          aria-live="off"
+          className="type-figure text-4xl tabular-nums"
+        >
           {withRupee(shown)}
         </output>
       </div>
@@ -77,6 +83,7 @@ export function EarningsCalculator({
         max={max}
         step={step}
         value={value}
+        aria-valuetext={spoken}
         onChange={(e) => {
           onChange(Number(e.target.value));
         }}
@@ -109,7 +116,7 @@ export function EarningsCalculator({
                 onClick={() => {
                   pick(v);
                 }}
-                className={`relative h-[46px] flex-1 cursor-pointer font-bold transition-colors ${vehicle === v ? 'text-paper' : 'text-slate'}`}
+                className={`press relative h-[46px] flex-1 cursor-pointer font-bold ${vehicle === v ? 'text-paper' : 'text-slate'}`}
               >
                 {v === 'car' ? 'Car' : 'Two-wheeler'}
               </button>
@@ -121,6 +128,7 @@ export function EarningsCalculator({
           'Hourly price (₹)',
           hourlyPrice,
           `₹${String(hourlyPrice)}/hr`,
+          `₹${String(hourlyPrice)} an hour`,
           RANGE[vehicle].min,
           RANGE[vehicle].max,
           5,
@@ -131,19 +139,33 @@ export function EarningsCalculator({
           'Hours rented per day',
           hoursPerDay,
           `${String(hoursPerDay)} hrs/day`,
+          `${String(hoursPerDay)} ${hoursPerDay === 1 ? 'hour' : 'hours'} a day`,
           1,
           24,
           1,
           setHoursPerDay,
         )}
-        {slider('slots', 'Slots', slots, String(slots), 1, 20, 1, setSlots)}
+        {slider(
+          'slots',
+          'Slots',
+          slots,
+          String(slots),
+          `${String(slots)} ${slots === 1 ? 'slot' : 'slots'}`,
+          1,
+          20,
+          1,
+          setSlots,
+        )}
       </form>
 
       <div className="flex max-w-[540px] min-w-0 flex-[1_1_420px] flex-col gap-4 rounded-3xl bg-midnight p-8 text-on-midnight shadow-[0_40px_80px_-40px_var(--pe-shadow)]">
-        <span className="font-bold text-on-midnight-muted">Estimated monthly earnings</span>
-        <span aria-live="polite" className="type-figure text-[clamp(64px,8vw,104px)]">
-          {withRupee(inr(monthly))}
-        </span>
+        {/* One live region, read as a whole: "Estimated monthly earnings ₹4,590". */}
+        <p aria-live="polite" aria-atomic="true" className="flex flex-col gap-4">
+          <span className="font-bold text-on-midnight-muted">Estimated monthly earnings</span>
+          <span data-estimate className="type-figure text-[clamp(64px,8vw,104px)] tabular-nums">
+            {withRupee(inr(monthly))}
+          </span>
+        </p>
         <span className="text-on-midnight-muted">
           {waived
             ? `No commission during your first ${String(waiverMonths)} months.`
@@ -180,7 +202,7 @@ export function EarningsCalculator({
             onChange={(e) => {
               setWaived(e.target.checked);
             }}
-            className="size-[22px] accent-sky"
+            className="size-[22px] cursor-pointer accent-sky"
           />
           I’m one of the first {waiverSlots} owners
         </label>

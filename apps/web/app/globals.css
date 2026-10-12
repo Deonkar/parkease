@@ -143,8 +143,15 @@
       background-color 160ms ease,
       border-color 160ms ease;
   }
-  .btn:active {
+  .btn:active,
+  .press:active {
     transform: scale(0.97);
+  }
+  /* Press feedback for pressables that are not .btn: tabs, toggles, the menu button. */
+  .press {
+    transition:
+      transform 160ms var(--ease-out-strong),
+      color 150ms ease;
   }
   .btn-sm {
     min-height: 44px;
@@ -338,9 +345,9 @@
   filter: blur(6px);
   pointer-events: none;
   transition:
-    opacity 160ms ease-in,
-    transform 160ms ease-in,
-    filter 160ms ease-in;
+    opacity 150ms var(--ease-out-strong),
+    transform 150ms var(--ease-out-strong),
+    filter 150ms var(--ease-out-strong);
 }
 .screen[data-active='true'] {
   opacity: 1;
@@ -357,7 +364,7 @@
   transition: transform 480ms var(--ease-in-out-strong);
 }
 .tab-indicator {
-  transition: transform 320ms var(--ease-in-out-strong);
+  transition: transform 240ms var(--ease-in-out-strong);
 }
 .panel {
   grid-area: 1 / 1;
@@ -371,7 +378,7 @@
 }
 .share-bar {
   transform-origin: 100% 50%;
-  transition: transform 480ms var(--ease-in-out-strong);
+  transition: transform 260ms var(--ease-in-out-strong);
 }
 .map-pin {
   animation: drop 420ms var(--ease-out-strong) both;
@@ -513,7 +520,8 @@
   .menu[open] .menu-panel {
     animation: none;
   }
-  .btn:active {
+  .btn:active,
+  .press:active {
     transform: none;
   }
   .screen,

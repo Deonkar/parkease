@@ -61,7 +61,10 @@ export default async function BlogPostPage({ params }: { readonly params: Promis
         <header className="bg-midnight text-on-midnight">
           <div className="wrap flex max-w-[880px] flex-col gap-6 pt-14 pb-16 md:pt-16">
             <nav aria-label="Breadcrumb" className="text-[15px] text-on-midnight-muted">
-              <Link className="underline underline-offset-4 hover:text-on-midnight" href="/blog">
+              <Link
+                className="inline-block py-2.5 underline underline-offset-4 hover:text-on-midnight"
+                href="/blog"
+              >
                 Blog
               </Link>{' '}
               / <span>{post.category}</span>

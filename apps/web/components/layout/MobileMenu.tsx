@@ -32,7 +32,7 @@ export function MobileMenu() {
     >
       <summary
         aria-label="Menu"
-        className="flex size-11 cursor-pointer items-center justify-center rounded-[10px] text-on-midnight shadow-[inset_0_0_0_1.5px_var(--pe-midnight-rule)]"
+        className="press flex size-11 cursor-pointer items-center justify-center rounded-[10px] text-on-midnight shadow-[inset_0_0_0_1.5px_var(--pe-midnight-rule)]"
       >
         <svg
           className="icon-open"
@@ -69,12 +69,16 @@ export function MobileMenu() {
           <Link
             key={link.href}
             href={link.href}
+            aria-current={pathname === link.href ? 'page' : undefined}
             onClick={() => {
               if (menu.current !== null) menu.current.open = false;
             }}
-            className="border-b border-midnight-rule py-3.5 text-[19px] font-bold text-on-midnight no-underline"
+            className={`flex min-h-12 items-center justify-between border-b border-midnight-rule text-[19px] font-bold no-underline ${pathname === link.href ? 'text-sky' : 'text-on-midnight'}`}
           >
             {link.label}
+            {pathname === link.href && (
+              <span className="text-sm font-bold text-on-midnight-muted">You’re here</span>
+            )}
           </Link>
         ))}
       </nav>

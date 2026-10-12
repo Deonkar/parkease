@@ -5,7 +5,7 @@ export function ServiceSwitch({ current }: { readonly current: 'valet' | 'car-wa
     <Link
       href={href}
       aria-current={active ? 'page' : undefined}
-      className={`rounded-full px-3.5 py-2 text-[15px] font-bold no-underline ${active ? 'bg-porcelain text-midnight' : 'text-on-midnight shadow-[inset_0_0_0_1.5px_var(--pe-midnight-rule)]'}`}
+      className={`press inline-flex min-h-11 items-center rounded-full px-4 text-[15px] font-bold no-underline ${active ? 'bg-porcelain text-midnight' : 'text-on-midnight shadow-[inset_0_0_0_1.5px_var(--pe-midnight-rule)]'}`}
     >
       {label}
     </Link>

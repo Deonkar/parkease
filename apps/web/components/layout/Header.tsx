@@ -12,7 +12,7 @@ export function Header() {
         <NavLinks />
         <Link
           href="/#get-the-app"
-          className="btn btn-sm btn-light max-md:min-h-10 max-md:px-3.5 max-md:text-[15px]"
+          className="btn btn-sm btn-light max-md:px-3.5 max-md:text-[15px] max-[359px]:hidden"
         >
           Get the app
         </Link>
