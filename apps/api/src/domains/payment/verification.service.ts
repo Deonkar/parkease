@@ -16,13 +16,22 @@ export class VerificationService {
    * `webhook-signature.spec.ts` asserts it as a regression: the same signature
    * against a re-serialised body with different key order must be rejected.
    */
-  verifyWebhookSignature(rawBody: Buffer | undefined, headerSignature: unknown): void {
-    if (rawBody === undefined) throw new InvalidWebhookSignatureError();
+  verifyWebhookSignature(
+    rawBody: Buffer | undefined,
+    headerSignature: unknown,
+    /**
+     * Whose secret, always explicit: a default would quietly verify an unconfigured sender's events
+     * under another sender's secret, since passing `undefined` selects the default.
+     */
+    secret: string | undefined,
+  ): void {
+    // No secret configured means nothing can be verified, so nothing is believed.
+    if (rawBody === undefined || secret === undefined) throw new InvalidWebhookSignatureError();
     if (typeof headerSignature !== 'string' || headerSignature.length === 0) {
       throw new InvalidWebhookSignatureError();
     }
 
-    const expected = createHmac('sha256', env.RAZORPAY_WEBHOOK_SECRET).update(rawBody).digest();
+    const expected = createHmac('sha256', secret).update(rawBody).digest();
 
     // `Buffer.from(hex)` truncates silently on invalid hex rather than throwing,
     // so a malformed header arrives here as a short buffer. Length is checked

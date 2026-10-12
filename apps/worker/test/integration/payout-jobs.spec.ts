@@ -17,6 +17,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import type { JobDeps } from '../../src/deps.js';
 import { postLedger } from '../../src/jobs/booking/ledger.js';
 import type { SourcedTransfer, TransferGateway } from '../../src/jobs/payment/razorpay.js';
+import { applyPayoutStatusJob } from '../../src/jobs/payout/apply-status.job.js';
 import { failPayout } from '../../src/jobs/payout/fail.js';
 import { type PayoutGateway, RazorpayXError } from '../../src/jobs/payout/razorpayx.js';
 import { reconcilePayouts } from '../../src/jobs/payout/reconcile.job.js';
@@ -762,6 +763,65 @@ describe('payout.reconcile', () => {
 
     expect((await payoutsOf(valet))[0]?.status).toBe('failed');
     expect(await owedTo(valet)).toBe(net);
+  });
+
+  /** S-102: the bank can return a payout after RazorpayX reported it processed. */
+  describe('a payout reversed after it was paid', () => {
+    const status = (s: string) =>
+      gateway({ fetch: vi.fn().mockResolvedValue({ id: 'pout_QK7l1nFirst', status: s }) });
+
+    it('the webhook marks it paid, then failed on reversal: owed again, flagged, ledger as if unsent', async () => {
+      const { valet, payoutId, net } = await processingPayout();
+      const event = { razorpayPayoutId: 'pout_QK7l1nFirst', status: 'processed' };
+
+      await applyPayoutStatusJob(deps, event);
+      await applyPayoutStatusJob(deps, event);
+      expect((await payoutsOf(valet))[0]?.status).toBe('paid');
+      expect(await owedTo(valet)).toBe(0);
+
+      await applyPayoutStatusJob(deps, { ...event, status: 'reversed' });
+      await applyPayoutStatusJob(deps, { ...event, status: 'reversed' });
+
+      expect((await payoutsOf(valet))[0]?.status).toBe('failed');
+      expect(await owedTo(valet)).toBe(net);
+      expect(await clearingFor('payout_id', payoutId)).toMatchObject({ net: 0 });
+      expect(await mismatches()).toEqual([
+        { kind: 'payout_failed', reference: payoutId, expected: expect.any(String), actual: '0' },
+      ]);
+      const [unbalanced] = await pg.sql<{ n: string }[]>`
+        SELECT count(*)::text AS n FROM (
+          SELECT txn_id FROM ledger_entries GROUP BY txn_id
+          HAVING sum(CASE direction WHEN 'debit' THEN amount_paise ELSE -amount_paise END) <> 0) t`;
+      expect(unbalanced?.n).toBe('0');
+    });
+
+    it('a late "failed" for a paid payout is drift, and changes nothing', async () => {
+      const { valet } = await processingPayout();
+      await applyPayoutStatusJob(deps, {
+        razorpayPayoutId: 'pout_QK7l1nFirst',
+        status: 'processed',
+      });
+      await applyPayoutStatusJob(deps, { razorpayPayoutId: 'pout_QK7l1nFirst', status: 'failed' });
+
+      expect((await payoutsOf(valet))[0]?.status).toBe('paid');
+    });
+
+    it('an event that outruns the send is retried, not dropped', async () => {
+      await expect(
+        applyPayoutStatusJob(deps, { razorpayPayoutId: 'pout_unknown', status: 'processed' }),
+      ).rejects.toThrow(/no payout carries/);
+    });
+
+    it('reconcile is the safety net: it asks a week of paid payouts whether the bank returned them', async () => {
+      const { valet, net } = await processingPayout();
+      await run(transfers([]), status('processed'));
+      expect((await payoutsOf(valet))[0]?.status).toBe('paid');
+
+      await run(transfers([]), status('reversed'));
+
+      expect((await payoutsOf(valet))[0]?.status).toBe('failed');
+      expect(await owedTo(valet)).toBe(net);
+    });
   });
 });
 

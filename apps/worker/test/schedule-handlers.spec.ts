@@ -69,6 +69,10 @@ describe('worker schedule and handler coverage', () => {
       CARWASH_COMPLETE_REMINDER_JOB,
       // Task 16a: committed by the weekly run with each payout row.
       'payout.send',
+      // S-98: committed by issue-refund with the gateway refund id, when Route paid a share.
+      'payment.reverse-transfer',
+      // S-102: committed by the RazorpayX payout webhook.
+      'payout.apply-status',
     ]);
     const scheduledSet = new Set(scheduleNames);
 

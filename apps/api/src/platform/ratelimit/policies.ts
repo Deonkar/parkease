@@ -79,6 +79,7 @@ export const RATE_LIMIT_POLICIES: Readonly<Record<string, RateLimitPolicy>> = {
   // user to key by, and `failClosed` is deliberately absent: dropping a capture
   // event because Redis blinked is worse than serving it.
   'POST /api/v1/webhooks/razorpay': { limit: 300, windowSeconds: 60, keyBy: 'ip' },
+  'POST /api/v1/webhooks/razorpayx': { limit: 300, windowSeconds: 60, keyBy: 'ip' },
   // Valet (task 11 §11.10).
   //
   // The accept budget is the loose one on purpose: losing a race is a 409, and a

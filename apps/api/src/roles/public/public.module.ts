@@ -6,11 +6,20 @@ import { PaymentModule } from '../../domains/payment/payment.module.js';
 import { AdminAuthController } from './admin-auth.controller.js';
 import { AuthController } from './auth.controller.js';
 import { HealthController } from './health.controller.js';
-import { RazorpayWebhookController } from './webhooks/razorpay.controller.js';
+import {
+  RazorpayWebhookController,
+  RazorpayxWebhookController,
+} from './webhooks/razorpay.controller.js';
 
 @Module({
   imports: [IdentityModule, PaymentModule],
-  controllers: [HealthController, AuthController, AdminAuthController, RazorpayWebhookController],
+  controllers: [
+    HealthController,
+    AuthController,
+    AdminAuthController,
+    RazorpayWebhookController,
+    RazorpayxWebhookController,
+  ],
 })
 // eslint-disable-next-line @typescript-eslint/no-extraneous-class
 export class PublicModule {}

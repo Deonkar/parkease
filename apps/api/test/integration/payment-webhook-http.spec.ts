@@ -762,4 +762,57 @@ describe('razorpay webhook over HTTP', () => {
       expect(response.status).toBe(400);
     });
   });
+
+  /** S-102: RazorpayX's payout events, on their own path under their own secret. */
+  describe('razorpayx payout webhook', () => {
+    const PAYOUT_URL = '/api/v1/webhooks/razorpayx';
+    const signX = (body: string) =>
+      createHmac('sha256', 'fake_payout_webhook_secret_000').update(body).digest('hex');
+    const payoutBody = (event: string, status: string) =>
+      JSON.stringify({
+        entity: 'event',
+        event,
+        payload: { payout: { entity: { id: 'pout_QK7l1nFirst', amount: 50_000, status } } },
+      });
+    const postX = (body: string, headers: Record<string, string>) =>
+      http.request({ method: 'POST', url: PAYOUT_URL, rawPayload: body, headers });
+    const queued = () =>
+      h.sql<{ payload: { razorpayPayoutId: string; status: string } }[]>`
+        SELECT payload FROM outbox_messages WHERE type = 'payout.apply-status'`;
+
+    it('records a verified payout event for the worker, once per delivery', async () => {
+      const body = payoutBody('payout.reversed', 'reversed');
+      const headers = { 'x-razorpay-signature': signX(body), 'x-razorpay-event-id': 'evt_px1' };
+
+      expect((await postX(body, headers)).status).toBe(200);
+      expect((await postX(body, headers)).status).toBe(200);
+
+      expect((await queued()).map((m) => m.payload)).toEqual([
+        { razorpayPayoutId: 'pout_QK7l1nFirst', status: 'reversed' },
+      ]);
+    });
+
+    it('refuses the payment webhook secret: each sender has its own', async () => {
+      const body = payoutBody('payout.processed', 'processed');
+      const response = await postX(body, { 'x-razorpay-signature': sign(body) });
+
+      expect(response.status).toBe(401);
+      expect(await queued()).toEqual([]);
+    });
+
+    it('answers 200 to a payout event it does not act on, and records nothing', async () => {
+      const body = payoutBody('payout.queued', 'queued');
+      const response = await postX(body, { 'x-razorpay-signature': signX(body) });
+
+      expect(response.status).toBe(200);
+      expect(await queued()).toEqual([]);
+    });
+
+    it('rejects a handled event with a malformed payout', async () => {
+      const body = JSON.stringify({ entity: 'event', event: 'payout.processed', payload: {} });
+      const response = await postX(body, { 'x-razorpay-signature': signX(body) });
+
+      expect(response.status).toBe(400);
+    });
+  });
 });

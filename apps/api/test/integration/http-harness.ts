@@ -77,7 +77,10 @@ import { OwnerEarningsController } from '../../src/roles/owner/earnings.controll
 import { OwnerReviewsController } from '../../src/roles/owner/reviews.controller.js';
 import { OwnerSpacesController } from '../../src/roles/owner/spaces.controller.js';
 import { AdminAuthController } from '../../src/roles/public/admin-auth.controller.js';
-import { RazorpayWebhookController } from '../../src/roles/public/webhooks/razorpay.controller.js';
+import {
+  RazorpayWebhookController,
+  RazorpayxWebhookController,
+} from '../../src/roles/public/webhooks/razorpay.controller.js';
 import { MeController } from '../../src/roles/shared/me.controller.js';
 import { MeNotificationsController } from '../../src/roles/shared/notifications.controller.js';
 import { MePayoutsController } from '../../src/roles/shared/payouts.controller.js';
@@ -221,6 +224,7 @@ class StubAuthGuard implements CanActivate {
     OwnerDashboardController,
     OwnerEarningsController,
     RazorpayWebhookController,
+    RazorpayxWebhookController,
     DriverValetController,
     ValetJobsController,
     ValetAvailabilityController,

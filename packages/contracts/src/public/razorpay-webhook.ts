@@ -168,3 +168,50 @@ export type RazorpayPaymentEntity = z.infer<typeof paymentEntitySchema>;
 export type RazorpayRefundEntity = z.infer<typeof refundEntitySchema>;
 
 export const RAZORPAY_WEBHOOK_PATH = '/api/v1/webhooks/razorpay';
+
+/**
+ * RazorpayX's payout events (S-102), delivered to their own endpoint under their own secret.
+ * `processed`, `reversed`, `failed` and `rejected` are the transitions the worker applies; the rest
+ * (`queued`, `pending`, `initiated`, `updated`) change nothing we record and parse as unhandled.
+ */
+export const RAZORPAYX_PAYOUT_EVENTS = [
+  'payout.processed',
+  'payout.reversed',
+  'payout.failed',
+  'payout.rejected',
+] as const;
+
+const payoutEventSchema = z.object({
+  ...envelopeShape,
+  event: z.enum(RAZORPAYX_PAYOUT_EVENTS),
+  payload: z.object({
+    payout: z.object({
+      entity: z.object({
+        id: razorpayId,
+        amount: paiseFromGateway,
+        status: z.string().min(1),
+      }),
+    }),
+  }),
+});
+
+const unhandledPayoutSchema = z
+  .object({
+    ...envelopeShape,
+    event: z
+      .string()
+      .min(1)
+      .refine((event) => !(RAZORPAYX_PAYOUT_EVENTS as readonly string[]).includes(event), {
+        message: 'a handled event must match its own schema, not fall through to unhandled',
+      }),
+  })
+  .transform((parsed) => ({ ...parsed, event: 'unhandled' as const, rawEvent: parsed.event }));
+
+export const razorpayxWebhookPayloadSchema = z.union([payoutEventSchema, unhandledPayoutSchema]);
+
+export type RazorpayxWebhookPayload = z.infer<typeof razorpayxWebhookPayloadSchema>;
+
+export const RAZORPAYX_WEBHOOK_PATH = '/api/v1/webhooks/razorpayx';
+
+/** The outbox message a payout event becomes; the worker applies it (S-102). */
+export const PAYOUT_APPLY_STATUS_JOB = 'payout.apply-status';

@@ -27,7 +27,7 @@ const BODY =
 describe('verifyWebhookSignature', () => {
   const service = new VerificationService();
   const verify = (body: string, signature: unknown): void => {
-    service.verifyWebhookSignature(Buffer.from(body, 'utf8'), signature);
+    service.verifyWebhookSignature(Buffer.from(body, 'utf8'), signature, WEBHOOK_SECRET);
   };
 
   it('accepts a signature over the exact bytes', () => {
@@ -113,9 +113,15 @@ describe('verifyWebhookSignature', () => {
     }).toThrow(InvalidWebhookSignatureError);
   });
 
+  it('rejects everything when the sender has no secret configured (S-102)', () => {
+    expect(() => {
+      service.verifyWebhookSignature(Buffer.from(BODY, 'utf8'), sign(BODY), undefined);
+    }).toThrow(InvalidWebhookSignatureError);
+  });
+
   it('rejects an absent body', () => {
     expect(() => {
-      service.verifyWebhookSignature(undefined, sign(BODY));
+      service.verifyWebhookSignature(undefined, sign(BODY), WEBHOOK_SECRET);
     }).toThrow(InvalidWebhookSignatureError);
   });
 

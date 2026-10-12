@@ -23,7 +23,9 @@ import { issueRefund } from './jobs/payment/issue-refund.job.js';
 import { PAYMENT_REVERSE_TRANSFER_JOB } from './jobs/payment/payload.js';
 import { reconcileOrphanCapture } from './jobs/payment/reconcile-orphan.job.js';
 import { reverseTransfer } from './jobs/payment/reverse-transfer.job.js';
+import { applyPayoutStatusJob } from './jobs/payout/apply-status.job.js';
 import {
+  PAYOUT_APPLY_STATUS_JOB,
   PAYOUT_RECONCILE_JOB,
   PAYOUT_RUN_WEEKLY_JOB,
   PAYOUT_SEND_JOB,
@@ -75,6 +77,9 @@ export async function registerHandlers(boss: PgBoss, deps: JobDeps): Promise<voi
   });
   await boss.work<unknown>('payment.orphan-capture', { batchSize: 1 }, async (jobs) => {
     for (const job of jobs) await reconcileOrphanCapture(deps, job.data);
+  });
+  await boss.work<unknown>(PAYOUT_APPLY_STATUS_JOB, { batchSize: 1 }, async (jobs) => {
+    for (const job of jobs) await applyPayoutStatusJob(deps, job.data);
   });
   await boss.work<unknown>(PAYMENT_REVERSE_TRANSFER_JOB, { batchSize: 1 }, async (jobs) => {
     for (const job of jobs) await reverseTransfer(deps, job.data);

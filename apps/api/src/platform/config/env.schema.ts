@@ -27,6 +27,12 @@ export const envSchema = z
     RAZORPAY_KEY_ID: z.string().min(1),
     RAZORPAY_KEY_SECRET: z.string().min(1),
     RAZORPAY_WEBHOOK_SECRET: z.string().min(1),
+    /**
+     * RazorpayX signs its payout webhooks with the secret set in its own dashboard (S-102). Optional:
+     * unset, `/webhooks/razorpayx` rejects every delivery and the daily reconcile alone moves
+     * payouts, as before.
+     */
+    RAZORPAYX_WEBHOOK_SECRET: z.string().min(1).optional(),
 
     CLOUDINARY_CLOUD_NAME: z.string().min(1),
     CLOUDINARY_API_KEY: z.string().min(1),

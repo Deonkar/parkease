@@ -8,6 +8,7 @@ import type PgBoss from 'pg-boss';
 import { NOTIFICATION_FETCH_RECEIPTS_JOB } from './jobs/notification/fetch-receipts.job.js';
 import { PAYMENT_REVERSE_TRANSFER_JOB } from './jobs/payment/payload.js';
 import {
+  PAYOUT_APPLY_STATUS_JOB,
   PAYOUT_RECONCILE_JOB,
   PAYOUT_RUN_WEEKLY_JOB,
   PAYOUT_SEND_JOB,
@@ -44,6 +45,7 @@ export const QUEUES = [
   PAYOUT_RUN_WEEKLY_JOB,
   PAYOUT_RECONCILE_JOB,
   PAYOUT_SEND_JOB,
+  PAYOUT_APPLY_STATUS_JOB,
   REVIEW_RECOMPUTE_AGGREGATES_JOB,
 ] as const;
 
