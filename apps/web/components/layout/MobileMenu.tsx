@@ -1,11 +1,35 @@
+'use client';
+
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { useEffect, useRef } from 'react';
 
 import { MOBILE_NAV } from '@/lib/site';
 
-/** A native <details> menu: opens without JavaScript and is keyboard-operable for free. */
+/**
+ * A native <details> menu, so it opens without JavaScript and is keyboard-operable for free.
+ * The header persists across client-side navigation, so the menu closes itself when the page
+ * changes, and on Escape.
+ */
 export function MobileMenu() {
+  const menu = useRef<HTMLDetailsElement>(null);
+  const pathname = usePathname();
+
+  useEffect(() => {
+    if (menu.current !== null) menu.current.open = false;
+  }, [pathname]);
+
   return (
-    <details className="menu md:hidden">
+    <details
+      ref={menu}
+      className="menu md:hidden"
+      onKeyDown={(e) => {
+        if (e.key === 'Escape' && menu.current?.open === true) {
+          menu.current.open = false;
+          menu.current.querySelector('summary')?.focus();
+        }
+      }}
+    >
       <summary
         aria-label="Menu"
         className="flex size-11 cursor-pointer items-center justify-center rounded-[10px] text-on-midnight shadow-[inset_0_0_0_1.5px_var(--pe-midnight-rule)]"
@@ -45,6 +69,9 @@ export function MobileMenu() {
           <Link
             key={link.href}
             href={link.href}
+            onClick={() => {
+              if (menu.current !== null) menu.current.open = false;
+            }}
             className="border-b border-midnight-rule py-3.5 text-[19px] font-bold text-on-midnight no-underline"
           >
             {link.label}

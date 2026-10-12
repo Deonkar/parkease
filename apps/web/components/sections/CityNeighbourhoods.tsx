@@ -12,24 +12,22 @@ export function CityNeighbourhoods({ city }: { readonly city: City }) {
           Open the app near any of these and you’ll see the spaces free around you.
         </p>
       </div>
-      <div className="overflow-x-auto pb-20">
-        <ul className="wrap flex min-w-max">
-          {city.neighbourhoods.map((name, i) => (
-            <li
-              key={name}
-              className="relative flex h-[220px] w-[200px] flex-col justify-between border-l-4 border-floor-paint px-5 pt-6 pb-4 last:border-r-4"
+      <ul className="wrap grid grid-cols-2 pb-20 sm:grid-cols-3 md:flex">
+        {city.neighbourhoods.map((name, i) => (
+          <li
+            key={name}
+            className="flex h-[168px] flex-col justify-between border-x-2 border-floor-paint px-5 pt-6 pb-4 md:h-[220px] md:w-[200px]"
+          >
+            <span className="text-[22px] leading-tight font-extrabold">{name}</span>
+            <span
+              aria-hidden="true"
+              className="font-stencil text-[44px] leading-none font-extrabold text-floor-stencil"
             >
-              <span className="text-[22px] leading-tight font-extrabold">{name}</span>
-              <span
-                aria-hidden="true"
-                className="font-stencil text-[44px] leading-none font-extrabold text-floor-stencil"
-              >
-                {String(i + 1).padStart(2, '0')}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </div>
+              {String(i + 1).padStart(2, '0')}
+            </span>
+          </li>
+        ))}
+      </ul>
       <div aria-hidden="true" className="kerb" />
     </section>
   );

@@ -50,3 +50,7 @@ graphify-out/
 
 # Lighthouse CI run output
 .lighthouseci/
+
+# Playwright output
+test-results/
+playwright-report/

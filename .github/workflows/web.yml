@@ -35,6 +35,13 @@ jobs:
           for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:3100/ && break; sleep 1; done
           BASE_URL=http://localhost:3100 pnpm --filter @parkease/web verify
 
+      # Calculator, tabs, phone menu, keyboard, FAQ, copy link and reduced motion, then axe and
+      # horizontal overflow on every page, at desktop and phone sizes.
+      - name: Install Playwright's Chromium
+        run: pnpm --filter @parkease/web exec playwright install --with-deps chromium
+      - name: Browser tests
+        run: pnpm --filter @parkease/web test:e2e
+
       # A gate, not a report: Performance or SEO under 90, LCP or FCP over 2.5s, or CLS over 0.1
       # fails the build (task 20 §20.11).
       - name: Lighthouse CI
