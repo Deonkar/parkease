@@ -13,7 +13,7 @@ import {
 } from '@nestjs/common';
 import { trace } from '@opentelemetry/api';
 import type { FastifyRequest } from 'fastify';
-import { Observable, catchError, of, tap, throwError } from 'rxjs';
+import { Observable, catchError, concatMap, from, of, throwError } from 'rxjs';
 import { z } from 'zod';
 
 import type { AuthUser } from '../auth/current-user.decorator.js';
@@ -156,7 +156,7 @@ export class IdempotencyInterceptor implements NestInterceptor {
          * the key was deleted under it. Nothing was written, and retrying would
          * only lose again, so it is logged and left.
          */
-        const observe = (write: Promise<boolean>, what: 'store' | 'release') => {
+        const observe = (write: Promise<boolean>, what: 'store' | 'release'): Promise<void> =>
           write.then(
             (held) => {
               if (!held) {
@@ -175,7 +175,6 @@ export class IdempotencyInterceptor implements NestInterceptor {
               );
             },
           );
-        };
 
         /**
          * A store is retried once, a release is not. The handler has already
@@ -199,17 +198,22 @@ export class IdempotencyInterceptor implements NestInterceptor {
         const handled = new Observable<unknown>((subscriber) =>
           idempotencyClaim.run({ key, claimedAt }, () => next.handle().subscribe(subscriber)),
         );
+        // The response waits for the store (or release) to settle, never for it to succeed: a
+        // client that retries the moment it has its answer must find the key replayable, not
+        // still in flight. A failed write is logged by `observe` and the answer goes out anyway.
         return handled.pipe(
-          tap((payload) => {
-            observe(store(payload), 'store');
+          concatMap(async (payload) => {
+            await observe(store(payload), 'store');
+            return payload;
           }),
           catchError((error: unknown) => {
             // A domain refusal after a saved step (route onboarding resumes this way) is meant
             // to be retried with the same key. Anything else that failed after committing keeps
             // its key settled, so the retry is not a second write.
             const rerunnable = error instanceof HttpException && error.getStatus() < 500;
-            observe(this.service.release(key, claimedAt, { rerunnable }), 'release');
-            return throwError(() => error);
+            return from(
+              observe(this.service.release(key, claimedAt, { rerunnable }), 'release'),
+            ).pipe(concatMap(() => throwError(() => error)));
           }),
         );
       }

@@ -58,10 +58,15 @@ export function refundableOf(
 const presetAmount = (
   option: Exclude<AdminRefundOption, 'custom'>,
   refundablePaise: Paise,
-): Paise =>
-  option === 'full_minus_fee'
-    ? toPaise(Math.max(0, refundablePaise - REFUND_PROCESSING_FEE_PAISE))
-    : toPaise(Math.floor(refundablePaise / 2));
+): Paise => {
+  // Exhaustive (S-142): a new preset fails to compile here instead of silently pricing as half.
+  switch (option) {
+    case 'full_minus_fee':
+      return toPaise(Math.max(0, refundablePaise - REFUND_PROCESSING_FEE_PAISE));
+    case 'half':
+      return toPaise(Math.floor(refundablePaise / 2));
+  }
+};
 
 /**
  * The presets an admin can pick right now. `custom` is never listed: the client supplies its

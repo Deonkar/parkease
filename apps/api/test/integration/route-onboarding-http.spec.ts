@@ -5,7 +5,14 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 
 import { RazorpayApiError } from '../../src/domains/payout/razorpay-rest.js';
 
-import { type Harness, seedSpace, seedUser, startHarness, stopHarness } from './harness.js';
+import {
+  approveBody,
+  type Harness,
+  seedSpace,
+  seedUser,
+  startHarness,
+  stopHarness,
+} from './harness.js';
 import { actingAs, type HttpApp, startHttpApp, stopHttpApp } from './http-harness.js';
 
 const FORM = {
@@ -490,7 +497,7 @@ describe('/me/route-onboarding over HTTP (task 16b)', () => {
         const approved = await http.request({
           method: 'POST',
           url: `/api/v1/admin/spaces/${space?.id ?? ''}/approve`,
-          payload: {},
+          payload: await approveBody(h, space?.id ?? ''),
           headers: { 'idempotency-key': crypto.randomUUID() },
         });
 
@@ -509,7 +516,7 @@ describe('/me/route-onboarding over HTTP (task 16b)', () => {
         await http.request({
           method: 'POST',
           url: `/api/v1/admin/spaces/${space?.id ?? ''}/approve`,
-          payload: {},
+          payload: await approveBody(h, space?.id ?? ''),
           headers: { 'idempotency-key': crypto.randomUUID() },
         });
 

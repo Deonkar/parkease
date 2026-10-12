@@ -1,6 +1,13 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { type Harness, seedSpace, seedUser, startHarness, stopHarness } from './harness.js';
+import {
+  approveBody,
+  type Harness,
+  seedSpace,
+  seedUser,
+  startHarness,
+  stopHarness,
+} from './harness.js';
 import { actingAs, type HttpApp, startHttpApp, stopHttpApp } from './http-harness.js';
 
 const BASE = '/api/v1/admin/audit';
@@ -65,7 +72,10 @@ describe('admin audit HTTP', () => {
       approvalStatus: 'pending_approval',
     });
     await h.sql`UPDATE spaces SET owner_id = ${ownerId}, submitted_at = now() WHERE id = ${spaceId}`;
-    expect((await write(`/api/v1/admin/spaces/${spaceId}/approve`)).status).toBe(200);
+    expect(
+      (await write(`/api/v1/admin/spaces/${spaceId}/approve`, await approveBody(h, spaceId)))
+        .status,
+    ).toBe(200);
 
     targets += 1;
     const phone = `+9198123${String(10_000 + targets)}`;

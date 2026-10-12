@@ -85,10 +85,15 @@ export class ReviewPartnerCommand {
         ipAddress: actor.ipAddress,
       });
 
-      await this.outbox.enqueue(tx, {
-        type: approving ? 'partner.verified' : 'partner.rejected',
-        payload: { userId: id, kind },
-      });
+      // "You're verified, start taking jobs" is only true when the role is open. Verifying the
+      // documents of a suspended partner is not a reinstatement (settleRole), so it announces
+      // nothing; the audit row above records the decision (S-142).
+      if (!approving || role.after === RoleStatus.ACTIVE) {
+        await this.outbox.enqueue(tx, {
+          type: approving ? 'partner.verified' : 'partner.rejected',
+          payload: { userId: id, kind },
+        });
+      }
     });
   }
 
@@ -97,21 +102,24 @@ export class ReviewPartnerCommand {
     kind: PartnerKind,
     userId: string,
   ): Promise<LockedProfile | undefined> {
-    if (kind === 'valet') {
-      const [row] = await tx
-        .select({ userId: valetProfiles.userId, status: valetProfiles.verificationStatus })
-        .from(valetProfiles)
-        .where(eq(valetProfiles.userId, userId))
-        .for('update');
-      return row;
+    switch (kind) {
+      case 'valet': {
+        const [row] = await tx
+          .select({ userId: valetProfiles.userId, status: valetProfiles.verificationStatus })
+          .from(valetProfiles)
+          .where(eq(valetProfiles.userId, userId))
+          .for('update');
+        return row;
+      }
+      case 'washer': {
+        const [row] = await tx
+          .select({ userId: washerProfiles.userId, status: washerProfiles.verificationStatus })
+          .from(washerProfiles)
+          .where(eq(washerProfiles.userId, userId))
+          .for('update');
+        return row;
+      }
     }
-
-    const [row] = await tx
-      .select({ userId: washerProfiles.userId, status: washerProfiles.verificationStatus })
-      .from(washerProfiles)
-      .where(eq(washerProfiles.userId, userId))
-      .for('update');
-    return row;
   }
 
   private async setProfileStatus(
@@ -121,18 +129,20 @@ export class ReviewPartnerCommand {
     status: string,
     now: Date,
   ): Promise<void> {
-    if (kind === 'valet') {
-      await tx
-        .update(valetProfiles)
-        .set({ verificationStatus: status, updatedAt: now })
-        .where(eq(valetProfiles.userId, userId));
-      return;
+    switch (kind) {
+      case 'valet':
+        await tx
+          .update(valetProfiles)
+          .set({ verificationStatus: status, updatedAt: now })
+          .where(eq(valetProfiles.userId, userId));
+        return;
+      case 'washer':
+        await tx
+          .update(washerProfiles)
+          .set({ verificationStatus: status, updatedAt: now })
+          .where(eq(washerProfiles.userId, userId));
+        return;
     }
-
-    await tx
-      .update(washerProfiles)
-      .set({ verificationStatus: status, updatedAt: now })
-      .where(eq(washerProfiles.userId, userId));
   }
 
   /**

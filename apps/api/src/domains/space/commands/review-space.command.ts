@@ -9,7 +9,7 @@ import { withTransaction } from '../../../platform/db/transaction.js';
 import { type AdminActor, AuditService } from '../../../platform/observability/audit.service.js';
 import { OutboxService } from '../../../platform/outbox/outbox.service.js';
 import { CommissionWaiverService } from '../../pricing/commission-waiver.service.js';
-import { IllegalApprovalTransitionError } from '../errors.js';
+import { IllegalApprovalTransitionError, SpaceChangedError } from '../errors.js';
 
 /**
  * Every admin decision, in one place: where it leaves the space, and what it is called in the
@@ -47,22 +47,33 @@ export class ReviewSpaceCommand {
     private readonly waivers: CommissionWaiverService,
   ) {}
 
-  approve(spaceId: string, actor: AdminActor): Promise<ReviewOutcome> {
-    return this.decide('approve', spaceId, null, actor);
+  approve(spaceId: string, expectedUpdatedAt: string, actor: AdminActor): Promise<ReviewOutcome> {
+    return this.decide('approve', spaceId, null, expectedUpdatedAt, actor);
   }
 
-  reject(spaceId: string, notes: string, actor: AdminActor): Promise<ReviewOutcome> {
-    return this.decide('reject', spaceId, notes, actor);
+  reject(
+    spaceId: string,
+    notes: string,
+    expectedUpdatedAt: string | undefined,
+    actor: AdminActor,
+  ): Promise<ReviewOutcome> {
+    return this.decide('reject', spaceId, notes, expectedUpdatedAt, actor);
   }
 
-  requestChanges(spaceId: string, notes: string, actor: AdminActor): Promise<ReviewOutcome> {
-    return this.decide('request_changes', spaceId, notes, actor);
+  requestChanges(
+    spaceId: string,
+    notes: string,
+    expectedUpdatedAt: string | undefined,
+    actor: AdminActor,
+  ): Promise<ReviewOutcome> {
+    return this.decide('request_changes', spaceId, notes, expectedUpdatedAt, actor);
   }
 
   private decide(
     decision: AdminSpaceDecision,
     spaceId: string,
     notes: string | null,
+    expectedUpdatedAt: string | undefined,
     actor: AdminActor,
   ): Promise<ReviewOutcome> {
     const { to, audit, event } = DECISIONS[decision];
@@ -76,6 +87,7 @@ export class ReviewSpaceCommand {
           ownerId: spaces.ownerId,
           approvalStatus: spaces.approvalStatus,
           reviewNotes: spaces.reviewNotes,
+          updatedAt: spaces.updatedAt,
         })
         .from(spaces)
         .where(and(eq(spaces.id, spaceId), isNull(spaces.deletedAt)))
@@ -85,6 +97,13 @@ export class ReviewSpaceCommand {
       const id = before.id;
       if (before.approvalStatus !== ApprovalStatus.PENDING_APPROVAL) {
         throw new IllegalApprovalTransitionError();
+      }
+      // Compared at the millisecond the detail view sent it with: Postgres keeps microseconds.
+      if (
+        expectedUpdatedAt !== undefined &&
+        before.updatedAt.toISOString() !== new Date(expectedUpdatedAt).toISOString()
+      ) {
+        throw new SpaceChangedError();
       }
 
       const now = new Date();

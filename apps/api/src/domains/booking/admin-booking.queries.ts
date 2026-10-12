@@ -48,13 +48,14 @@ function searchBy(text: string): SQL | undefined {
 }
 
 /**
- * `from`/`to` are IST calendar days over `starts_at`, both inclusive: `to` runs until the next IST
- * midnight. The day boundary is computed by Postgres in Asia/Kolkata, never in the server's zone.
+ * `from`/`to` are IST calendar days over `starts_at`, `from` inclusive and `to` exclusive, like the
+ * ledger explorer, the audit log and finance (S-142): `2026-10-01`..`2026-10-08` is seven days.
+ * The day boundary is computed by Postgres in Asia/Kolkata, never in the server's zone.
  */
 const startsOnOrAfter = (day: string): SQL =>
   sql`${bookings.startsAt} >= (${day}::date)::timestamp AT TIME ZONE 'Asia/Kolkata'`;
-const startsOnOrBefore = (day: string): SQL =>
-  sql`${bookings.startsAt} < ((${day}::date + 1)::timestamp AT TIME ZONE 'Asia/Kolkata')`;
+const startsBefore = (day: string): SQL =>
+  sql`${bookings.startsAt} < (${day}::date)::timestamp AT TIME ZONE 'Asia/Kolkata'`;
 
 /**
  * The admin booking screens (task 18a). The driver's phone is masked here, before a row leaves
@@ -70,7 +71,7 @@ export class AdminBookingQueries {
       q.status === undefined ? undefined : eq(bookings.status, q.status),
       q.q === undefined || q.q === '' ? undefined : searchBy(q.q),
       q.from === undefined ? undefined : startsOnOrAfter(q.from),
-      q.to === undefined ? undefined : startsOnOrBefore(q.to),
+      q.to === undefined ? undefined : startsBefore(q.to),
     );
 
     const base = () =>

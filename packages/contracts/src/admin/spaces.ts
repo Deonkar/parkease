@@ -13,9 +13,21 @@ export const ADMIN_SPACE_DECISION_VALUES = ['approve', 'reject', 'request_change
 export const adminSpaceDecisionSchema = z.enum(ADMIN_SPACE_DECISION_VALUES);
 export type AdminSpaceDecision = z.infer<typeof adminSpaceDecisionSchema>;
 
-/** Reject and request-changes both owe the owner an explanation. Approve takes no body. */
+/**
+ * The `updatedAt` of the version the admin looked at (S-142). A decision on a listing the owner
+ * changed since is refused (409 `SPACE_CHANGED`), so nobody approves photos or a price they never
+ * saw. Required to approve; reject and request-changes accept it.
+ */
+const expectedUpdatedAt = z.string().datetime();
+
+export const spaceApproveSchema = z.object({ expectedUpdatedAt });
+
+export type SpaceApprove = z.infer<typeof spaceApproveSchema>;
+
+/** Reject and request-changes both owe the owner an explanation. */
 export const spaceDecisionNotesSchema = z.object({
   notes: z.string().trim().min(1).max(1000),
+  expectedUpdatedAt: expectedUpdatedAt.optional(),
 });
 
 export type SpaceDecisionNotes = z.infer<typeof spaceDecisionNotesSchema>;
@@ -52,6 +64,16 @@ export const adminSpaceDetailSchema = adminSpaceQueueItemSchema.extend({
   longitude: z.number().min(-180).max(180),
   zoneId: z.string(),
   reviewedAt: z.string().datetime().nullable(),
+  /** The version: sent back as `expectedUpdatedAt` with a decision. */
+  updatedAt: z.string().datetime(),
 });
 
 export type AdminSpaceDetail = z.infer<typeof adminSpaceDetailSchema>;
+
+/** What every decision answers (S-142: it had no contract). */
+export const adminSpaceDecisionResultSchema = z.object({
+  id: spaceIdSchema,
+  approvalStatus: approvalStatusSchema,
+});
+
+export type AdminSpaceDecisionResult = z.infer<typeof adminSpaceDecisionResultSchema>;

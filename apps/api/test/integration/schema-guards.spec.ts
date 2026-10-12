@@ -118,6 +118,29 @@ describe('schema guards', () => {
     );
   });
 
+  it('refuses refunds that add up to more than the payment captured (S-142, 0057)', async () => {
+    const driverId = await seedUser(h, 'driver');
+    const bookingId = await seedBooking(h, {
+      spaceId,
+      driverId,
+      vehicleType: 'car',
+      slotIndex: 3,
+      slotStatus: 'confirmed',
+    });
+    const [payment] = await h.sql<{ id: string }[]>`
+      INSERT INTO payments (booking_id, user_id, razorpay_order_id, razorpay_payment_id,
+                            expected_total_paise, captured_paise, status, captured_at)
+      VALUES (${bookingId}, ${driverId}, 'order_guard1', 'pay_guard1', 6162, 6162, 'captured', now())
+      RETURNING id`;
+    const refund = (amount: number) =>
+      h.sql`INSERT INTO refunds (payment_id, amount_paise, reason, status)
+            VALUES (${payment?.id ?? ''}, ${amount}, 'admin', 'pending')`;
+
+    expect(await refusedBy(refund(4000))).toBeUndefined();
+    expect(await refusedBy(refund(2163))).toBe('refunds_capped_at_capture');
+    expect(await refusedBy(refund(2162))).toBeUndefined();
+  });
+
   it('serves the offers-by-job lookup from the unique key once the duplicate index is gone (S-21)', async () => {
     const plan = (
       await h.db.execute(sql`

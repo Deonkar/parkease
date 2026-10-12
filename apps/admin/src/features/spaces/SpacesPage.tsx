@@ -1,4 +1,5 @@
 import {
+  adminSpaceDecisionResultSchema,
   adminSpaceDetailSchema,
   adminSpaceQueueItemSchema,
   type AdminSpaceQueueItem,
@@ -127,11 +128,18 @@ export function SpacesPage() {
 function SpaceReview({ id, onClose }: { id: string; onClose: () => void }) {
   const detail = useApi(adminSpaceDetailSchema, `/admin/spaces/${id}`);
   const [notes, setNotes] = useState('');
-  const decide = useAction(z.unknown(), ({ decision }: { decision: Decision }) => ({
-    path: `/admin/spaces/${id}/${decision}`,
-    body: decision === 'approve' ? {} : { notes },
-  }));
   const s = detail.data?.data;
+  // The version on screen goes with the decision, so a listing changed since is refused (409).
+  const decide = useAction(
+    adminSpaceDecisionResultSchema,
+    ({ decision }: { decision: Decision }) => ({
+      path: `/admin/spaces/${id}/${decision}`,
+      body: {
+        ...(decision === 'approve' ? {} : { notes }),
+        ...(s === undefined ? {} : { expectedUpdatedAt: s.updatedAt }),
+      },
+    }),
+  );
 
   return (
     <Drawer open width="min(640px, 100vw)" title={s?.title ?? 'Review listing'} onClose={onClose}>

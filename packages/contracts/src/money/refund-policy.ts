@@ -11,6 +11,13 @@ import { mulRate, toPaise, toRate, type Paise } from '../primitives/paise.js';
  * The amounts are named constants because a `1_000` at a call site is a number
  * nobody can grep for when finance asks why we kept ₹10 (R-GEN-05).
  */
+/**
+ * The `refunds.reason` written when a capture that landed with no live booking behind it is
+ * refunded in full (the worker's orphan-capture job). Shared, so the API's readers and the
+ * worker's writer cannot drift (S-142).
+ */
+export const ORPHAN_CAPTURE_REFUND_REASON = 'orphan_capture';
+
 export const REFUND_PROCESSING_FEE_PAISE = 1_000 as Paise;
 export const OWNER_CANCEL_GOODWILL_PAISE = 5_000 as Paise;
 export const ACTIVE_GRACE_MINUTES = 30;

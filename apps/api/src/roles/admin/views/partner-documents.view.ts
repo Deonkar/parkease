@@ -1,4 +1,4 @@
-import type { PartnerDocument } from '@parkease/contracts/admin';
+import type { PartnerDocument, PartnerKind } from '@parkease/contracts/admin';
 
 import type { PartnerDocumentIds } from '../../../domains/identity/partner.queries.js';
 import { logger } from '../../../platform/observability/logger.js';
@@ -62,4 +62,15 @@ export function partnerDocumentsOf(
     ids.idProof === null ? undefined : signed('id_proof', ids.idProof),
     ...ids.businessPhotos.map(photo),
   ].filter((document): document is PartnerDocument => document !== undefined);
+}
+
+/** What a decision on each kind of partner must be able to see (S-142). */
+const REQUIRED_DOCUMENTS: Readonly<Record<PartnerKind, readonly PartnerDocument['kind'][]>> = {
+  valet: ['driving_licence', 'id_proof'],
+  washer: ['id_proof'],
+};
+
+/** True when a document the decision needs is missing, or stored but unreadable. */
+export function documentsIncomplete(kind: PartnerKind, shown: readonly PartnerDocument[]): boolean {
+  return REQUIRED_DOCUMENTS[kind].some((required) => !shown.some((d) => d.kind === required));
 }

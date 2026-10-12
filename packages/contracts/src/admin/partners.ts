@@ -47,6 +47,12 @@ export const adminPartnerDetailSchema = adminPartnerSchema.extend({
   vehicleNumber: z.string().nullable(),
   operatingHours: z.unknown().nullable(),
   documents: z.array(partnerDocumentSchema),
+  /**
+   * A document the decision needs is missing or could not be shown (S-142): a valet needs a
+   * licence and an ID, a washer an ID. The panel warns before Verify rather than letting an admin
+   * approve what they could not see.
+   */
+  documentsIncomplete: z.boolean(),
 });
 
 export type AdminPartnerDetail = z.infer<typeof adminPartnerDetailSchema>;

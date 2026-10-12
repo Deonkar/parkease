@@ -51,6 +51,7 @@ export const adminBookingsQuerySchema = adminPageQuerySchema.extend({
   status: bookingStatusSchema.optional(),
   q: z.string().trim().max(100).optional(),
   from: istDateSchema.optional(),
+  /** Exclusive, as every admin range is. */
   to: istDateSchema.optional(),
 });
 

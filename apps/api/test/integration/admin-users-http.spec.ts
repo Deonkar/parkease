@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
+import { RevokeRoleCommand } from '../../src/domains/identity/commands/revoke-role.command.js';
 import { TokenService } from '../../src/platform/auth/token.service.js';
 import { AuditService } from '../../src/platform/observability/audit.service.js';
 
@@ -433,6 +434,45 @@ describe('admin users HTTP', () => {
       expect(errorCode(missing)).toBe('ROLE_NOT_HELD');
       expect((await revoke(other, 'admin')).status).toBe(404);
       expect(await auditRows('user.role.revoke', stranger)).toHaveLength(0);
+    });
+
+    it('refuses a revoke by an admin who lost their own access: 409 LAST_ADMIN (S-142)', async () => {
+      const other = await seedUser(h, 'admin');
+      // Another admin removed this one a moment ago; their token still says admin.
+      await h.sql`UPDATE user_roles SET status = 'suspended' WHERE user_id = ${adminId} AND role = 'admin'`;
+      try {
+        const res = await revoke(other, 'admin');
+        expect(res.status).toBe(409);
+        expect(errorCode(res)).toBe('LAST_ADMIN');
+        expect((await roleRow(other, 'admin'))?.status).toBe('active');
+      } finally {
+        await h.sql`UPDATE user_roles SET status = 'active' WHERE user_id = ${adminId} AND role = 'admin'`;
+      }
+    });
+
+    it('two admins revoking each other at once leave one admin, never none (S-142)', async () => {
+      const other = await seedUser(h, 'admin');
+      // Only these two are admins for this test.
+      await h.sql`UPDATE user_roles SET status = 'suspended'
+                  WHERE role = 'admin' AND user_id NOT IN (${adminId}, ${other})`;
+      const commands = http.app.get(RevokeRoleCommand);
+      const results = await Promise.allSettled([
+        commands.execute(
+          { userId: other, role: 'admin', reason: 'race' },
+          { userId: adminId, ipAddress: '127.0.0.1' },
+        ),
+        commands.execute(
+          { userId: adminId, role: 'admin', reason: 'race' },
+          { userId: other, ipAddress: '127.0.0.1' },
+        ),
+      ]);
+
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      const [left] = await h.sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM user_roles WHERE role = 'admin' AND status = 'active'
+          AND user_id IN (${adminId}, ${other})`;
+      expect(left?.n).toBe(1);
+      await h.sql`UPDATE user_roles SET status = 'active' WHERE user_id = ${adminId} AND role = 'admin'`;
     });
 
     it('requires a reason', async () => {

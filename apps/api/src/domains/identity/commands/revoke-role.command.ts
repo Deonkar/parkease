@@ -6,6 +6,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { DB, type Database } from '../../../platform/db/db.module.js';
 import { withTransaction } from '../../../platform/db/transaction.js';
 import { type AdminActor, AuditService } from '../../../platform/observability/audit.service.js';
+import { assertAdminsRemain } from '../admin-guard.js';
 import { RoleNotHeldError, SelfDemotionError } from '../errors.js';
 
 export interface RevokeRoleInput {
@@ -57,6 +58,9 @@ export class RevokeRoleCommand {
           ),
         );
       if (held === undefined) throw new RoleNotHeldError();
+      if (role === Role.ADMIN && held.status === RoleStatus.ACTIVE) {
+        await assertAdminsRemain(tx, user.id, actor.userId);
+      }
 
       await tx
         .update(userRoles)

@@ -1,5 +1,9 @@
 import { LedgerAccount } from '@parkease/contracts/enums';
-import { type LedgerEntryDraft, routeDischargeEntries } from '@parkease/contracts/money';
+import {
+  type LedgerEntryDraft,
+  ORPHAN_CAPTURE_REFUND_REASON,
+  routeDischargeEntries,
+} from '@parkease/contracts/money';
 import { outboxMessages, payments, refunds } from '@parkease/db/schema';
 import { and, eq } from 'drizzle-orm';
 
@@ -43,7 +47,9 @@ export async function reconcileOrphanCapture(deps: JobDeps, raw: unknown): Promi
     const [existing] = await tx
       .select({ id: refunds.id })
       .from(refunds)
-      .where(and(eq(refunds.paymentId, payment.id), eq(refunds.reason, 'orphan_capture')));
+      .where(
+        and(eq(refunds.paymentId, payment.id), eq(refunds.reason, ORPHAN_CAPTURE_REFUND_REASON)),
+      );
 
     if (existing !== undefined) {
       logger.info(
@@ -86,26 +92,12 @@ export async function reconcileOrphanCapture(deps: JobDeps, raw: unknown): Promi
       });
     }
 
-    const [refund] = await tx
-      .insert(refunds)
-      .values({
-        paymentId: payment.id,
-        amountPaise: payload.capturedPaise,
-        reason: 'orphan_capture',
-        status: 'pending',
-        routeReversalPaise: transferPaise,
-      })
-      .returning({ id: refunds.id });
-
-    if (refund === undefined) {
-      throw new Error(`Refund row for orphan capture on payment ${payment.id} was not created`);
-    }
-
     // Record what was actually captured before recording that it went back.
     // `confirm-payment` never reached `markCaptured` on this path — it diverted
     // at the status check — so without this the row claims a refund of money it
     // has no record of receiving, and task 16 has no gateway payment id to match
-    // Route's settlement report against.
+    // Route's settlement report against. First, too, because the refund below is
+    // checked against what was captured (0057).
     await tx
       .update(payments)
       .set({
@@ -116,6 +108,21 @@ export async function reconcileOrphanCapture(deps: JobDeps, raw: unknown): Promi
         updatedAt: new Date(),
       })
       .where(eq(payments.id, payment.id));
+
+    const [refund] = await tx
+      .insert(refunds)
+      .values({
+        paymentId: payment.id,
+        amountPaise: payload.capturedPaise,
+        reason: ORPHAN_CAPTURE_REFUND_REASON,
+        status: 'pending',
+        routeReversalPaise: transferPaise,
+      })
+      .returning({ id: refunds.id });
+
+    if (refund === undefined) {
+      throw new Error(`Refund row for orphan capture on payment ${payment.id} was not created`);
+    }
 
     // Ledger first, money second — the gateway call is the next job, committed
     // in the same transaction as the rows that justify it.

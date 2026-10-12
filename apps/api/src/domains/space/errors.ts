@@ -18,6 +18,17 @@ export class IllegalApprovalTransitionError extends SpaceDomainError {
   }
 }
 
+/** The owner changed the listing after the admin opened it (S-142): look again, then decide. */
+export class SpaceChangedError extends SpaceDomainError {
+  constructor() {
+    super(
+      'SPACE_CHANGED',
+      'The owner changed this listing after you opened it. Review the latest version, then decide.',
+      HttpStatus.CONFLICT,
+    );
+  }
+}
+
 /** Rejected is terminal for the owner: the way forward is a new listing, not an edit. */
 export class SpaceRejectedError extends SpaceDomainError {
   constructor() {

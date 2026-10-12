@@ -12,9 +12,12 @@ import {
   Req,
 } from '@nestjs/common';
 import {
+  type AdminSpaceDecisionResult,
+  adminSpaceDecisionResultSchema,
   adminSpaceDetailSchema,
   adminSpaceQueueItemSchema,
   adminSpaceQueueQuerySchema,
+  spaceApproveSchema,
   spaceDecisionNotesSchema,
 } from '@parkease/contracts/admin';
 import { Role } from '@parkease/contracts/enums';
@@ -65,36 +68,40 @@ export class AdminSpacesController {
 
   @Post(':id/approve')
   @HttpCode(HttpStatus.OK)
-  approve(
+  async approve(
     @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: unknown,
     @CurrentUser() user: AuthUser,
     @Req() request: FastifyRequest,
-  ): Promise<ReviewOutcome> {
-    return this.review.approve(id, actorOf(user, request));
+  ): Promise<AdminSpaceDecisionResult> {
+    const { expectedUpdatedAt } = spaceApproveSchema.parse(body);
+    return decided(await this.review.approve(id, expectedUpdatedAt, actorOf(user, request)));
   }
 
   @Post(':id/reject')
   @HttpCode(HttpStatus.OK)
-  reject(
+  async reject(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() body: unknown,
     @CurrentUser() user: AuthUser,
     @Req() request: FastifyRequest,
-  ): Promise<ReviewOutcome> {
-    const { notes } = spaceDecisionNotesSchema.parse(body);
-    return this.review.reject(id, notes, actorOf(user, request));
+  ): Promise<AdminSpaceDecisionResult> {
+    const { notes, expectedUpdatedAt } = spaceDecisionNotesSchema.parse(body);
+    return decided(await this.review.reject(id, notes, expectedUpdatedAt, actorOf(user, request)));
   }
 
   @Post(':id/request-changes')
   @HttpCode(HttpStatus.OK)
-  requestChanges(
+  async requestChanges(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() body: unknown,
     @CurrentUser() user: AuthUser,
     @Req() request: FastifyRequest,
-  ): Promise<ReviewOutcome> {
-    const { notes } = spaceDecisionNotesSchema.parse(body);
-    return this.review.requestChanges(id, notes, actorOf(user, request));
+  ): Promise<AdminSpaceDecisionResult> {
+    const { notes, expectedUpdatedAt } = spaceDecisionNotesSchema.parse(body);
+    return decided(
+      await this.review.requestChanges(id, notes, expectedUpdatedAt, actorOf(user, request)),
+    );
   }
 }
 
@@ -103,3 +110,6 @@ const actorOf = (user: AuthUser, request: FastifyRequest): AdminActor => ({
   userId: user.id,
   ipAddress: request.ip,
 });
+
+const decided = (outcome: ReviewOutcome): AdminSpaceDecisionResult =>
+  parseOutgoing(adminSpaceDecisionResultSchema, outcome, 'admin space decision');

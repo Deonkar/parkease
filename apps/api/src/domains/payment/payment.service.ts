@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { PaymentStatus } from '@parkease/contracts/enums';
+import { ORPHAN_CAPTURE_REFUND_REASON } from '@parkease/contracts/money';
 import { bookings, linkedAccounts, payments, refunds, spaces, washJobs } from '@parkease/db/schema';
 import { and, desc, eq, inArray, isNotNull, notExists } from 'drizzle-orm';
 
@@ -29,13 +30,11 @@ export const CAPTURED_PAYMENT_STATUSES: PaymentStatus[] = [
 ];
 
 /**
- * The `refunds.reason` the worker's `reconcile-orphan.job.ts` writes when it refunds, in full, a
- * capture that landed with no live booking behind it (a late capture on a failed order, or the
- * loser of two concurrent create-order calls). That payment is marked `refunded` with a fresh
- * `captured_at`, so it is the newest capture on the booking — and it is not the booking's money.
- * The worker cannot import from `apps/api`, so the literal lives in both places; change together.
+ * A capture that landed with no live booking behind it is refunded in full under this reason. That
+ * payment is marked `refunded` with a fresh `captured_at`, so it is the newest capture on the
+ * booking — and it is not the booking's money.
  */
-export const ORPHAN_CAPTURE_REFUND_REASON = 'orphan_capture';
+export { ORPHAN_CAPTURE_REFUND_REASON };
 
 /**
  * Every read and write against `payments`, `refunds` and `linked_accounts`.

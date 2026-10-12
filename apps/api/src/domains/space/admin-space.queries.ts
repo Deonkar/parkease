@@ -97,6 +97,7 @@ export class AdminSpaceQueries {
         location: spaces.location,
         zoneId: spaces.zoneId,
         reviewedAt: spaces.reviewedAt,
+        updatedAt: spaces.updatedAt,
       })
       .from(spaces)
       .innerJoin(users, eq(users.id, spaces.ownerId))
@@ -120,6 +121,7 @@ export class AdminSpaceQueries {
       longitude: row.location.lng,
       zoneId: row.zoneId,
       reviewedAt: row.reviewedAt?.toISOString() ?? null,
+      updatedAt: row.updatedAt.toISOString(),
     };
   }
 }

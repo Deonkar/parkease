@@ -386,3 +386,14 @@ export async function registerUploads(
       ON CONFLICT (public_id) DO UPDATE SET user_id = EXCLUDED.user_id`;
   }
 }
+
+/** The approve body an admin sends: the version of the listing they looked at (S-142). */
+export async function approveBody(
+  h: Harness,
+  spaceId: string,
+): Promise<{ expectedUpdatedAt: string }> {
+  const [row] = await h.sql<{ at: string }[]>`
+    SELECT to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS at
+    FROM spaces WHERE id = ${spaceId}`;
+  return { expectedUpdatedAt: row?.at ?? new Date(0).toISOString() };
+}
