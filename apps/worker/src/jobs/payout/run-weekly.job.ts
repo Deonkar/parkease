@@ -70,6 +70,7 @@ async function payOne(deps: JobDeps, userId: string, period: string, now: Date):
       .select({
         fundAccountId: bankDetails.razorpayxFundAccountId,
         heldUntil: bankDetails.payoutsHeldUntil,
+        last4: bankDetails.last4,
       })
       .from(bankDetails)
       .where(eq(bankDetails.userId, userId));
@@ -104,6 +105,8 @@ async function payOne(deps: JobDeps, userId: string, period: string, now: Date):
         // Pinned: `payout.send` pays exactly this account, and fails the payout
         // rather than redirect it if the details change before it goes.
         razorpayxFundAccountId: fundAccountId,
+        // Which account, as it is now: a later bank change never renames this payout (S-113).
+        destinationLast4: bank.last4,
         status: 'pending',
       })
       .onConflictDoNothing({ target: [payouts.userId, payouts.period] })

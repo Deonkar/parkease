@@ -36,6 +36,8 @@ export const payouts = pgTable(
     txnId: uuid('txn_id').notNull(),
     /** The account this payout was made for; `payout.send` pays exactly this. */
     razorpayxFundAccountId: text('razorpayx_fund_account_id').notNull(),
+    /** The account's last 4 when this payout was made (S-113); null on older rows. */
+    destinationLast4: text('destination_last4'),
     status: text('status').notNull().default('pending'),
     razorpayPayoutId: text('razorpay_payout_id'),
     razorpayContactId: text('razorpay_contact_id'),

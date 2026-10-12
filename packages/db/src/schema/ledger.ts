@@ -28,6 +28,8 @@ export const ledgerEntries = pgTable(
   (t) => [
     index('ledger_entries_txn_id_idx').on(t.txnId),
     index('ledger_entries_account_occurred_at_idx').on(t.account, t.occurredAt),
+    // 0053 (S-138): the explorer's and the export's range order.
+    index('ledger_entries_occurred_at_id_idx').on(t.occurredAt, t.id),
     index('ledger_entries_booking_id_idx').on(t.bookingId),
     index('ledger_entries_payout_id_idx').on(t.payoutId),
     index('ledger_entries_payment_id_idx').on(t.paymentId),

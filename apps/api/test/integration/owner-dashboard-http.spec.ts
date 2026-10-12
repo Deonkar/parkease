@@ -199,6 +199,22 @@ describe('owner dashboard HTTP', () => {
     return booking;
   };
 
+  it('lists a confirmed driver who is late (started, not checked in) as upcoming, first (S-93)', async () => {
+    const spaceId = await seedSpace(h, { lat: 12.9345, lng: 77.6266, carSlots: 3 });
+    const later = await bookConfirmed(spaceId, 6);
+    const late = await bookConfirmed(spaceId, 20);
+    // Its window began half an hour ago and nobody has checked in.
+    await h.sql`UPDATE bookings SET starts_at = now() - interval '30 minutes',
+                                    ends_at = now() + interval '90 minutes'
+                WHERE id = ${late.id}`;
+
+    const res = await get(`/owner/spaces/${spaceId}/bookings?group=upcoming`);
+
+    expect(res.status).toBe(200);
+    const ids = (res.body as { data: { bookingId: string }[] }).data.map((b) => b.bookingId);
+    expect(ids).toEqual([late.id, later.id]);
+  });
+
   it('pages upcoming bookings soonest-first, no duplicates, and rejects a past cursor replayed against upcoming', async () => {
     const spaceId = await seedSpace(h, { lat: 12.9345, lng: 77.6266, carSlots: 3 });
     // Seeded out of order so soonest-first is a real assertion, not an

@@ -34,6 +34,7 @@ const PAYOUTS: PayoutView[] = [
     netPaise: 280_000,
     status: 'processing',
     razorpayPayoutId: 'pout_QK7l1nFirst',
+    destinationLast4: '6789',
     createdAt: '2026-09-28T00:30:00.000Z',
   },
   {
@@ -45,6 +46,7 @@ const PAYOUTS: PayoutView[] = [
     netPaise: 160_000,
     status: 'paid',
     razorpayPayoutId: 'pout_QK7l1nSecnd',
+    destinationLast4: '6789',
     createdAt: '2026-09-21T00:30:00.000Z',
   },
   {
@@ -56,6 +58,7 @@ const PAYOUTS: PayoutView[] = [
     netPaise: 90_000,
     status: 'failed',
     razorpayPayoutId: null,
+    destinationLast4: null,
     createdAt: '2026-09-14T00:30:00.000Z',
   },
 ].map((p) => payoutViewSchema.parse(p));

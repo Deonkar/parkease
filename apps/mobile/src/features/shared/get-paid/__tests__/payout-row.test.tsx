@@ -20,6 +20,7 @@ const payout = (patch: Partial<Record<string, unknown>>): PayoutView =>
     netPaise: 280_000,
     status: 'paid',
     razorpayPayoutId: 'pout_QK7l1nFirst',
+    destinationLast4: null,
     createdAt: '2026-09-28T00:30:00.000Z',
     ...patch,
   });
@@ -31,10 +32,6 @@ describe('PayoutRow', () => {
     expect(text(tree)).toContain('Mon 28 Sep');
     expect(text(tree)).toContain('To your bank');
     expect(text(byTestId(tree, 'payout-status') ?? null)).toBe('Paid');
-  });
-
-  it('never names an account: a payout keeps its fund account, not its last 4, and the bank may have changed since', () => {
-    expect(text(render(<PayoutRow payout={payout({})} />))).not.toMatch(/····\d{4}/);
   });
 
   it.each([
@@ -62,5 +59,14 @@ describe('PayoutRow', () => {
     });
     const tree = render(<PayoutRow payout={taxed} />);
     expect(text(byTestId(tree, 'payout-tax') ?? null)).toBe('₹32.00 TCS · ₹32.00 TDS withheld');
+  });
+
+  it('names the account the payout was made to, not today’s bank (S-113)', () => {
+    expect(
+      text(render(<PayoutRow payout={payout({ status: 'paid', destinationLast4: '4321' })} />)),
+    ).toContain('····4321');
+    expect(
+      text(render(<PayoutRow payout={payout({ status: 'paid', destinationLast4: null })} />)),
+    ).toContain('To your bank');
   });
 });

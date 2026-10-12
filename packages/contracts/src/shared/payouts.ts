@@ -56,6 +56,11 @@ export const payoutViewSchema = z.object({
   status: payoutStatusSchema,
   /** RazorpayX's `pout_…` reference, once the payout has been sent. */
   razorpayPayoutId: z.string().nullable(),
+  /** The account's last 4 when the payout was made (S-113); null for payouts made before that. */
+  destinationLast4: z
+    .string()
+    .regex(/^\d{4}$/)
+    .nullable(),
   createdAt: z.string().datetime(),
 });
 

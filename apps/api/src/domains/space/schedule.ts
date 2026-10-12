@@ -69,3 +69,40 @@ export function isOpenAt(schedule: SpaceSchedule, instant: Date): boolean {
   // HH:mm strings compare correctly lexicographically — both are zero-padded.
   return parts.hhmm >= day.opensAt && parts.hhmm < day.closesAt;
 }
+
+/** India Standard Time is UTC+05:30 all year (no DST), so IST wall time is a fixed offset. */
+const IST_OFFSET_MS = (5 * 60 + 30) * 60_000;
+const DAY_MS = 86_400_000;
+const DAY_KEYS: readonly DayKey[] = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+const minutesOf = (hhmm: string): number => {
+  const [h, m] = hhmm.split(':');
+  return Number(h) * 60 + Number(m);
+};
+
+/**
+ * The hours in `[from, to)` during which the space is open (S-82): the occupancy denominator. A
+ * 24x7 space is open the whole window; otherwise each IST calendar day's open interval is
+ * intersected with the window and the overlaps summed. A schedule's day never crosses midnight
+ * (`opensAt < closesAt`, by contract), so one interval per day is the whole story.
+ */
+export function openHoursWithin(schedule: SpaceSchedule, from: Date, to: Date): number {
+  const start = from.getTime();
+  const end = to.getTime();
+  if (end <= start) return 0;
+  if (schedule.is24x7) return (end - start) / 3_600_000;
+
+  let openMs = 0;
+  // IST midnight at or before `from`, in UTC milliseconds.
+  let dayStart = Math.floor((start + IST_OFFSET_MS) / DAY_MS) * DAY_MS - IST_OFFSET_MS;
+  for (; dayStart < end; dayStart += DAY_MS) {
+    const dayKey = DAY_KEYS[new Date(dayStart + IST_OFFSET_MS).getUTCDay()];
+    if (dayKey === undefined) continue;
+    const day = schedule.days[dayKey];
+    if (!day.isOpen) continue;
+    const opens = dayStart + minutesOf(day.opensAt) * 60_000;
+    const closes = dayStart + minutesOf(day.closesAt) * 60_000;
+    openMs += Math.max(0, Math.min(closes, end) - Math.max(opens, start));
+  }
+  return openMs / 3_600_000;
+}

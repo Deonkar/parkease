@@ -37,6 +37,7 @@ export const toPayoutView = (row: PayoutRow): PayoutView =>
       netPaise: row.netPaise,
       status: row.status,
       razorpayPayoutId: row.razorpayPayoutId,
+      destinationLast4: row.destinationLast4,
       createdAt: row.createdAt.toISOString(),
     },
     'payout view',

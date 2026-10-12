@@ -112,11 +112,11 @@ describe('reviews HTTP', () => {
       await h.sql`
         INSERT INTO wash_jobs (booking_id, driver_user_id, washer_user_id, status, service_name,
                                vehicle_type, price_paise, commission_rate, txn_id, space_location,
-                               before_photo_id, after_photo_id)
+                               before_photo_id, after_photo_id, completed_at)
         VALUES (${id}, ${h.driverId}, ${washer}, 'completed', 'basic_exterior', 'car', 30000, 0.150,
                 ${crypto.randomUUID()},
                 ST_SetSRID(ST_MakePoint(${ORIGIN.lng}, ${ORIGIN.lat}), 4326)::geography,
-                ${`before-${String(n)}-${id}`}, ${`after-${String(n)}-${id}`})`;
+                ${`before-${String(n)}-${id}`}, ${`after-${String(n)}-${id}`}, now())`;
     }
     return id;
   }

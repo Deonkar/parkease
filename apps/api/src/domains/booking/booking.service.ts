@@ -339,7 +339,9 @@ export class BookingService {
     if (query.spaceId !== undefined) conditions.push(eq(bookings.spaceId, query.spaceId));
     if (query.group === 'active') conditions.push(eq(bookings.status, 'active'));
     if (query.group === 'upcoming') {
-      conditions.push(eq(bookings.status, 'confirmed'), sql`${bookings.startsAt} > now()`);
+      // Not yet over, rather than not yet started (S-93): a confirmed driver who is late (the
+      // window has begun, no check-in yet) is exactly who the owner is waiting for at the gate.
+      conditions.push(eq(bookings.status, 'confirmed'), sql`${bookings.endsAt} > now()`);
     }
     if (query.group === 'past') {
       conditions.push(inArray(bookings.status, ['completed', 'cancelled', 'no_show']));

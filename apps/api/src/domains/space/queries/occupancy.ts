@@ -1,12 +1,15 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { ApprovalStatus, BookingStatus } from '@parkease/contracts/enums';
+import { spaceScheduleSchema } from '@parkease/contracts/owner';
 import { bookingSlots, bookings, spaceSlots, spaces } from '@parkease/db/schema';
 import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import { DB, type Database } from '../../../platform/db/db.module.js';
+import { parseOutgoing } from '../../../platform/http/outgoing-contract.js';
+import type { Reader } from '../../ledger/queries/owner-balance.js';
+import { openHoursWithin } from '../schedule.js';
 // Reader lives with the first query that needed it (R2) — a redeclaration here
 // would be a second copy of the same shape drifting from the original.
-import type { Reader } from '../../ledger/queries/owner-balance.js';
 
 /**
  * Booking status, not slot status: completion and cancellation both set the
@@ -16,11 +19,9 @@ import type { Reader } from '../../ledger/queries/owner-balance.js';
 const OCCUPYING: BookingStatus[] = ['confirmed', 'active', 'completed'];
 
 /**
- * Booked slot-hours ÷ (slots × window hours), in basis points, for every space
- * the owner has, in one statement.
- *
- * ponytail: available hours assume 24h opening; intersect with the space's
- * schedule if owners with night closures read it as too low (suggestedtask).
+ * Booked slot-hours ÷ (slots × open hours in the window), in basis points, for every space the
+ * owner has, in one statement. Open hours are the window intersected with the space's own schedule
+ * (S-82): a space that closes overnight and is booked for every hour it is open reads 10,000 bp.
  */
 @Injectable()
 export class SpaceOccupancyQuery {
@@ -71,6 +72,7 @@ export class SpaceOccupancyQuery {
         id: spaces.id,
         title: spaces.title,
         approvalStatus: spaces.approvalStatus,
+        schedule: spaces.schedule,
         slots: slotCounts.slots,
         hours: booked.hours,
       })
@@ -80,8 +82,12 @@ export class SpaceOccupancyQuery {
       .where(and(eq(spaces.ownerId, ownerId), isNull(spaces.deletedAt)))
       .orderBy(asc(spaces.createdAt));
 
-    const windowHours = (window.to.getTime() - window.from.getTime()) / 3_600_000;
     return rows.map((row) => {
+      const openHours = openHoursWithin(
+        parseOutgoing(spaceScheduleSchema, row.schedule, 'space schedule'),
+        window.from,
+        window.to,
+      );
       // Drizzle types a LEFT-JOINed aliased subquery's own columns as
       // non-nullable — it only marks the whole-row object nullable, and that
       // form isn't usable here (subquery-as-field requires exactly one
@@ -89,7 +95,7 @@ export class SpaceOccupancyQuery {
       // runtime a space with no slots or no bookings in the window genuinely
       // joins to SQL NULL, so the fallback is load-bearing despite the rule.
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-      const available = (row.slots ?? 0) * windowHours;
+      const available = (row.slots ?? 0) * openHours;
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       const bookedHours = Number(row.hours ?? 0);
       return {

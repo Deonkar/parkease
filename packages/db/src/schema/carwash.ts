@@ -199,6 +199,10 @@ export const washJobs = pgTable(
     index('wash_jobs_booking_id_idx').on(t.bookingId),
     index('wash_jobs_driver_user_id_idx').on(t.driverUserId),
     index('wash_jobs_washer_user_id_idx').on(t.washerUserId),
+    // 0054 (S-58): a partner's earnings lines, newest first, with id as the tiebreak.
+    index('wash_jobs_earnings_lines_idx')
+      .on(t.washerUserId, t.completedAt.desc(), t.id.desc())
+      .where(sql`${t.status} = 'completed'`),
     index('wash_jobs_status_idx').on(t.status),
     // The busy-partner exclusion in the candidate query. Partial, so completed
     // and cancelled jobs never enter it — the cost of asking "are they free"
