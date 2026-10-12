@@ -18,7 +18,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { markOnboarded } from '@/features/shared/hooks/useHasOnboarded';
 import { api } from '@/lib/api';
 import { confirmOtp, requestOtp } from '@/lib/firebase';
-import { landingRouteFor } from '@/lib/landing-route';
+import { ADMIN_ONLY_ROUTE, isAdminOnly, landingRouteFor } from '@/lib/landing-route';
 import { secureStorage } from '@/lib/secure-storage';
 import { uuidv7 } from '@/lib/uuid';
 
@@ -75,7 +75,9 @@ export default function VerifyScreen() {
       await markOnboarded();
       auth.setAuthenticated(data.data.roles, data.data.activeRole);
 
-      if (data.data.isNewUser || data.data.activeRole === null) {
+      if (isAdminOnly(data.data.roles)) {
+        router.replace(ADMIN_ONLY_ROUTE);
+      } else if (data.data.isNewUser || data.data.activeRole === null) {
         router.replace('/(auth)/choose-role');
       } else {
         router.replace(landingRouteFor(data.data.activeRole));

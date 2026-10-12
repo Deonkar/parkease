@@ -102,7 +102,7 @@ describe('role-group redirects', () => {
     ]) {
       const source = readFileSync(file, 'utf8');
       expect(bareGroupHrefs(source), file).toEqual([]);
-      expect(source, file).toMatch(/landingRouteFor\(/);
+      expect(source, file).toMatch(/landingRouteFor(Session)?\(/);
     }
   });
 

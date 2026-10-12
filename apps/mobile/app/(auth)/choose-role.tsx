@@ -1,11 +1,13 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Role } from '@parkease/contracts/enums';
 import { colors, fontSize, opacity, spacing } from '@parkease/tokens';
+import { Redirect } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/contexts/AuthContext';
+import { ADMIN_ONLY_ROUTE, isAdminOnly } from '@/lib/landing-route';
 
 const roles = [
   {
@@ -46,6 +48,11 @@ export default function ChooseRoleScreen() {
   const auth = useAuth();
   const [loading, setLoading] = useState(false);
   const insets = useSafeAreaInsets();
+
+  // Every role offered below is one an admin-only account does not hold (S-54).
+  if (auth.status === 'authenticated' && isAdminOnly(auth.roles)) {
+    return <Redirect href={ADMIN_ONLY_ROUTE} />;
+  }
 
   const handleSelect = async (role: Role) => {
     setLoading(true);
