@@ -180,7 +180,12 @@ export default function OwnerEarningsScreen() {
         refreshing={pulling}
         onRefresh={onPull}
         onEndReached={() => {
-          if (transactions.hasNextPage && !transactions.isFetchingNextPage) {
+          // Not after a failed page: the footer's "Tap to retry" owns that, or a scroll loops it.
+          if (
+            transactions.hasNextPage &&
+            !transactions.isFetchingNextPage &&
+            !transactions.isFetchNextPageError
+          ) {
             void transactions.fetchNextPage();
           }
         }}
