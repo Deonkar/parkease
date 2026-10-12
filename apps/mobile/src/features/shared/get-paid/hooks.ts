@@ -2,6 +2,7 @@ import type { SubmitRouteOnboarding, UpdateBankDetails } from '@parkease/contrac
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useIntent } from '../hooks/useIntent';
+import { AlreadyAppliedError } from '../intent';
 
 import {
   fetchBankDetails,
@@ -29,15 +30,24 @@ export function useRouteOnboarding() {
 
 /**
  * One Idempotency-Key per submit intent (R-FE-05): a retry after a timeout replays the same
- * submission instead of sending the KYC steps twice; a successful submit mints the next key.
+ * submission instead of sending the KYC steps twice; a successful submit mints the next key,
+ * and so does an edited form (S-115). A submit the server already applied reads the status.
  */
 export function useSubmitRouteOnboarding() {
   const queryClient = useQueryClient();
   const intent = useIntent();
   return useMutation({
-    mutationFn: (form: SubmitRouteOnboarding) => submitRouteOnboarding(form, intent),
+    mutationFn: (form: SubmitRouteOnboarding) =>
+      intent.send(
+        form,
+        (key) => submitRouteOnboarding(form, key),
+        async () => {
+          const view = await fetchRouteOnboarding();
+          if (view === null) throw new AlreadyAppliedError();
+          return view;
+        },
+      ),
     onSuccess: (view) => {
-      intent.reset();
       queryClient.setQueryData(getPaidKeys.route, view);
     },
   });
@@ -71,9 +81,17 @@ export function useSaveBankDetails() {
   const queryClient = useQueryClient();
   const intent = useIntent();
   return useMutation({
-    mutationFn: (form: UpdateBankDetails) => saveBankDetails(form, intent),
+    mutationFn: (form: UpdateBankDetails) =>
+      intent.send(
+        form,
+        (key) => saveBankDetails(form, key),
+        async () => {
+          const view = await fetchBankDetails();
+          if (view === null) throw new AlreadyAppliedError();
+          return view;
+        },
+      ),
     onSuccess: (view) => {
-      intent.reset();
       queryClient.setQueryData(getPaidKeys.bank, view);
       void queryClient.invalidateQueries({ queryKey: getPaidKeys.payouts });
       void queryClient.invalidateQueries({ queryKey: getPaidKeys.summary });

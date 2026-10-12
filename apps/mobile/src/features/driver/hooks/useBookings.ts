@@ -1,8 +1,8 @@
 import type { DriverBooking } from '@parkease/contracts/driver';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRef } from 'react';
 
-import { newIntent, type Intent } from '@/lib/api';
+import { useIntent } from '@/features/shared/hooks/useIntent';
+import { AlreadyAppliedError } from '@/features/shared/intent';
 import { isDevMockSession } from '@/lib/dev-mock';
 
 import { SPACE_DETAIL_KEY } from '../../shared/reviews/hooks';
@@ -101,34 +101,36 @@ function useBookingInvalidation() {
   };
 }
 
-/**
- * One intent for the life of the component (R-FE-05).
- *
- * A `useRef`, not a bare call in the hook body. `newIntent()` in the body runs
- * on *every render* — and `useMutation` re-renders the component itself as
- * `isPending` flips — so the key would change between the attempt that timed out
- * and the "try again" that follows it. The server would then see two distinct
- * intents and reserve two slots, which is the exact double-booking the rule
- * exists to prevent.
- *
- * Deliberately not regenerated on error: "try again" on the same screen is the
- * same intent. A genuinely new attempt means a new screen, and a new screen
- * means a new component.
- */
-function useIntent(): Intent {
-  const intent = useRef<Intent | null>(null);
-  intent.current ??= newIntent();
-  return intent.current;
-}
-
 export function useCreateBooking() {
   const invalidate = useBookingInvalidation();
   const intent = useIntent();
 
   return useMutation({
-    mutationFn: (body: CreateBookingBody) => createBooking(body, intent),
+    mutationFn: (body: CreateBookingBody) =>
+      intent.send(
+        body,
+        (key) => createBooking(body, key),
+        () => findCreatedBooking(body),
+      ),
     onSuccess: invalidate,
   });
+}
+
+/**
+ * A create the server already applied (409 `REQUEST_ALREADY_APPLIED`): the
+ * booking exists and its answer was lost. It is the driver's upcoming booking
+ * for this space and window; if it is not there, the screen says to refresh.
+ */
+async function findCreatedBooking(body: CreateBookingBody): Promise<DriverBooking> {
+  const page = await listBookings({ filter: 'upcoming', limit: 20 });
+  const created = page.items.find(
+    (booking) =>
+      booking.space.id === body.spaceId &&
+      Date.parse(booking.startsAt) === Date.parse(body.startsAt) &&
+      Date.parse(booking.endsAt) === Date.parse(body.endsAt),
+  );
+  if (created === undefined) throw new AlreadyAppliedError();
+  return created;
 }
 
 export function useCancelBooking(bookingId: string) {
@@ -136,7 +138,12 @@ export function useCancelBooking(bookingId: string) {
   const intent = useIntent();
 
   return useMutation({
-    mutationFn: (reason?: string) => cancelBooking(bookingId, reason, intent),
+    mutationFn: (reason?: string) =>
+      intent.send(
+        { bookingId, reason },
+        (key) => cancelBooking(bookingId, reason, key),
+        () => fetchBooking(bookingId),
+      ),
     onSuccess: invalidate,
   });
 }
@@ -146,7 +153,12 @@ export function useExtendBooking(bookingId: string) {
   const intent = useIntent();
 
   return useMutation({
-    mutationFn: (newEndsAt: string) => extendBooking(bookingId, newEndsAt, intent),
+    mutationFn: (newEndsAt: string) =>
+      intent.send(
+        { bookingId, newEndsAt },
+        (key) => extendBooking(bookingId, newEndsAt, key),
+        () => fetchBooking(bookingId),
+      ),
     onSuccess: invalidate,
   });
 }
@@ -156,7 +168,12 @@ export function useSelfCheckIn(bookingId: string) {
   const intent = useIntent();
 
   return useMutation({
-    mutationFn: () => selfCheckIn(bookingId, intent),
+    mutationFn: () =>
+      intent.send(
+        { bookingId },
+        (key) => selfCheckIn(bookingId, key),
+        () => fetchBooking(bookingId),
+      ),
     onSuccess: invalidate,
   });
 }

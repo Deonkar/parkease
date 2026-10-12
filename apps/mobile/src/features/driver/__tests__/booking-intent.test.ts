@@ -32,29 +32,24 @@ const HOOKS = path.resolve(__dirname, '../hooks/useBookings.ts');
  * the shape is what regressed.
  */
 describe('idempotency intent lifetime', () => {
-  it('caches the intent in a ref rather than minting one per render', async () => {
+  it('holds each intent in the shared useIntent, never minting one in a hook body', async () => {
     const source = await readFile(HOOKS, 'utf8');
-
-    expect(source).toMatch(/useRef</);
-    expect(source).toMatch(/intent\.current \?\?= newIntent\(\)/);
-  });
-
-  it('no mutation hook calls newIntent() directly in its body', async () => {
-    const source = await readFile(HOOKS, 'utf8');
-
-    // Comments stripped first: the doc block above `useIntent` names
-    // `newIntent()` when explaining why the old shape was wrong, and counting
-    // that would make this assertion measure prose.
     const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
 
-    // `newIntent()` must appear exactly once — inside `useIntent`. A second
-    // call site is a hook that mints per render again.
-    expect(code.match(/newIntent\(\)/g) ?? []).toHaveLength(1);
+    // The shared hook keeps the key in a ref (and ties it to the body, S-115);
+    // a bare `newIntent()` here would be a hook minting per render again.
+    expect(code).toContain("from '@/features/shared/hooks/useIntent'");
+    expect(code).not.toMatch(/newIntent\(\)/);
+  });
 
-    // And every mutation hook must go through the shared helper.
+  it('sends every mutation through the intent, so a retry replays its key', async () => {
+    const source = await readFile(HOOKS, 'utf8');
+    const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+
     const mutationHooks = code.match(/export function use(Create|Cancel|Extend|SelfCheckIn)\w*/g);
     expect(mutationHooks).toHaveLength(4);
-    expect(source.match(/const intent = useIntent\(\)/g)).toHaveLength(4);
+    expect(code.match(/const intent = useIntent\(\)/g)).toHaveLength(4);
+    expect(code.match(/intent\.send\(/g)).toHaveLength(4);
   });
 
   it('demonstrates why a bare call in the hook body is wrong', () => {

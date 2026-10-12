@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
 
 import { useIntent } from '@/features/shared/hooks/useIntent';
+import { AlreadyAppliedError } from '@/features/shared/intent';
 
 import { createPaymentOrder, verifyPayment } from '../api/payments';
 import type { CheckoutResult } from '../checkout-html';
@@ -29,8 +30,8 @@ export type CheckoutPhase =
  * learnings.md records this exact bug from the booking flow, where it reserved
  * two slots).
  *
- * `reset()` on success, so the next booking starts a fresh intent rather than
- * replaying this one's stored response.
+ * `send` spends the key on success, so the next booking starts a fresh intent
+ * rather than replaying this one's stored response.
  *
  * **Two intents, not one.** Creating the order and confirming the payment are
  * different endpoints, and ADR-011 scopes a key to its endpoint — so one key
@@ -47,11 +48,28 @@ export function useCheckout(bookingId: string | undefined) {
   const [state, setState] = useState<CheckoutPhase>({ phase: 'idle' });
 
   const orderMutation = useMutation({
-    mutationFn: (id: string) => createPaymentOrder(id, orderIntent),
+    mutationFn: (id: string) =>
+      orderIntent.send(
+        { bookingId: id },
+        (key) => createPaymentOrder(id, key),
+        // The earlier order was created and its answer lost, and there is no
+        // read for it. An unpaid Razorpay order moves no money, so a fresh key
+        // asks for the order again rather than leaving Pay stuck on a 409.
+        () => createPaymentOrder(id, orderIntent.forBody({ bookingId: id })),
+      ),
   });
 
   const verifyMutation = useMutation({
-    mutationFn: (body: Parameters<typeof verifyPayment>[0]) => verifyPayment(body, verifyIntent),
+    mutationFn: async (body: Parameters<typeof verifyPayment>[0]): Promise<string> =>
+      verifyIntent.send(
+        body,
+        async (key) => (await verifyPayment(body, key)).bookingId,
+        // Already verified: the payment went through, and the booking id is ours.
+        () => {
+          if (bookingId === undefined) throw new AlreadyAppliedError();
+          return Promise.resolve(bookingId);
+        },
+      ),
   });
 
   /**
@@ -105,7 +123,7 @@ export function useCheckout(bookingId: string | undefined) {
           razorpaySignature: result.razorpaySignature,
         },
         {
-          onSuccess: (payment) => {
+          onSuccess: (paidBookingId) => {
             // Both intents are spent. A later booking mints fresh keys.
             orderIntent.reset();
             verifyIntent.reset();
@@ -113,7 +131,7 @@ export function useCheckout(bookingId: string | undefined) {
             // server, which is the only thing that knows whether the webhook
             // got there first.
             void queryClient.invalidateQueries({ queryKey: BOOKINGS_KEY });
-            setState({ phase: 'confirmed', bookingId: payment.bookingId });
+            setState({ phase: 'confirmed', bookingId: paidBookingId });
           },
           onError: () => {
             // Verification failed, but the webhook may still confirm this
