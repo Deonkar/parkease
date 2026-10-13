@@ -4,7 +4,7 @@
   "buildCommand": "cd ../.. && pnpm turbo run build --filter=@parkease/admin",
   "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://parkease-api.onrender.com/api/:path*" },
+    { "source": "/api/:path*", "destination": "https://parkease-api-yudq.onrender.com/api/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

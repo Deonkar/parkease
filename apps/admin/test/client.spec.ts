@@ -8,13 +8,12 @@ import { refreshOnce } from '../src/lib/session';
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
-const session = {
-  data: {
-    accessToken: 'tok',
-    expiresIn: 900,
-    user: { id: '0192f1c0-0000-7000-8000-000000000001', roles: ['admin'] },
-  },
-};
+// A JWT-shaped access token carrying the claims the panel reads; the refresh body is tokens only.
+const b64url = (value: object): string =>
+  btoa(JSON.stringify(value)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const TOKEN = `${b64url({ alg: 'HS256' })}.${b64url({ sub: '0192f1c0-0000-7000-8000-000000000001', roles: ['admin'] })}.sig`;
+
+const session = { data: { accessToken: TOKEN, expiresIn: 900 } };
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -44,7 +43,7 @@ describe('request', () => {
       vi.fn((url: string, init: RequestInit) => {
         calls.push(url);
         if (url.endsWith('/auth/admin/refresh')) return Promise.resolve(json(200, session));
-        const authorised = new Headers(init.headers).get('authorization') === 'Bearer tok';
+        const authorised = new Headers(init.headers).get('authorization') === `Bearer ${TOKEN}`;
         return Promise.resolve(
           authorised
             ? json(200, { data: { ok: true } })
