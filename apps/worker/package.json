@@ -26,7 +26,7 @@
   "devDependencies": {
     "@parkease/config": "workspace:*",
     "@parkease/testing": "workspace:*",
-    "tsx": "4.19.2",
+    "tsx": "4.23.15",
     "vitest": "3.2.7"
   }
 }
