@@ -57,3 +57,6 @@ apps/mobile/public/maplibre/
 # Playwright output
 test-results/
 playwright-report/
+
+# Firecrawl CLI scrape output (agent-side, never committed)
+.firecrawl/

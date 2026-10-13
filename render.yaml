@@ -1,0 +1,45 @@
+# Render Blueprint for the free demo (task 22). Deploys are triggered from CI after
+# migrations run (.github/workflows/deploy.yml), never on push and never at boot (R-DB-05).
+services:
+  - type: web
+    name: parkease-api
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile.demo
+    dockerContext: .
+    autoDeploy: false
+    # Render ignores the Dockerfile HEALTHCHECK.
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY_HOPS
+        value: '1'
+      - key: REDIS_URL
+        fromService: { type: keyvalue, name: parkease-cache, property: connectionString }
+      # Secrets are set in the dashboard, never committed (R-ENV-03).
+      - { key: DATABASE_URL, sync: false }
+      - { key: JWT_SECRET, sync: false }
+      - { key: BOOKING_QR_SECRET, sync: false }
+      - { key: ENCRYPTION_KEY, sync: false }
+      - { key: FIREBASE_PROJECT_ID, sync: false }
+      - { key: FIREBASE_CLIENT_EMAIL, sync: false }
+      - { key: FIREBASE_PRIVATE_KEY, sync: false }
+      - { key: RAZORPAY_KEY_ID, sync: false }
+      - { key: RAZORPAY_KEY_SECRET, sync: false }
+      - { key: RAZORPAY_WEBHOOK_SECRET, sync: false }
+      - { key: CLOUDINARY_CLOUD_NAME, sync: false }
+      - { key: CLOUDINARY_API_KEY, sync: false }
+      - { key: CLOUDINARY_API_SECRET, sync: false }
+      - { key: CORS_ALLOWED_ORIGINS, sync: false }
+      - { key: ADMIN_ORIGIN, sync: false }
+      - { key: OTEL_EXPORTER_OTLP_ENDPOINT, sync: false }
+
+  # Cache only (ADR-010): eviction and loss are survivable.
+  - type: keyvalue
+    name: parkease-cache
+    plan: free
+    region: singapore
+    maxmemoryPolicy: allkeys-lru
+    ipAllowList: []
