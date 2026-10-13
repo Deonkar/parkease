@@ -1,0 +1,26 @@
+import { CONTACT } from '@/lib/site';
+import { PRICING } from '@/lib/pricing';
+
+What happens to your money when a parking booking is cancelled, by you or by the space owner. The same rules are built into the app, so the refund it shows you is the refund you get.
+
+## When you cancel
+
+- **Before your start time:** a full refund, less a ₹{PRICING.refunds.processingFee} processing fee. If the booking cost less than ₹{PRICING.refunds.processingFee}, nothing is refunded and nothing more is charged.
+- **Within {PRICING.refunds.graceMinutes} minutes of your start time:** {PRICING.refunds.gracePercent}% of what you paid.
+- **More than {PRICING.refunds.graceMinutes} minutes after your start time:** no refund, because the space was held for you.
+
+## When the owner cancels
+
+A full refund, at any time, even in the middle of a booking. ParkEase also pays you ₹{PRICING.refunds.ownerCancelGoodwill} for the trouble. It is paid by ParkEase, never taken from the owner or anyone else. The same applies if ParkEase cancels a booking.
+
+## Valet call-outs
+
+If you are not there {PRICING.valet.noShowGraceMinutes} minutes after your valet arrives, the ₹{PRICING.valet.base} call-out fee is charged and the distance charge is not.
+
+## How refunds are paid
+
+Refunds go back to the payment method you used, through Razorpay. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer posuere erat a ante venenatis dapibus. The ₹{PRICING.refunds.ownerCancelGoodwill} goodwill payment is made separately from the refund. Sed posuere consectetur est at lobortis.
+
+## Questions
+
+Open the booking in the app for help with a specific refund, or email <a href={`mailto:${CONTACT.support}`}>{CONTACT.support}</a>.

@@ -12,14 +12,14 @@ RUN pnpm install --frozen-lockfile --filter @parkease/worker...
 
 FROM base AS build
 COPY --from=deps /app .
-COPY tsconfig.base.json .
+COPY tsconfig.base.json turbo.json .
 COPY packages/ packages/
 COPY apps/worker/ apps/worker/
 RUN pnpm turbo run build --filter=@parkease/worker...
 
-FROM node:24.9.0-alpine AS runtime
-WORKDIR /app
-COPY --from=build /app/apps/worker/dist ./dist
-COPY --from=build /app/node_modules ./node_modules
+# ponytail: workspace packages export raw .ts (exports -> src/index.ts), so the image keeps the
+# full build workspace and runs under tsx. Slim to `pnpm deploy --prod` once packages emit dist.
+FROM build AS runtime
+WORKDIR /app/apps/worker
 ENV NODE_ENV=production
-CMD ["node", "dist/main.js"]
+CMD ["node", "--import", "tsx", "dist/main.js"]

@@ -2,13 +2,17 @@ name: web
 on:
   push:
     branches: [main]
-    paths: ['apps/web/**', 'packages/**', 'pnpm-lock.yaml', 'turbo.json']
+    paths:
+      ['apps/web/**', 'packages/**', 'pnpm-lock.yaml', 'turbo.json', '.github/workflows/web.yml']
   pull_request:
-    paths: ['apps/web/**', 'packages/**', 'pnpm-lock.yaml', 'turbo.json']
+    paths:
+      ['apps/web/**', 'packages/**', 'pnpm-lock.yaml', 'turbo.json', '.github/workflows/web.yml']
 
 jobs:
   verify:
     runs-on: ubuntu-latest
+    env:
+      NEXT_TELEMETRY_DISABLED: 1
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
@@ -20,3 +24,20 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm turbo run lint typecheck test --filter=@parkease/web...
+      - run: pnpm --filter @parkease/web build
+
+      # SEO (metadata, JSON-LD, sitemap, robots, share image, 404s), then calculator, tabs, menu,
+      # keyboard and reduced motion, then axe and horizontal overflow on every page, at desktop
+      # and phone sizes.
+      - name: Install Playwright's Chromium
+        run: pnpm --filter @parkease/web exec playwright install --with-deps chromium
+      - name: Browser tests
+        run: pnpm --filter @parkease/web test:e2e
+
+      # A gate, not a report: Performance or SEO under 90, LCP or FCP over 2.5s, or CLS over 0.1
+      # fails the build (task 20 §20.11).
+      - name: Lighthouse CI
+        uses: treosh/lighthouse-ci-action@v12
+        with:
+          configPath: apps/web/lighthouserc.json
+          uploadArtifacts: true

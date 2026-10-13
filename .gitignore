@@ -50,3 +50,10 @@ graphify-out/
 
 # MapLibre web worker, copied from node_modules on install (apps/mobile/scripts/copy-maplibre-worker.mjs)
 apps/mobile/public/maplibre/
+
+# Lighthouse CI run output
+.lighthouseci/
+
+# Playwright output
+test-results/
+playwright-report/
