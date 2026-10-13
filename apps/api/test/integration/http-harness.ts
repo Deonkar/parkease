@@ -150,10 +150,14 @@ class StubAuthGuard implements CanActivate {
     ]);
     if (isPublic) return true;
 
-    if (actingAs.user === null) throw new UnauthorizedException('Authentication required.');
-
     const request = context.switchToHttp().getRequest<FastifyRequest & { user?: AuthUser }>();
-    request.user = actingAs.user;
+    // A per-request identity, for a stress test whose concurrent requests are different people;
+    // `actingAs` is one global and cannot say that. Test harness only.
+    const header = request.headers['x-test-user'];
+    const user = typeof header === 'string' ? (JSON.parse(header) as AuthUser) : actingAs.user;
+    if (user === null) throw new UnauthorizedException('Authentication required.');
+
+    request.user = user;
     return true;
   }
 }
