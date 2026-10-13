@@ -20,7 +20,7 @@ import {
 import { FlashList } from '@shopify/flash-list';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   FadeIn,
   useAnimatedStyle,
@@ -45,6 +45,7 @@ import {
   type SearchOrigin,
 } from '@/features/driver/hooks/useSearchFilters';
 import { useSpaceSearch } from '@/features/driver/hooks/useSpaceSearch';
+import { openAppSettings } from '@/lib/settings';
 
 /**
  * How many all-filtered-out pages to walk through before giving up and showing
@@ -253,7 +254,7 @@ export default function DriverDiscoveryScreen() {
           body="ParkEase needs your location to find parking spots near you."
           actionLabel="Enable in Settings"
           onAction={() => {
-            void Linking.openSettings();
+            void openAppSettings();
           }}
           secondaryActionLabel="Search Manually"
           onSecondaryAction={() => {

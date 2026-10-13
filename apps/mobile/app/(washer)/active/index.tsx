@@ -51,6 +51,7 @@ import { newIntent, type Intent } from '@/lib/api';
 import { assertNever } from '@/lib/assert-never';
 import { warn } from '@/lib/log';
 import { formatPaise } from '@/lib/money';
+import { openAppSettings } from '@/lib/settings';
 
 /** How often the elapsed bar re-reads the clock. It shows whole minutes. */
 const ELAPSED_TICK_MS = 30_000;
@@ -146,7 +147,7 @@ export default function WasherActiveScreen() {
               ? undefined
               : [
                   { text: 'Not now', style: 'cancel' },
-                  { text: 'Open Settings', onPress: () => void Linking.openSettings() },
+                  { text: 'Open Settings', onPress: () => void openAppSettings() },
                 ],
           );
           return;

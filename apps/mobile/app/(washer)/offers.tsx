@@ -6,7 +6,7 @@ import { FlashList } from '@shopify/flash-list';
 import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Alert, Linking, StyleSheet, Text, View } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 
 import { ReadableColumn } from '@/features/shared/components/ReadableColumn';
 import { RefreshNotice } from '@/features/shared/components/RefreshNotice';
@@ -36,6 +36,7 @@ import {
 } from '@/features/washer/verification-copy';
 import { newIntent, type Intent } from '@/lib/api';
 import { assertNever } from '@/lib/assert-never';
+import { openAppSettings } from '@/lib/settings';
 
 const VERIFY_LOCK = 'Verify your documents to accept jobs';
 
@@ -215,7 +216,7 @@ export default function WasherOffersScreen() {
       if (!copy.settings) return;
       Alert.alert(copy.title, copy.body, [
         { text: 'Not now', style: 'cancel' },
-        { text: 'Enable in Settings', onPress: () => void Linking.openSettings() },
+        { text: 'Enable in Settings', onPress: () => void openAppSettings() },
       ]);
     },
     [presence],

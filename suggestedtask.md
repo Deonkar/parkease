@@ -1069,6 +1069,9 @@ LogBox shows an uncaught error from FontFaceObserver (`entry.bundle`, the `D.pro
 after the driver home loads: a font-load promise rejects with nobody handling it. On the web build this is a
 red-screen in dev; it may also mean an icon font never finishes loading.
 
+- **Note (2026-10-13):** not reproduced — driver home on the web build stayed open for minutes with no
+  font timeout and no console error. Likely a slow first load of the icon font; nothing in the app loads
+  fonts explicitly yet (see S-95).
 - **Why deferred:** web-only, found while filming.
 - **Done means:** the font load that times out is identified, its rejection is handled (R-FAIL-01: logged at
   warn with context), and the icon font loads or falls back deliberately.
@@ -1213,31 +1216,6 @@ driver rating, so a read model would be maintained for no reader.
 - **Why deferred:** YAGNI until something gates on it (an owner auto-decline, a driver trust badge).
 - **Done means:** that consumer exists; `users` gains the rating pair with the same CHECK as
   `spaces_rating_read_model_check`, and the recompute writes it.
-
-### S-135 — "Enable in Settings" crashes the driver home on web
-
-- **Status:** `open`
-- **Found in:** task 17b visual check, 2026-10-05
-- **Surface:** mobile (web build) · `app/(driver)/index.tsx` location-denied state
-
-`Linking.openSettings` does not exist in react-native-web, so the button throws "Linking.default.openSettings
-is not a function" and red-screens the dev build.
-
-- **Why deferred:** web is not the shipping platform (ADR-023) and the crash predates 17b.
-- **Done means:** on web the button is hidden or opens the browser's site-settings help, with a test.
-
-### S-136 — Picking a place suggestion does nothing on web (driver home, denied-location state)
-
-- **Status:** `open`
-- **Found in:** task 17b visual check, 2026-10-05
-- **Surface:** mobile (web build) · `features/driver/components/PlaceSearchBar.tsx`
-
-The input's `onBlur` sets `focused=false` on mousedown, which unmounts the dropdown before the suggestion's
-press lands, so `onSelect` never fires and the screen stays on "Enable Location". A synthetic `click()` works.
-
-- **Why deferred:** predates 17b; needs a check that Android touch does not have the same race.
-- **Done means:** a suggestion tap selects on web and Android (keep the dropdown mounted until the press
-  settles, or select on press-in), with a test.
 
 ### S-137 — The owner reviews section was not opened in a running app
 

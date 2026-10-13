@@ -16,6 +16,7 @@ import { useActiveJob, useAdvanceJob } from '@/features/valet/hooks/useValetQuer
 import { newIntent, type Intent } from '@/lib/api';
 import { warn } from '@/lib/log';
 import { formatPaise } from '@/lib/money';
+import { openAppSettings } from '@/lib/settings';
 
 /** Events that may not fire until a proof photo is attached. */
 const PROOF_GATED = new Set(['confirm_parked']);
@@ -177,7 +178,7 @@ export default function ValetActiveScreen() {
         onToggle={() => {
           Alert.alert('Finish this job first', 'You can go offline once the car is delivered.');
         }}
-        onFix={() => void Linking.openSettings()}
+        onFix={() => void openAppSettings()}
       />
 
       {/* A failed refresh keeps the last job on screen, and says it is the last one (S-48). */}
