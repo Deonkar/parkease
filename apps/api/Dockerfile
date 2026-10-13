@@ -26,4 +26,6 @@ EXPOSE 3000
 # alpine has no curl
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD node -e "require('http').get({port:3000,path:'/api/v1/health'},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+# The image's unprivileged user: a compromised process can't rewrite the app or the system.
+USER node
 CMD ["node", "--import", "tsx", "dist/main.js"]

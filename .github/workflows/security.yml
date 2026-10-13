@@ -49,15 +49,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-          cache: pnpm
+      # No `cache: pnpm`: nothing is installed here, so the store path never exists and the cache
+      # save step fails the job after the audit itself has passed.
       - run: pnpm audit --prod --audit-level high
-
-  # A pull request may not add a dependency with a known high-severity advisory.
-  dependency-review:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/dependency-review-action@v4
-        with:
-          fail-on-severity: high

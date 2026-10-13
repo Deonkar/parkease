@@ -22,4 +22,6 @@ RUN pnpm turbo run build --filter=@parkease/worker...
 FROM build AS runtime
 WORKDIR /app/apps/worker
 ENV NODE_ENV=production
+# The image's unprivileged user: a compromised process can't rewrite the app or the system.
+USER node
 CMD ["node", "--import", "tsx", "dist/main.js"]
