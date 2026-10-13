@@ -88,21 +88,14 @@ describe('booking concurrency', () => {
   });
 
   /**
-   * Ten parallel attempts against three slots.
+   * Ten parallel attempts against three slots: exactly three win, on three distinct indexes.
    *
-   * The task file asks for "exactly three 201s and seven 409s". That is not
-   * reachable under ADR-007, and asserting it makes a flaky test: with no retry
-   * loop, several racers pick the same index and all but one of them loses, so
-   * the number of winners is *at most* the slot count and often fewer. The first
-   * version of this test asserted exactly three, passed once on scheduling luck,
-   * and failed on the next run with two.
-   *
-   * The ADR wins over the task file (governance chain), so what is asserted here
-   * is the invariant that actually holds and is the one worth holding: the space
-   * is never oversold, no two winners share a slot-instance, and every loser
-   * gets the same clean 409.
+   * Under the original ADR-007 this could only assert "at most three": racers all picked index 0
+   * and most lost. Allocation now takes turns per space (an advisory lock in
+   * `AvailabilityService.allocate`), so every caller sees the earlier winners and the count is
+   * exact. A run with fewer than three winners means the lock is gone.
    */
-  it('never oversells three slots, however many callers race for them', async () => {
+  it('sells exactly three slots to ten racing callers, never more', async () => {
     const spaceId = await seedSpace(h, { lat: 12.9345, lng: 77.6266, carSlots: 3 });
     const window = windowFromNow(3, 2);
 
@@ -115,11 +108,8 @@ describe('booking concurrency', () => {
     const won = results.filter((r) => r.status === 'fulfilled');
     const lost = results.filter((r) => r.status === 'rejected');
 
-    expect(won.length).toBeGreaterThanOrEqual(1);
-    // The assertion that would catch a real defect: more than three means the
-    // constraint let a fourth car into a three-car space.
-    expect(won.length).toBeLessThanOrEqual(3);
-    expect(won.length + lost.length).toBe(10);
+    expect(won).toHaveLength(3);
+    expect(lost).toHaveLength(7);
 
     for (const rejection of lost) {
       // Name the SQLSTATE under Drizzle's "Failed query" wrapper, so a loser that is not a
@@ -131,27 +121,15 @@ describe('booking concurrency', () => {
       ).toBeInstanceOf(SlotUnavailableError);
     }
 
-    expect(await heldSlots(spaceId)).toBe(won.length);
-
     // Every winner took a distinct index. The constraint is per slot-instance,
     // so two rows on index 0 would be the actual double-sell.
     const indexes = await h.sql<{ slot_index: number }[]>`
       SELECT slot_index FROM booking_slots
       WHERE space_id = ${spaceId} AND status = 'confirmed' ORDER BY slot_index
     `;
-    expect(new Set(indexes.map((r) => r.slot_index)).size).toBe(indexes.length);
-    expect(indexes.length).toBe(won.length);
+    expect(indexes.map((r) => r.slot_index)).toEqual([0, 1, 2]);
   });
 
-  /**
-   * Sequential, deliberately, and the reason is ADR-007's accepted cost rather
-   * than a weaker test. The SELECT picks the lowest free index but takes no lock,
-   * so two *concurrent* callers against a two-slot space can both pick index 0
-   * and one loses — a 409 even though index 1 was free. There is no retry loop by
-   * decision. Run back to back, the second caller sees the first row committed
-   * and moves to index 1, which is the property worth asserting: the constraint
-   * is per slot-instance, not per space.
-   */
   it('gives the next free index to a driver arriving after the first', async () => {
     const spaceId = await seedSpace(h, { lat: 12.9345, lng: 77.6266, carSlots: 2 });
     const driverB = await seedUser(h, 'driver');
@@ -164,27 +142,18 @@ describe('booking concurrency', () => {
     expect(await heldSlots(spaceId)).toBe(2);
   });
 
-  it('fails one of two concurrent callers even when another index was free', async () => {
+  it('gives two concurrent callers both slots of a two-slot space', async () => {
     const spaceId = await seedSpace(h, { lat: 12.9345, lng: 77.6266, carSlots: 2 });
     const driverB = await seedUser(h, 'driver');
     const window = windowFromNow(11, 2);
 
-    const results = await Promise.allSettled([
+    const [a, b] = await Promise.all([
       book(spaceId, h.driverId, window),
       book(spaceId, driverB, window),
     ]);
 
-    // This is ADR-007 written as an assertion, not a defect. Both callers can
-    // pick index 0 before either commits; the loser gets an instant, clearly
-    // worded 409 and "try again" is a fresh intent with a new Idempotency-Key.
-    // If this ever starts passing with two 201s, someone added a retry loop or a
-    // lock to the hottest write path in the system, and that is a decision to
-    // make deliberately rather than discover here.
-    const fulfilled = results.filter((r) => r.status === 'fulfilled');
-    expect(fulfilled.length).toBeGreaterThanOrEqual(1);
-    for (const rejection of results.filter((r) => r.status === 'rejected')) {
-      expect(rejection.reason).toBeInstanceOf(SlotUnavailableError);
-    }
+    // Before the per-space lock, one of these lost with a 409 while index 1 was free.
+    expect([a.slotIndex, b.slotIndex].sort()).toEqual([0, 1]);
   });
 
   it('lets two drivers take the same slot for non-overlapping windows', async () => {
@@ -261,26 +230,36 @@ describe('booking concurrency', () => {
   });
 
   /**
-   * The regression guard the task file asks for by name: drop the constraint and
-   * the double-sell becomes possible again. If someone "simplifies" migration
-   * 0005 away, this is the test that notices — every other assertion here would
-   * still pass by luck on an unloaded machine.
+   * The regression guard the task file asks for by name: the constraint, not the allocation
+   * lock, is what makes a double sale impossible. A slot row written outside `allocate` (a
+   * migration, a backfill, a future code path) gets no lock, so this writes one directly: refused
+   * while `booking_slots_no_overlap` exists, accepted the moment it is dropped. If someone
+   * "simplifies" migration 0005 away, this is the test that notices.
    */
   it('depends on booking_slots_no_overlap, and proves it', async () => {
     const spaceId = await seedSpace(h, { lat: 12.9345, lng: 77.6266, carSlots: 1 });
     const driverB = await seedUser(h, 'driver');
     const window = windowFromNow(9, 2);
+    const later = windowFromNow(20, 2);
+
+    await book(spaceId, h.driverId, window);
+    // A second booking, legitimately on a later window, whose slot row is then forged onto the
+    // first window by hand.
+    const other = await book(spaceId, driverB, later);
+    const forge = () => h.sql`
+      INSERT INTO booking_slots (booking_id, space_id, vehicle_type, slot_index, period, status)
+      VALUES (${other.booking.id}, ${spaceId}, 'car', 0,
+              tstzrange(${window.startsAt.toISOString()}::timestamptz,
+                        ${window.endsAt.toISOString()}::timestamptz, '[)'),
+              'confirmed')`;
+
+    await expect(forge()).rejects.toMatchObject({ code: '23P01' });
 
     await h.sql`ALTER TABLE booking_slots DROP CONSTRAINT booking_slots_no_overlap`;
     try {
-      const results = await Promise.allSettled([
-        book(spaceId, h.driverId, window),
-        book(spaceId, driverB, window),
-      ]);
-      // Without the constraint, nothing in the write path can stop the second
-      // insert: both SELECTs see index 0 free and both INSERTs succeed.
-      expect(results.filter((r) => r.status === 'fulfilled').length).toBeGreaterThan(1);
-      expect(await heldSlots(spaceId)).toBeGreaterThan(1);
+      // Without the constraint nothing stops it: index 0 is now sold twice for one window.
+      await forge();
+      expect(await heldSlots(spaceId)).toBe(3);
     } finally {
       await h.sql`TRUNCATE booking_slots, bookings CASCADE`;
       await h.sql`
