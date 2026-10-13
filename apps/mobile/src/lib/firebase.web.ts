@@ -1,3 +1,4 @@
+import { DEMO_TOKEN_PREFIX } from '@parkease/contracts/public';
 import { initializeApp } from 'firebase/app';
 import {
   type ConfirmationResult,
@@ -16,11 +17,19 @@ const config = {
 
 const auth = config.apiKey === '' ? null : getAuth(initializeApp(config));
 
+// The public web demo: no SMS; the API accepts `demo:<phone>` for its fixed demo accounts only.
+const DEMO = process.env.EXPO_PUBLIC_DEMO_MODE === 'true';
+
 let recaptcha: RecaptchaVerifier | null = null;
 let pending: ConfirmationResult | null = null;
 let devPhone: string | null = null;
+let demoPhone: string | null = null;
 
 export async function requestOtp(e164Phone: string): Promise<void> {
+  if (DEMO) {
+    demoPhone = e164Phone;
+    return;
+  }
   if (auth === null) {
     // Same contract as native: the dev mock exists only in development.
     if (__DEV__) {
@@ -38,6 +47,7 @@ export async function requestOtp(e164Phone: string): Promise<void> {
 }
 
 export async function confirmOtp(code: string): Promise<string> {
+  if (demoPhone !== null) return `${DEMO_TOKEN_PREFIX}${demoPhone}`;
   if (devPhone !== null) {
     const token = `dev-mock-token-${devPhone}`;
     devPhone = null;

@@ -7,6 +7,11 @@ on:
     types: [completed]
     branches: [main]
   workflow_dispatch:
+    inputs:
+      seed:
+        description: Load the demo accounts and Bangalore fixtures (once; the dev seed is not re-run safe)
+        type: boolean
+        default: false
 
 # api and worker can both finish for one push; the later run supersedes the earlier.
 concurrency:
@@ -47,5 +52,10 @@ jobs:
         run: pnpm install --frozen-lockfile --filter @parkease/db...
       - if: steps.gate.outputs.ready == 'true'
         run: pnpm db:migrate
+      - if: steps.gate.outputs.ready == 'true' && inputs.seed
+        run: pnpm db:seed:bootstrap && pnpm db:seed:dev
+        env:
+          # The demo admin (DEMO_ACCOUNTS in packages/contracts/src/public/demo.ts).
+          BOOTSTRAP_ADMIN_PHONE: '+919900000005'
       - if: steps.gate.outputs.ready == 'true'
         run: curl --fail --silent --show-error -X POST "$RENDER_DEPLOY_HOOK"

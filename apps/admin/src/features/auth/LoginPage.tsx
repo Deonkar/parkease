@@ -1,3 +1,4 @@
+import { DEMO_ACCOUNTS, DEMO_TOKEN_PREFIX } from '@parkease/contracts/public';
 import { useNavigate } from '@tanstack/react-router';
 import { Alert, Button, Card, Form, Input, Typography } from 'antd';
 import { initializeApp } from 'firebase/app';
@@ -19,7 +20,11 @@ const firebaseConfig = {
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID ?? '',
 };
 
-const auth = FIXTURES ? null : getAuth(initializeApp(firebaseConfig));
+// The public demo (VITE_DEMO_MODE): no Firebase; the API accepts the demo admin's demo token.
+const DEMO = import.meta.env.VITE_DEMO_MODE === 'true';
+const DEMO_ADMIN_TOKEN = `${DEMO_TOKEN_PREFIX}${DEMO_ACCOUNTS.find((a) => a.role === 'admin')?.phone ?? ''}`;
+
+const auth = FIXTURES || DEMO ? null : getAuth(initializeApp(firebaseConfig));
 
 /** Indian mobile, typed with or without +91 and spaces. */
 const toE164 = (raw: string): string | null => {
@@ -42,6 +47,18 @@ export function LoginPage() {
   const sendCode = async ({ phone }: { phone: string }) => {
     setError(null);
     if (FIXTURES) return finish((fixtureSignIn(), true));
+    if (DEMO) {
+      setBusy(true);
+      try {
+        await finish(await exchangeIdToken(DEMO_ADMIN_TOKEN));
+      } catch (err: unknown) {
+        reportError('Demo sign-in failed', err);
+        setError('The demo could not sign in. Try again in a minute.');
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     const e164 = toE164(phone);
     if (e164 === null || auth === null) {
       setError('Enter a 10-digit Indian mobile number.');
@@ -84,7 +101,11 @@ export function LoginPage() {
         {error ? (
           <Alert type="error" showIcon message={error} style={{ marginBottom: 16 }} />
         ) : null}
-        {confirmation === null ? (
+        {DEMO ? (
+          <Button type="primary" block loading={busy} onClick={() => void sendCode({ phone: '' })}>
+            Enter the demo as admin
+          </Button>
+        ) : confirmation === null ? (
           <Form layout="vertical" onFinish={(v: { phone: string }) => void sendCode(v)}>
             <Form.Item label="Mobile number" name="phone" rules={[{ required: true }]}>
               <Input prefix="+91" inputMode="tel" autoComplete="tel-national" autoFocus />

@@ -5,7 +5,9 @@ home; owners earn from empty driveways and basements; valets and car washers pic
 Five roles (driver, owner, valet, washer, admin), one Android app, an API, a job worker, an admin
 panel and a marketing site — built solo, at zero recurring cost.
 
-**Live:** [parkease-web-navy.vercel.app](https://parkease-web-navy.vercel.app) (marketing site) ·
+**Live:** [marketing site](https://parkease-web-navy.vercel.app) ·
+[app demo](https://parkease-app-six.vercel.app) (tap a role, any 6-digit code) ·
+[admin demo](https://parkease-admin.vercel.app) ·
 **Build log:** [dev.to/rakno](https://dev.to/rakno) · **Videos:** [below](#videos)
 
 <p>
@@ -25,16 +27,16 @@ panel and a marketing site — built solo, at zero recurring cost.
 
 ## By the numbers
 
-|              |                                                                                                                  |
-| ------------ | ---------------------------------------------------------------------------------------------------------------- |
-| Built        | 5 weeks, 29 merged PRs (Sep 10 – Oct 13, 2026)                                                                   |
-| Code         | ~86k lines of TypeScript across 5 apps and 6 packages                                                            |
-| API          | 130 HTTP routes in 38 role-scoped controllers, 21 idempotent background jobs                                     |
-| Database     | 58 hand-written SQL migrations, PostgreSQL 18 + PostGIS 3.6                                                      |
-| Mobile       | 52 screens, Android-only, New Architecture                                                                       |
-| Tests        | 3,246 unit tests across 8 packages, plus 55 integration suites on real Postgres (Testcontainers), Playwright E2E |
-| Decisions    | 34 architecture decision records                                                                                 |
-| Running cost | ₹0/month — every service on a free tier; the only spend is Google Play's $25 one-time fee                        |
+|              |                                                                                                    |
+| ------------ | -------------------------------------------------------------------------------------------------- |
+| Built        | 5 weeks, 29 merged PRs (Sep 10 – Oct 13, 2026)                                                     |
+| Code         | ~86k lines of TypeScript across 5 apps and 6 packages                                              |
+| API          | 130 HTTP routes in 38 role-scoped controllers, 21 idempotent background jobs                       |
+| Database     | 58 hand-written SQL migrations, PostgreSQL 18 + PostGIS 3.6                                        |
+| Mobile       | 52 screens, Android-only, New Architecture                                                         |
+| Tests        | 3,246 unit + 1,080 integration tests on real PostgreSQL + PostGIS (Testcontainers), Playwright E2E |
+| Decisions    | 34 architecture decision records                                                                   |
+| Running cost | ₹0/month — every service on a free tier; the only spend is Google Play's $25 one-time fee          |
 
 **Measured, and asserted in CI so they cannot regress:**
 
@@ -122,6 +124,10 @@ Free tiers only. The API and the worker run as two processes in one Render free 
 (`Dockerfile.demo`, `render.yaml`); CI runs migrations and then calls Render's deploy hook
 (`.github/workflows/deploy.yml`), so migrations never run at boot. The admin panel, the mobile web
 build and this marketing site deploy to Vercel. Android release builds run locally through Gradle.
+
+The public demo runs with `DEMO_MODE=true`: Firebase, Razorpay and Cloudinary are not connected,
+sign-in is limited to five seeded demo accounts (no OTP is sent), and payments and photo uploads
+are disabled. Data is the Bangalore test seed.
 
 ## Notes
 

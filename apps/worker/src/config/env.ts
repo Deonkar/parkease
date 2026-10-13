@@ -1,3 +1,5 @@
+import { randomBytes } from 'node:crypto';
+
 import { z } from 'zod';
 
 const envSchema = z.object({
@@ -20,8 +22,19 @@ const envSchema = z.object({
 
 export type WorkerEnv = z.infer<typeof envSchema>;
 
+/**
+ * The free public demo (task 22, the API's DEMO_MODE): no Razorpay account exists, so refunds
+ * and payouts fail through their normal failure paths. The secret is random per boot.
+ */
+const demoCredentials = () => ({
+  RAZORPAY_KEY_ID: 'demo-disabled',
+  RAZORPAY_KEY_SECRET: randomBytes(32).toString('hex'),
+});
+
 function loadEnv(): WorkerEnv {
-  const parsed = envSchema.safeParse(process.env);
+  const source =
+    process.env['DEMO_MODE'] === 'true' ? { ...demoCredentials(), ...process.env } : process.env;
+  const parsed = envSchema.safeParse(source);
   if (parsed.success) return parsed.data;
 
   const problems = parsed.error.issues
