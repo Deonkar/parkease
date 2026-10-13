@@ -41,7 +41,7 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - if: steps.gate.outputs.ready == 'true'
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with: { version: 9.15.4 }
       - if: steps.gate.outputs.ready == 'true'
         uses: actions/setup-node@v4
