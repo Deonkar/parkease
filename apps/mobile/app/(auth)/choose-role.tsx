@@ -57,7 +57,11 @@ export default function ChooseRoleScreen() {
   const handleSelect = async (role: Role) => {
     setLoading(true);
     try {
-      await auth.switchRole(role);
+      // A role this account does not hold yet is taken on, not switched to (S-149). Drivers
+      // are every account's starting role.
+      const held = auth.status === 'authenticated' && auth.roles.includes(role);
+      if (held || role === Role.DRIVER || role === Role.ADMIN) await auth.switchRole(role);
+      else await auth.addRole(role);
     } catch {
       Alert.alert('Error', 'Failed to set your role. Please try again.');
     } finally {

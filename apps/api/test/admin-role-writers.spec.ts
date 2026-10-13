@@ -29,6 +29,12 @@ const ALLOWED_WRITERS: ReadonlyArray<{
     expectWrite: true,
   },
   {
+    file: 'apps/api/src/domains/identity/commands/self-serve-role.command.ts',
+    reason:
+      'S-149 self-serve: owner, valet or washer for the caller only, never admin (the schema is a closed enum without it); audited.',
+    expectWrite: true,
+  },
+  {
     file: 'apps/api/src/domains/identity/commands/revoke-role.command.ts',
     reason: 'The admin revoke: suspends a role, audited with the reason.',
     expectWrite: true,

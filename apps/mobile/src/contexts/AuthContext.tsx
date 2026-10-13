@@ -1,6 +1,12 @@
 import { type Role } from '@parkease/contracts/enums';
+import {
+  type RoleSession,
+  roleSessionSchema,
+  type SelfServeRole,
+} from '@parkease/contracts/shared';
 import { router } from 'expo-router';
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { z } from 'zod';
 
 import { clearOnboarded } from '@/features/shared/hooks/useHasOnboarded';
 import { deactivateRegisteredPushToken } from '@/features/shared/notifications/push';
@@ -13,9 +19,13 @@ import { clearSessionScopedStorage } from '@/lib/session-storage';
 import { disconnectAll } from '@/lib/socket';
 import { uuidv7 } from '@/lib/uuid';
 
+/** A role change answers the new session, its roles and the active one (S-149). */
+const roleSessionEnvelope = z.object({ data: roleSessionSchema });
+
 interface AuthMethods {
   signOut: () => Promise<void>;
   switchRole: (role: Role) => Promise<void>;
+  addRole: (role: SelfServeRole['role']) => Promise<void>;
   setAuthenticated: (roles: readonly Role[], activeRole: Role | null) => void;
 }
 
@@ -79,37 +89,71 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     router.replace('/');
   }, []);
 
-  const switchRole = useCallback(async (role: Role) => {
-    const session = await secureStorage.read();
-
-    if (__DEV__ && !session) {
-      await secureStorage.write({
-        accessToken: `dev-mock-access-${String(Date.now())}`,
-        refreshToken: `dev-mock-refresh-${String(Date.now())}`,
-        roles: [role],
-        activeRole: role,
-      });
-      queryClient.clear();
-      setState({ status: 'authenticated', roles: [role], activeRole: role });
-      router.replace(landingRouteFor(role));
-      return;
-    }
-
-    const { data } = await api.post<{
-      data: { accessToken: string; refreshToken: string; activeRole: Role };
-    }>('/me/roles/active', { role }, { headers: { 'Idempotency-Key': uuidv7() } });
+  /** Stores a role session and lands in its role: shared by a switch and a new role. */
+  const enterSession = useCallback(async (session: RoleSession) => {
     await secureStorage.write({
-      accessToken: data.data.accessToken,
-      refreshToken: data.data.refreshToken,
-      roles: session?.roles ?? [],
-      activeRole: data.data.activeRole,
+      accessToken: session.accessToken,
+      refreshToken: session.refreshToken,
+      roles: session.roles,
+      activeRole: session.activeRole,
     });
     queryClient.clear();
-    setState((prev) =>
-      prev.status === 'authenticated' ? { ...prev, activeRole: data.data.activeRole } : prev,
-    );
-    router.replace(landingRouteFor(data.data.activeRole));
+    setState({ status: 'authenticated', roles: session.roles, activeRole: session.activeRole });
+    router.replace(landingRouteFor(session.activeRole));
   }, []);
+
+  /** Takes on owner, valet or washer and switches into it (S-149). */
+  const addRole = useCallback(
+    async (role: SelfServeRole['role']) => {
+      if (__DEV__ && !(await secureStorage.read())) {
+        // The dev-mock preview has no server to grant with; it switches straight in.
+        await secureStorage.write({
+          accessToken: `dev-mock-access-${String(Date.now())}`,
+          refreshToken: `dev-mock-refresh-${String(Date.now())}`,
+          roles: [role],
+          activeRole: role,
+        });
+        queryClient.clear();
+        setState({ status: 'authenticated', roles: [role], activeRole: role });
+        router.replace(landingRouteFor(role));
+        return;
+      }
+      const response = await api.post<unknown>(
+        '/me/roles',
+        { role },
+        { headers: { 'Idempotency-Key': uuidv7() } },
+      );
+      await enterSession(roleSessionEnvelope.parse(response.data).data);
+    },
+    [enterSession],
+  );
+
+  const switchRole = useCallback(
+    async (role: Role) => {
+      const session = await secureStorage.read();
+
+      if (__DEV__ && !session) {
+        await secureStorage.write({
+          accessToken: `dev-mock-access-${String(Date.now())}`,
+          refreshToken: `dev-mock-refresh-${String(Date.now())}`,
+          roles: [role],
+          activeRole: role,
+        });
+        queryClient.clear();
+        setState({ status: 'authenticated', roles: [role], activeRole: role });
+        router.replace(landingRouteFor(role));
+        return;
+      }
+
+      const response = await api.post<unknown>(
+        '/me/roles/active',
+        { role },
+        { headers: { 'Idempotency-Key': uuidv7() } },
+      );
+      await enterSession(roleSessionEnvelope.parse(response.data).data);
+    },
+    [enterSession],
+  );
 
   const setAuthenticated = useCallback((roles: readonly Role[], activeRole: Role | null) => {
     setState({ status: 'authenticated', roles, activeRole });
@@ -120,7 +164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [signOut]);
 
   return (
-    <AuthContext.Provider value={{ ...state, signOut, switchRole, setAuthenticated }}>
+    <AuthContext.Provider value={{ ...state, signOut, switchRole, addRole, setAuthenticated }}>
       {children}
     </AuthContext.Provider>
   );

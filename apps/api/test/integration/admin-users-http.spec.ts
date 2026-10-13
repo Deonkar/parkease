@@ -611,7 +611,7 @@ describe('admin users HTTP', () => {
       expect(await roleRow(id, 'admin')).toBeUndefined();
     });
 
-    it('there is no self-service endpoint that grants a role at all', async () => {
+    it('the self-serve endpoint refuses admin at the schema, and nothing is written (S-149)', async () => {
       const id = await seedUser(h, 'driver');
       actingAs.user = { id, roles: ['driver'], activeRole: 'driver' };
 
@@ -622,8 +622,81 @@ describe('admin users HTTP', () => {
         headers: { 'idempotency-key': crypto.randomUUID() },
       });
 
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(400);
+      expect(errorCode(res)).toBe('VALIDATION_FAILED');
       expect(await roleRow(id, 'admin')).toBeUndefined();
+    });
+  });
+
+  /** S-149: a person takes on owner, valet or washer themselves, and lands in that role. */
+  describe('self-serve roles', () => {
+    const addRole = (role: string) =>
+      http.request({
+        method: 'POST',
+        url: '/api/v1/me/roles',
+        payload: { role },
+        headers: { 'idempotency-key': crypto.randomUUID() },
+      });
+    const session = (res: { body: unknown }) =>
+      (res.body as { data: { roles: string[]; activeRole: string; accessToken: string } }).data;
+
+    it('opens owner for the caller, switches into it, and audits it as their own', async () => {
+      const id = await seedUser(h, 'driver');
+      actingAs.user = { id, roles: ['driver'], activeRole: 'driver' };
+
+      const res = await addRole('owner');
+
+      expect(res.status).toBe(200);
+      expect(session(res)).toMatchObject({ activeRole: 'owner' });
+      expect([...session(res).roles].sort()).toEqual(['driver', 'owner']);
+      expect(session(res).accessToken.length).toBeGreaterThan(20);
+      expect((await roleRow(id, 'owner'))?.status).toBe('active');
+      const audit = await h.sql<{ actor_user_id: string; action: string }[]>`
+        SELECT actor_user_id, action FROM audit_log
+        WHERE target_id = ${id} AND action = 'user.role.self-grant'`;
+      expect(audit).toEqual([{ actor_user_id: id, action: 'user.role.self-grant' }]);
+    });
+
+    it('opens valet with the profile still to verify, and is idempotent', async () => {
+      const id = await seedUser(h, 'driver');
+      actingAs.user = { id, roles: ['driver'], activeRole: 'driver' };
+
+      expect((await addRole('valet')).status).toBe(200);
+      expect((await addRole('valet')).status).toBe(200);
+
+      expect((await roleRow(id, 'valet'))?.status).toBe('active');
+      const audit = await h.sql`
+        SELECT 1 FROM audit_log WHERE target_id = ${id} AND action = 'user.role.self-grant'`;
+      expect(audit).toHaveLength(1);
+    });
+
+    it('never reopens a role the platform suspended: 403 ROLE_SUSPENDED', async () => {
+      const id = await seedUser(h, 'driver');
+      await h.sql`INSERT INTO user_roles (user_id, role, status) VALUES (${id}, 'washer', 'suspended')`;
+      actingAs.user = { id, roles: ['driver'], activeRole: 'driver' };
+
+      const res = await addRole('washer');
+
+      expect(res.status).toBe(403);
+      expect(errorCode(res)).toBe('ROLE_SUSPENDED');
+      expect((await roleRow(id, 'washer'))?.status).toBe('suspended');
+    });
+
+    it('switching roles answers the roles and the active one, which the app reads', async () => {
+      const id = await seedUser(h, 'driver');
+      await h.sql`INSERT INTO user_roles (user_id, role) VALUES (${id}, 'owner')`;
+      actingAs.user = { id, roles: ['driver', 'owner'], activeRole: 'driver' };
+
+      const res = await http.request({
+        method: 'POST',
+        url: '/api/v1/me/roles/active',
+        payload: { role: 'owner' },
+        headers: { 'idempotency-key': crypto.randomUUID() },
+      });
+
+      expect(res.status).toBe(200);
+      expect(session(res).activeRole).toBe('owner');
+      expect([...session(res).roles].sort()).toEqual(['driver', 'owner']);
     });
   });
 });

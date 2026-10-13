@@ -155,6 +155,8 @@ export const RATE_LIMIT_POLICIES: Readonly<Record<string, RateLimitPolicy>> = {
   'GET /api/v1/owner/spaces': { limit: 60, windowSeconds: 60, keyBy: 'user' },
   'POST /api/v1/uploads': { limit: 20, windowSeconds: 60, keyBy: 'user' },
   'POST /api/v1/me/roles/active': { limit: 10, windowSeconds: 60, keyBy: 'user' },
+  // S-149: taking on a role is rare; a burst is a script, not a person.
+  'POST /api/v1/me/roles': { limit: 5, windowSeconds: 60, keyBy: 'user' },
 
   // Surge admin (task 10 §10.4). Tighter than `ADMIN:*` in both directions, and
   // for different reasons.

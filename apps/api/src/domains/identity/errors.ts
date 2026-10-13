@@ -76,3 +76,14 @@ export class LastAdminError extends IdentityDomainError {
     );
   }
 }
+
+/** A self-serve role the platform took away (S-149): only an admin may give it back. */
+export class RoleSuspendedError extends IdentityDomainError {
+  constructor() {
+    super(
+      'ROLE_SUSPENDED',
+      'That role was suspended on your account. Contact support to have it reviewed.',
+      HttpStatus.FORBIDDEN,
+    );
+  }
+}

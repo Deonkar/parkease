@@ -17,6 +17,7 @@ import { CreateSessionCommand } from '../../src/domains/identity/commands/create
 import { GrantRoleCommand } from '../../src/domains/identity/commands/grant-role.command.js';
 import { ReviewPartnerCommand } from '../../src/domains/identity/commands/review-partner.command.js';
 import { RevokeRoleCommand } from '../../src/domains/identity/commands/revoke-role.command.js';
+import { SelfServeRoleCommand } from '../../src/domains/identity/commands/self-serve-role.command.js';
 import { SetUserStatusCommand } from '../../src/domains/identity/commands/set-user-status.command.js';
 import { SwitchRoleCommand } from '../../src/domains/identity/commands/switch-role.command.js';
 import { PartnerQueries } from '../../src/domains/identity/partner.queries.js';
@@ -253,6 +254,7 @@ class StubAuthGuard implements CanActivate {
     RoleRepository,
     UserRepository,
     SwitchRoleCommand,
+    SelfServeRoleCommand,
     CreateSessionCommand,
     // The admin user commands and queries are provided directly, like SwitchRoleCommand above:
     // none of them needs the verifier, so IdentityModule stays out of this test module.
