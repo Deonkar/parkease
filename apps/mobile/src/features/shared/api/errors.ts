@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { AlreadyAppliedError, REQUEST_ALREADY_APPLIED } from '../intent';
+
 /**
  * The API's error envelope: `{ error: { code, message, traceId } }`.
  *
@@ -46,6 +48,14 @@ const UNKNOWN_FAILURE: ApiFailure = {
  */
 export function toApiFailure(error: unknown): ApiFailure {
   if (typeof error !== 'object' || error === null) return UNKNOWN_FAILURE;
+  if (error instanceof AlreadyAppliedError) {
+    return {
+      code: REQUEST_ALREADY_APPLIED,
+      message: error.message,
+      traceId: undefined,
+      status: 409,
+    };
+  }
 
   const axiosLike = error as {
     response?: { status?: number; data?: unknown };

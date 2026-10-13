@@ -100,7 +100,7 @@ async function seedJob(opts: SeedJobOptions): Promise<string> {
     INSERT INTO wash_jobs (
       booking_id, driver_user_id, washer_user_id, status,
       service_name, vehicle_type, space_location, price_paise, commission_rate,
-      txn_id, offer_radius_m, offer_round, before_photo_id, after_photo_id
+      txn_id, offer_radius_m, offer_round, before_photo_id, after_photo_id, completed_at
     )
     VALUES (
       ${bookingId}, ${driverId}, ${assigned}, ${opts.status},
@@ -110,7 +110,8 @@ async function seedJob(opts: SeedJobOptions): Promise<string> {
       ${assigned === null ? null : pg.sql`uuidv7()`},
       ${opts.offerRadiusM ?? WASH_OFFER_RADII_M[0]}, ${opts.offerRound ?? 0},
       ${opts.status === 'washing' || opts.status === 'completed' ? 'wash/before/x' : null},
-      ${opts.status === 'completed' ? 'wash/after/x' : null}
+      ${opts.status === 'completed' ? 'wash/after/x' : null},
+      ${opts.status === 'completed' ? pg.sql`now()` : null}
     )
     RETURNING id
   `;

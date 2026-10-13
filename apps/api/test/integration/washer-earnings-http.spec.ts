@@ -10,6 +10,7 @@ import {
   seedBooking,
   seedSpace,
   seedUser,
+  registerUploads,
   startHarness,
   stopHarness,
 } from './harness.js';
@@ -128,8 +129,9 @@ const advance = (jobId: string, washerId: string, event: string) => {
   });
 };
 
-const attachPhoto = (jobId: string, washerId: string, slot: 'before' | 'after') => {
+const attachPhoto = async (jobId: string, washerId: string, slot: 'before' | 'after') => {
   asUser(washerId, ['washer']);
+  await registerUploads(h, washerId, `parkease/proofs/${slot}-abc123`);
   return http.request({
     method: 'POST',
     url: `/api/v1/washer/jobs/${jobId}/${slot}-photo`,
@@ -377,6 +379,25 @@ describe('GET /washer/earnings — period filter and per-job lines', () => {
  * its parse answered 400, blaming the partner's phone. Now it fails loudly, as
  * the server fault it is.
  */
+describe('GET /washer/earnings — line order (S-58)', () => {
+  it('orders two jobs completed in the same instant the same way on every read', async () => {
+    const washerId = await seedWasher();
+    const first = await completeAJob(washerId, 1);
+    const second = await completeAJob(washerId, 2);
+    await h.sql`UPDATE wash_jobs SET completed_at = date_trunc('second', now())
+                WHERE id IN (${first}, ${second})`;
+
+    const ids = async () =>
+      dataOf<{ lines: { jobId: string }[] }>(
+        (await earnings(washerId, '?period=all')).body,
+      ).lines.map((l) => l.jobId);
+
+    const expected = [first, second].sort().reverse();
+    expect(await ids()).toEqual(expected);
+    expect(await ids()).toEqual(expected);
+  });
+});
+
 describe('GET /washer/earnings — a missing posting fails loudly', () => {
   it('answers 500 INTERNAL_ERROR, never a ₹0 line, for a completed job with no posting', async () => {
     const washerId = await seedWasher();

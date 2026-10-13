@@ -38,6 +38,7 @@ export default defineConfig({
       RAZORPAY_KEY_ID: 'rzp_test_fake0000000000',
       RAZORPAY_KEY_SECRET: 'fakesecretfakesecret00',
       RAZORPAY_WEBHOOK_SECRET: 'fake_webhook_secret_000',
+      RAZORPAYX_WEBHOOK_SECRET: 'fake_payout_webhook_secret_000',
       CLOUDINARY_CLOUD_NAME: 'test-cloud',
       CLOUDINARY_API_KEY: '000000000000000',
       CLOUDINARY_API_SECRET: 'fake_cloudinary_secret_000',

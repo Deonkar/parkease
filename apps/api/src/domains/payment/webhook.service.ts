@@ -1,14 +1,22 @@
 import { createHash } from 'node:crypto';
 
-import { Injectable, UnprocessableEntityException } from '@nestjs/common';
+import { Inject, Injectable, UnprocessableEntityException } from '@nestjs/common';
 import {
+  PAYOUT_APPLY_STATUS_JOB,
   RAZORPAY_WEBHOOK_PATH,
+  RAZORPAYX_WEBHOOK_PATH,
   type RazorpayWebhookPayload,
   razorpayWebhookPayloadSchema,
+  razorpayxWebhookPayloadSchema,
 } from '@parkease/contracts/public';
 
+import { env } from '../../platform/config/env.schema.js';
+import { DB, type Database } from '../../platform/db/db.module.js';
+import { withTransaction } from '../../platform/db/transaction.js';
+import { idempotencyClaim } from '../../platform/idempotency/claim-context.js';
 import { IdempotencyService } from '../../platform/idempotency/idempotency.service.js';
 import { logger } from '../../platform/observability/logger.js';
+import { OutboxService } from '../../platform/outbox/outbox.service.js';
 import { ApplyRouteStatusCommand } from '../payout/commands/apply-route-status.command.js';
 import { toRouteStatus } from '../payout/route.client.js';
 
@@ -23,12 +31,15 @@ export interface IncomingWebhook {
   readonly eventId: unknown;
 }
 
-/** The endpoint string the idempotency table's public-scope CHECK matches on. */
+/** The endpoint strings the idempotency table's public-scope CHECK matches on. */
 const WEBHOOK_ENDPOINT = `POST ${RAZORPAY_WEBHOOK_PATH}`;
+const PAYOUT_WEBHOOK_ENDPOINT = `POST ${RAZORPAYX_WEBHOOK_PATH}`;
 
 @Injectable()
 export class WebhookService {
   constructor(
+    @Inject(DB) private readonly db: Database,
+    private readonly outbox: OutboxService,
     private readonly verification: VerificationService,
     private readonly idempotency: IdempotencyService,
     private readonly confirmPayment: ConfirmPaymentCommand,
@@ -46,7 +57,11 @@ export class WebhookService {
    * of our code paths runs before we know who they are.
    */
   async handle(input: IncomingWebhook): Promise<void> {
-    this.verification.verifyWebhookSignature(input.rawBody, input.signature);
+    this.verification.verifyWebhookSignature(
+      input.rawBody,
+      input.signature,
+      env.RAZORPAY_WEBHOOK_SECRET,
+    );
 
     // Safe to parse now: the bytes are provably Razorpay's. `rawBody` is defined
     // here — verification throws otherwise — but narrowing it explicitly beats
@@ -54,7 +69,52 @@ export class WebhookService {
     const rawBody = input.rawBody ?? Buffer.alloc(0);
     const event = razorpayWebhookPayloadSchema.parse(JSON.parse(rawBody.toString('utf8')));
 
-    const eventId = this.dedupKey(input.eventId, event.id, rawBody);
+    await this.once(WEBHOOK_ENDPOINT, input.eventId, event, rawBody, (eventId) =>
+      this.dispatch(event, eventId),
+    );
+  }
+
+  /**
+   * RazorpayX's payout events (S-102): the same order — signature under RazorpayX's own secret,
+   * schema, dedup — and one effect, an outbox message the worker applies with the same
+   * transitions as the daily reconcile. The worker, not this request, holds the payout rules.
+   */
+  async handlePayout(input: IncomingWebhook): Promise<void> {
+    this.verification.verifyWebhookSignature(
+      input.rawBody,
+      input.signature,
+      env.RAZORPAYX_WEBHOOK_SECRET,
+    );
+    const rawBody = input.rawBody ?? Buffer.alloc(0);
+    const event = razorpayxWebhookPayloadSchema.parse(JSON.parse(rawBody.toString('utf8')));
+
+    await this.once(PAYOUT_WEBHOOK_ENDPOINT, input.eventId, event, rawBody, async () => {
+      if (event.event === 'unhandled') {
+        logger.info({ event: event.rawEvent }, 'unhandled razorpayx event');
+        return;
+      }
+      const payout = event.payload.payout.entity;
+      await withTransaction(this.db, (tx) =>
+        this.outbox.enqueue(tx, {
+          type: PAYOUT_APPLY_STATUS_JOB,
+          payload: { razorpayPayoutId: payout.id, status: payout.status },
+        }),
+      );
+    });
+  }
+
+  /** Claims the delivery, runs `effect` inside the claim, and stores or releases it. */
+  private async once(
+    endpoint: string,
+    header: unknown,
+    event: { readonly id?: string | undefined; readonly event: string },
+    rawBody: Buffer,
+    effect: (eventId: string) => Promise<void>,
+  ): Promise<void> {
+    const eventId = this.dedupKey(header, event.id, rawBody);
+    // This delivery's claim token (S-75): store and release land only on this delivery's claim,
+    // never on a redelivery that took the key over after this one stalled.
+    const claimedAt = new Date();
 
     const claim = await this.idempotency.claim({
       key: eventId,
@@ -62,8 +122,9 @@ export class WebhookService {
       // their own mutation — which is why `idempotency_keys.user_id` is nullable
       // for exactly this endpoint prefix.
       userId: null,
-      endpoint: WEBHOOK_ENDPOINT,
+      endpoint,
       requestHash: createHash('sha256').update(rawBody).digest('hex'),
+      claimedAt,
     });
 
     switch (claim.outcome) {
@@ -71,6 +132,12 @@ export class WebhookService {
         // Razorpay redelivers on any non-2xx and occasionally on a 2xx. A
         // redelivered payment.captured must not credit the owner twice.
         logger.info({ eventId, event: event.event }, 'webhook redelivery ignored');
+        return;
+
+      case 'committed':
+        // An earlier delivery's write committed and its store was lost. The commands are
+        // idempotent by state, but there is nothing left to do: answer 200 so Razorpay stops.
+        logger.info({ eventId, event: event.event }, 'webhook already applied');
         return;
 
       case 'in_flight':
@@ -93,14 +160,22 @@ export class WebhookService {
     }
 
     try {
-      await this.dispatch(event, eventId);
-      await this.idempotency.store(eventId, 200, { received: true });
+      // Inside the claim, so a delivery that stalled past the stale threshold and was taken over
+      // cannot commit beside the redelivery (`fenceOnClaim`, S-64).
+      await idempotencyClaim.run({ key: eventId, claimedAt }, () => effect(eventId));
+      if (!(await this.idempotency.store(eventId, 200, { received: true }, claimedAt))) {
+        logger.warn({ eventId, event: event.event }, 'webhook store matched no claim');
+      }
     } catch (error) {
       // Release the claim so Razorpay's retry can actually re-run. Holding it
       // would leave the event permanently `in_flight` and silently drop every
       // redelivery — a capture that never confirms, with no failure anywhere
-      // to show for it (R-FAIL-01).
-      await this.idempotency.release(eventId);
+      // to show for it (R-FAIL-01). Rerunnable even after a commit: every
+      // command here is idempotent by the state it reads.
+      const released = await this.idempotency.release(eventId, claimedAt, { rerunnable: true });
+      if (!released) {
+        logger.warn({ eventId, event: event.event }, 'webhook release matched no claim');
+      }
       throw error;
     }
   }

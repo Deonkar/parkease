@@ -1,8 +1,12 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { signBookingReference } from '../../src/domains/booking/qr.js';
+import { env } from '../../src/platform/config/env.schema.js';
+
 import { windowFromNow } from './booking-harness.js';
 import {
   type Harness,
+  seedBooking,
   seedSpace,
   seedUser,
   startHarness,
@@ -363,6 +367,29 @@ describe('booking HTTP', () => {
   });
 
   describe('POST /owner/bookings/:id/check-in', () => {
+    it("tells the owner who arrived as 'First L.', never the driver's full name (S-85)", async () => {
+      const spaceId = await seedSpace(h, { lat: 12.9345, lng: 77.6266, carSlots: 1 });
+      await h.sql`UPDATE users SET name = 'Ravi Kumar Sharma' WHERE id = ${h.driverId}`;
+      // Confirmed and started five minutes ago: inside the check-in window.
+      const bookingId = await seedBooking(h, {
+        spaceId,
+        vehicleType: 'car',
+        slotIndex: 0,
+        slotStatus: 'confirmed',
+      });
+      actingAs.user = { id: h.ownerId, roles: ['owner'], activeRole: 'owner' };
+
+      const response = await post(
+        `/api/v1/owner/bookings/${bookingId}/check-in`,
+        { token: signBookingReference(bookingId, env.BOOKING_QR_SECRET, new Date()) },
+        key(),
+      );
+
+      expect(response.status).toBe(201);
+      expect((response.body as { data: { driverName: string } }).data.driverName).toBe('Ravi S.');
+      expect(JSON.stringify(response.body)).not.toContain('Kumar');
+    });
+
     it('404s when the booking is on someone else s space', async () => {
       const spaceId = await seedSpace(h, { lat: 12.9345, lng: 77.6266, carSlots: 1 });
       const created = await post('/api/v1/driver/bookings', createBody(spaceId), key());

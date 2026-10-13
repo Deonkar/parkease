@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { fontSize, layout, lineHeight, touchTarget } from '../src/index.js';
+import { fontSize, iconSize, layout, lineHeight, touchTarget } from '../src/index.js';
 
 /** Section M of the task 14 fix wave: sizes that were literals become tokens. */
 describe('layout', () => {
@@ -23,5 +23,18 @@ describe('layout', () => {
     const steps = Object.values(layout.skeleton);
     expect(steps).toEqual([...steps].sort((a, b) => a - b));
     expect(layout.skeleton.line).toBe(touchTarget);
+  });
+
+  it('orders the icon steps smallest to largest, and fits the tab icon box', () => {
+    const steps = Object.values(iconSize);
+    expect(steps).toEqual([...steps].sort((a, b) => a - b));
+    expect(new Set(steps).size).toBe(steps.length);
+    // The tab bar test above budgets a 28px icon box.
+    expect(iconSize.xl).toBe(28);
+  });
+
+  it('keeps the error badge smaller than the empty-state illustration', () => {
+    expect(layout.state.badge).toBeLessThan(layout.state.illustration);
+    expect(layout.state.badge).toBeGreaterThanOrEqual(touchTarget);
   });
 });

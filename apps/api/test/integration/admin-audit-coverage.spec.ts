@@ -5,6 +5,7 @@ import { type BookingStack, buildBookingStack, windowFromNow, zoneOf } from './b
 import {
   type Harness,
   seedBooking,
+  approveBody,
   seedSpace,
   seedUser,
   startHarness,
@@ -196,7 +197,7 @@ describe('admin audit coverage, every mutation', () => {
         const id = await pendingSpace();
         return {
           url: `${ADMIN}/spaces/${id}/approve`,
-          payload: {},
+          payload: await approveBody(h, id),
           target: id,
         };
       },

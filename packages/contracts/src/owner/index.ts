@@ -59,3 +59,4 @@ export {
   ownerCheckInResultSchema,
   type OwnerCheckInResult,
 } from './check-in.js';
+export { driverShortNameSchema } from './driver-name.js';

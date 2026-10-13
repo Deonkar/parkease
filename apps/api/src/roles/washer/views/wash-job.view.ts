@@ -13,6 +13,7 @@ import {
 } from '@parkease/contracts/washer';
 
 import type { WashJobRow } from '../../../domains/carwash/carwash.service.js';
+import { parseOutgoing } from '../../../platform/http/outgoing-contract.js';
 
 /**
  * Events a partner may fire from here, derived from the machine rather than
@@ -49,21 +50,25 @@ function earningsFor(pricePaise: number | null, commissionRate: string): number 
 }
 
 export function toWashJobView(job: WashJobRow): WashJobView {
-  return washJobViewSchema.parse({
-    id: job.id,
-    bookingId: job.bookingId,
-    status: job.status,
-    serviceName: job.serviceName,
-    vehicleType: job.vehicleType,
-    spaceLocation: job.spaceLocation,
-    earningsPaise: earningsFor(job.pricePaise, job.commissionRate),
-    availableEvents: availableEventsFor(parseCarwashJobStatus(job.status)),
-    beforePhotoId: job.beforePhotoId,
-    afterPhotoId: job.afterPhotoId,
-    acceptedAt: job.acceptedAt?.toISOString() ?? null,
-    startedAt: job.startedAt?.toISOString() ?? null,
-    completedAt: job.completedAt?.toISOString() ?? null,
-  });
+  return parseOutgoing(
+    washJobViewSchema,
+    {
+      id: job.id,
+      bookingId: job.bookingId,
+      status: job.status,
+      serviceName: job.serviceName,
+      vehicleType: job.vehicleType,
+      spaceLocation: job.spaceLocation,
+      earningsPaise: earningsFor(job.pricePaise, job.commissionRate),
+      availableEvents: availableEventsFor(parseCarwashJobStatus(job.status)),
+      beforePhotoId: job.beforePhotoId,
+      afterPhotoId: job.afterPhotoId,
+      acceptedAt: job.acceptedAt?.toISOString() ?? null,
+      startedAt: job.startedAt?.toISOString() ?? null,
+      completedAt: job.completedAt?.toISOString() ?? null,
+    },
+    'wash job view',
+  );
 }
 
 /**
@@ -83,18 +88,22 @@ export function toWashJobOffer(row: {
 }): WashJobOffer {
   const fee = computeWashFee(toPaise(row.pricePaise), toRate(Number(row.job.commissionRate)));
 
-  return washJobOfferSchema.parse({
-    jobId: row.job.id,
-    bookingId: row.job.bookingId,
-    serviceName: row.job.serviceName,
-    vehicleType: row.job.vehicleType,
-    spaceLocation: row.job.spaceLocation,
-    distanceM: row.distanceM,
-    earningsPaise: fee.washerEarningsPaise satisfies Paise,
-    offeredAt: row.offeredAt.toISOString(),
-    // Derived from when the offer went out rather than stored, so the ladder
-    // and the countdown cannot disagree: WASH_ACCEPT_TIMEOUT_MS is the same
-    // constant the worker's timeout job is scheduled with.
-    expiresAt: new Date(row.offeredAt.getTime() + WASH_ACCEPT_TIMEOUT_MS).toISOString(),
-  });
+  return parseOutgoing(
+    washJobOfferSchema,
+    {
+      jobId: row.job.id,
+      bookingId: row.job.bookingId,
+      serviceName: row.job.serviceName,
+      vehicleType: row.job.vehicleType,
+      spaceLocation: row.job.spaceLocation,
+      distanceM: row.distanceM,
+      earningsPaise: fee.washerEarningsPaise satisfies Paise,
+      offeredAt: row.offeredAt.toISOString(),
+      // Derived from when the offer went out rather than stored, so the ladder
+      // and the countdown cannot disagree: WASH_ACCEPT_TIMEOUT_MS is the same
+      // constant the worker's timeout job is scheduled with.
+      expiresAt: new Date(row.offeredAt.getTime() + WASH_ACCEPT_TIMEOUT_MS).toISOString(),
+    },
+    'wash job offer',
+  );
 }

@@ -1,6 +1,13 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { type Harness, seedSpace, seedUser, startHarness, stopHarness } from './harness.js';
+import {
+  approveBody,
+  type Harness,
+  seedSpace,
+  seedUser,
+  startHarness,
+  stopHarness,
+} from './harness.js';
 import { actingAs, type HttpApp, startHttpApp, stopHttpApp } from './http-harness.js';
 
 const BASE = '/api/v1/admin/spaces';
@@ -125,7 +132,7 @@ describe('admin spaces HTTP', () => {
       const responses = await Promise.all([
         http.request({ method: 'GET', url: BASE }),
         http.request({ method: 'GET', url: `${BASE}/${id}` }),
-        write('POST', `${BASE}/${id}/approve`),
+        write('POST', `${BASE}/${id}/approve`, await approveBody(h, id)),
         write('POST', `${BASE}/${id}/reject`, { notes: 'no' }),
         write('POST', `${BASE}/${id}/request-changes`, { notes: 'no' }),
       ]);
@@ -208,9 +215,33 @@ describe('admin spaces HTTP', () => {
   });
 
   describe('decisions', () => {
+    it('refuses to approve a listing the owner changed after it was opened: 409 SPACE_CHANGED (S-142)', async () => {
+      const id = await pendingSpace();
+      const detail = await http.request({ method: 'GET', url: `${BASE}/${id}` });
+      const viewed = (envelope(detail).data as { updatedAt: string }).updatedAt;
+      await h.sql`UPDATE spaces SET updated_at = now() + interval '1 second' WHERE id = ${id}`;
+
+      const stale = await write('POST', `${BASE}/${id}/approve`, { expectedUpdatedAt: viewed });
+      expect(stale.status).toBe(409);
+      expect((stale.body as { error: { code: string } }).error.code).toBe('SPACE_CHANGED');
+      expect((await spaceRow(id)).approval_status).toBe('pending_approval');
+      expect(await auditRows('space.approve', id)).toHaveLength(0);
+
+      const fresh = await http.request({ method: 'GET', url: `${BASE}/${id}` });
+      const again = await write('POST', `${BASE}/${id}/approve`, {
+        expectedUpdatedAt: (envelope(fresh).data as { updatedAt: string }).updatedAt,
+      });
+      expect(again.status).toBe(200);
+    });
+
+    it('requires the viewed version to approve: 400 without it', async () => {
+      const id = await pendingSpace();
+      expect((await write('POST', `${BASE}/${id}/approve`, {})).status).toBe(400);
+    });
+
     it('approves: active, one audit row, one outbox row', async () => {
       const id = await pendingSpace();
-      const response = await write('POST', `${BASE}/${id}/approve`);
+      const response = await write('POST', `${BASE}/${id}/approve`, await approveBody(h, id));
       expect(response.status).toBe(200);
       expect(envelope(response).data).toEqual({ id, approvalStatus: 'active' });
 
@@ -240,7 +271,11 @@ describe('admin spaces HTTP', () => {
      */
     it('approving by an uppercase id records, announces and answers the canonical id', async () => {
       const id = await pendingSpace();
-      const response = await write('POST', `${BASE}/${id.toUpperCase()}/approve`);
+      const response = await write(
+        'POST',
+        `${BASE}/${id.toUpperCase()}/approve`,
+        await approveBody(h, id),
+      );
       expect(response.status).toBe(200);
       expect(envelope(response).data).toEqual({ id, approvalStatus: 'active' });
 
@@ -297,7 +332,7 @@ describe('admin spaces HTTP', () => {
 
     it('409s a decision on a space that is not pending, and writes nothing', async () => {
       const id = await pendingSpace('active');
-      const response = await write('POST', `${BASE}/${id}/approve`);
+      const response = await write('POST', `${BASE}/${id}/approve`, await approveBody(h, id));
       expect(response.status).toBe(409);
       expect(envelope(response).error?.code).toBe('ILLEGAL_APPROVAL_TRANSITION');
       expect(await counts(id)).toEqual({ audit: 0, outbox: 0 });
@@ -307,8 +342,8 @@ describe('admin spaces HTTP', () => {
     it('lets exactly one of two parallel approvals through', async () => {
       const id = await pendingSpace();
       const results = await Promise.all([
-        write('POST', `${BASE}/${id}/approve`),
-        write('POST', `${BASE}/${id}/approve`),
+        write('POST', `${BASE}/${id}/approve`, await approveBody(h, id)),
+        write('POST', `${BASE}/${id}/approve`, await approveBody(h, id)),
       ]);
       expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
       expect(await auditRows('space.approve', id)).toHaveLength(1);
@@ -316,7 +351,11 @@ describe('admin spaces HTTP', () => {
     });
 
     it('answers 404 for an unknown id and 400 for a malformed one', async () => {
-      const missing = await write('POST', `${BASE}/${crypto.randomUUID()}/approve`);
+      const missing = await write(
+        'POST',
+        `${BASE}/${crypto.randomUUID()}/approve`,
+        await approveBody(h, crypto.randomUUID()),
+      );
       expect(missing.status).toBe(404);
       const malformed = await write('POST', `${BASE}/nope/approve`);
       expect(malformed.status).toBe(400);
@@ -325,7 +364,7 @@ describe('admin spaces HTTP', () => {
     it('does not decide a soft-deleted space', async () => {
       const id = await pendingSpace();
       await h.sql`UPDATE spaces SET deleted_at = now() WHERE id = ${id}`;
-      const response = await write('POST', `${BASE}/${id}/approve`);
+      const response = await write('POST', `${BASE}/${id}/approve`, await approveBody(h, id));
       expect(response.status).toBe(404);
     });
   });

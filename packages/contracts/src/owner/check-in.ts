@@ -5,6 +5,8 @@ import { bookingStatusSchema } from '../enums/booking-status.js';
 import { checkInMethodSchema } from '../enums/check-in-method.js';
 import { bookingIdSchema } from '../primitives/ids.js';
 
+import { driverShortNameSchema } from './driver-name.js';
+
 /**
  * The owner scans the driver's QR. Same token, same command, different
  * authorisation context and a different response shape (ADR-016): the owner is
@@ -21,7 +23,7 @@ export const ownerCheckInResultSchema = z.object({
   status: bookingStatusSchema,
   checkedInAt: z.string().datetime(),
   checkInMethod: checkInMethodSchema,
-  driverName: z.string(),
+  driverName: driverShortNameSchema,
   vehicleNumber: z.string().nullable(),
   startsAt: z.string().datetime(),
   endsAt: z.string().datetime(),

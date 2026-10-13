@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import Razorpay from 'razorpay';
 
 import { env } from '../../platform/config/env.schema.js';
+import { parseOutgoing } from '../../platform/http/outgoing-contract.js';
+import { GATEWAY_TIMEOUT_MS } from '../../platform/http/timeouts.js';
 
 import {
   type CreateOrderInput,
@@ -26,10 +28,12 @@ import {
  */
 @Injectable()
 export class RazorpaySdkClient implements RazorpayClient {
-  private readonly client = new Razorpay({
-    key_id: env.RAZORPAY_KEY_ID,
-    key_secret: env.RAZORPAY_KEY_SECRET,
-  });
+  private readonly client = withTimeout(
+    new Razorpay({
+      key_id: env.RAZORPAY_KEY_ID,
+      key_secret: env.RAZORPAY_KEY_SECRET,
+    }),
+  );
 
   async createOrder(input: CreateOrderInput): Promise<RazorpayOrder> {
     const order = await this.client.orders.create({
@@ -69,8 +73,10 @@ export class RazorpaySdkClient implements RazorpayClient {
     paymentId: string,
     reference: string,
   ): Promise<RazorpayRefund | null> {
-    const page = razorpayRefundListSchema.parse(
+    const page = parseOutgoing(
+      razorpayRefundListSchema,
       await this.client.payments.fetchMultipleRefund(paymentId),
+      'razorpay refund list',
     );
 
     const existing = page.items.find(
@@ -79,4 +85,15 @@ export class RazorpaySdkClient implements RazorpayClient {
 
     return existing === undefined ? null : toRefund(existing);
   }
+}
+
+/**
+ * The SDK takes no timeout and builds its own axios instance without one, so a hung Razorpay
+ * call would hold the request (its pooled connection and its idempotency claim) indefinitely
+ * (S-64). The instance is public on the SDK (`api.rq`), and its defaults apply to every call.
+ */
+function withTimeout(client: Razorpay): Razorpay {
+  (client.api as unknown as { rq: { defaults: { timeout: number } } }).rq.defaults.timeout =
+    GATEWAY_TIMEOUT_MS;
+  return client;
 }

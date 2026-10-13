@@ -16,6 +16,7 @@ import { z } from 'zod';
 
 import { DB, type Database } from '../../platform/db/db.module.js';
 import type { TxHandle } from '../../platform/db/transaction.js';
+import { parseOutgoing } from '../../platform/http/outgoing-contract.js';
 
 import { type Participants, REVIEW_WINDOW_MS } from './eligibility.js';
 
@@ -339,7 +340,7 @@ export class ReviewService {
         reports: reports
           .filter((r) => r.reviewId === review.id)
           .map((r) => ({
-            reason: reportReasonSchema.parse(r.reason),
+            reason: parseOutgoing(reportReasonSchema, r.reason, 'report reason'),
             detail: r.detail,
             createdAt: r.createdAt,
           })),

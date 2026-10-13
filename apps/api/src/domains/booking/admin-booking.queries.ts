@@ -18,6 +18,7 @@ import { alias } from 'drizzle-orm/pg-core';
 import type { z } from 'zod';
 
 import { DB, type Database } from '../../platform/db/db.module.js';
+import { parseOutgoing } from '../../platform/http/outgoing-contract.js';
 import {
   CAPTURED_PAYMENT_STATUSES,
   ORPHAN_CAPTURE_REFUND_REASON,
@@ -47,13 +48,14 @@ function searchBy(text: string): SQL | undefined {
 }
 
 /**
- * `from`/`to` are IST calendar days over `starts_at`, both inclusive: `to` runs until the next IST
- * midnight. The day boundary is computed by Postgres in Asia/Kolkata, never in the server's zone.
+ * `from`/`to` are IST calendar days over `starts_at`, `from` inclusive and `to` exclusive, like the
+ * ledger explorer, the audit log and finance (S-142): `2026-10-01`..`2026-10-08` is seven days.
+ * The day boundary is computed by Postgres in Asia/Kolkata, never in the server's zone.
  */
 const startsOnOrAfter = (day: string): SQL =>
   sql`${bookings.startsAt} >= (${day}::date)::timestamp AT TIME ZONE 'Asia/Kolkata'`;
-const startsOnOrBefore = (day: string): SQL =>
-  sql`${bookings.startsAt} < ((${day}::date + 1)::timestamp AT TIME ZONE 'Asia/Kolkata')`;
+const startsBefore = (day: string): SQL =>
+  sql`${bookings.startsAt} < (${day}::date)::timestamp AT TIME ZONE 'Asia/Kolkata'`;
 
 /**
  * The admin booking screens (task 18a). The driver's phone is masked here, before a row leaves
@@ -69,7 +71,7 @@ export class AdminBookingQueries {
       q.status === undefined ? undefined : eq(bookings.status, q.status),
       q.q === undefined || q.q === '' ? undefined : searchBy(q.q),
       q.from === undefined ? undefined : startsOnOrAfter(q.from),
-      q.to === undefined ? undefined : startsOnOrBefore(q.to),
+      q.to === undefined ? undefined : startsBefore(q.to),
     );
 
     const base = () =>
@@ -104,7 +106,7 @@ export class AdminBookingQueries {
     return {
       items: rows.map((row) => ({
         ...row,
-        status: bookingStatusSchema.parse(row.status),
+        status: parseOutgoing(bookingStatusSchema, row.status, 'booking status'),
         startsAt: row.startsAt.toISOString(),
         endsAt: row.endsAt.toISOString(),
       })),
@@ -189,7 +191,7 @@ export class AdminBookingQueries {
 
     return {
       id: booking.id,
-      status: bookingStatusSchema.parse(booking.status),
+      status: parseOutgoing(bookingStatusSchema, booking.status, 'booking status'),
       driver: { id: booking.driverId, name: row.driverName, phone: maskPhone(row.driverPhone) },
       space: { id: booking.spaceId, title: row.spaceTitle, ownerName: row.ownerName },
       startsAt: booking.startsAt.toISOString(),
@@ -201,8 +203,8 @@ export class AdminBookingQueries {
       ledger: ledgerRows.map((e) => ({
         id: e.id,
         txnId: e.txnId,
-        account: ledgerAccountSchema.parse(e.account),
-        direction: ledgerDirectionSchema.parse(e.direction),
+        account: parseOutgoing(ledgerAccountSchema, e.account, 'ledger account'),
+        direction: parseOutgoing(ledgerDirectionSchema, e.direction, 'ledger direction'),
         amountPaise: e.amountPaise,
         bookingId: e.bookingId,
         payoutId: e.payoutId,
@@ -211,14 +213,14 @@ export class AdminBookingQueries {
       })),
       payments: paymentRows.map((p) => ({
         id: p.id,
-        status: paymentStatusSchema.parse(p.status),
+        status: parseOutgoing(paymentStatusSchema, p.status, 'payment status'),
         amountPaise: p.capturedPaise ?? p.expectedTotalPaise,
         razorpayPaymentId: p.razorpayPaymentId,
       })),
       refunds: refundRows.map((r) => ({
         id: r.id,
         amountPaise: r.amountPaise,
-        status: refundStatusSchema.parse(r.status),
+        status: parseOutgoing(refundStatusSchema, r.status, 'refund status'),
         reason: r.reason,
         createdAt: r.createdAt.toISOString(),
       })),

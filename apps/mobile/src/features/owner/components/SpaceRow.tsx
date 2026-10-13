@@ -96,7 +96,7 @@ const styles = StyleSheet.create({
   liveText: { fontSize: fontSize.xs, fontWeight: fontWeight.semibold, color: colors.available },
   neutralPill: {
     backgroundColor: colors.mutedSoft,
-    borderRadius: radius.sm,
+    borderRadius: radius.chip,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs / 2,
   },

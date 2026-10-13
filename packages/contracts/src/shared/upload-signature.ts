@@ -37,8 +37,9 @@ const UPLOAD_ID = /^[A-Za-z0-9_\-/]+$/;
  * photo, ID document, business photos, valet proof — R-ARCH-07): the call sites
  * must change together, because the id format is one fact about one signer.
  *
- * This proves the id is well-formed and in the right folder. It does NOT prove
- * the upload exists or that the caller made it — suggestedtask.md S-50.
+ * This proves the id is well-formed and in the right folder. That the caller
+ * was issued it is the API's `UploadRegistry` check (S-50), which a schema
+ * cannot make.
  */
 export const uploadIdIn = (folder: UploadFolder) =>
   z
@@ -67,6 +68,11 @@ const CLOUDINARY_UPLOAD_API = 'https://api.cloudinary.com/v1_1/';
  * two URLs it could do nothing with.
  */
 export const uploadSignatureResponseSchema = z.object({
+  /**
+   * The id to attach once the upload lands: the same `parkease/<folder>/<uuid>` Cloudinary's own
+   * response names. Optional so a client parsing an older server's answer still works.
+   */
+  uploadId: z.string().regex(UPLOAD_ID).optional(),
   uploadUrl: z
     .string()
     .url()

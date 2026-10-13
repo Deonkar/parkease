@@ -3,7 +3,7 @@ import { Redirect } from 'expo-router';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { useHasOnboarded } from '@/features/shared/hooks/useHasOnboarded';
-import { landingRouteFor } from '@/lib/landing-route';
+import { landingRouteForSession } from '@/lib/landing-route';
 
 export default function Splash() {
   const auth = useAuth();
@@ -17,5 +17,5 @@ export default function Splash() {
     return <Redirect href={hasOnboarded ? '/(auth)/phone' : '/(auth)/onboarding'} />;
   }
 
-  return <Redirect href={landingRouteFor(auth.activeRole)} />;
+  return <Redirect href={landingRouteForSession(auth.roles, auth.activeRole)} />;
 }

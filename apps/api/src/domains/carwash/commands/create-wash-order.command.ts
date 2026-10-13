@@ -8,6 +8,7 @@ import { toRate } from '@parkease/contracts/primitives';
 import { env } from '../../../platform/config/env.schema.js';
 import { DB, type Database } from '../../../platform/db/db.module.js';
 import { withTransaction } from '../../../platform/db/transaction.js';
+import { parseOutgoing } from '../../../platform/http/outgoing-contract.js';
 import { OrderService } from '../../payment/order.service.js';
 import { PaymentService } from '../../payment/payment.service.js';
 import { CarwashService } from '../carwash.service.js';
@@ -132,14 +133,18 @@ export class CreateWashOrderCommand {
     // Parsed, not cast. `washJobId` is a branded id and `amountPaise` is a
     // positive integer by contract; a cast would let a zero amount or a
     // non-uuid reach Checkout and fail there instead of here (R-VAL-01).
-    return washPaymentOrderSchema.parse({
-      razorpayOrderId,
-      amountPaise,
-      currency: 'INR',
-      // Publishable by design; the secret never leaves the server (R-ENV-05).
-      keyId: env.RAZORPAY_KEY_ID,
-      serviceLabel: SERVICE_LABELS[serviceName],
-      washJobId,
-    });
+    return parseOutgoing(
+      washPaymentOrderSchema,
+      {
+        razorpayOrderId,
+        amountPaise,
+        currency: 'INR',
+        // Publishable by design; the secret never leaves the server (R-ENV-05).
+        keyId: env.RAZORPAY_KEY_ID,
+        serviceLabel: SERVICE_LABELS[serviceName],
+        washJobId,
+      },
+      'wash payment order',
+    );
   }
 }

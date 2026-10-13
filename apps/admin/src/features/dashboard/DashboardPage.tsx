@@ -59,7 +59,8 @@ export function DashboardPage() {
             }}
           />
           <Space>
-            <Switch checked={showQueries} onChange={setShowQueries} /> Show queries
+            <Switch checked={showQueries} onChange={setShowQueries} aria-label="Show queries" />{' '}
+            Show queries
           </Space>
         </Space>
       </Space>

@@ -211,7 +211,7 @@ export const valetJobOffers = pgTable(
      * already saw this job, even if the query is wrong.
      */
     uniqueIndex('valet_job_offers_job_valet_key').on(t.jobId, t.valetUserId),
-    index('valet_job_offers_job_id_idx').on(t.jobId),
+    // valet_job_offers_job_id_idx was dropped in 0049 (S-21): the unique key leads with job_id.
     index('valet_job_offers_valet_user_id_idx').on(t.valetUserId),
     check(
       'valet_job_offers_outcome_check',

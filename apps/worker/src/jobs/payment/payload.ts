@@ -16,6 +16,10 @@ export const issueRefundPayloadSchema = z.object({
 
 export type IssueRefundPayload = z.infer<typeof issueRefundPayloadSchema>;
 
+export const PAYMENT_REVERSE_TRANSFER_JOB = 'payment.reverse-transfer';
+
+export const reverseTransferPayloadSchema = z.object({ refundId: z.string().uuid() });
+
 export const orphanCapturePayloadSchema = z.object({
   bookingId: z.string().uuid(),
   paymentId: z.string().uuid(),

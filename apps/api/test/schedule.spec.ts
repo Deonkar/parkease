@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { isOpenAt } from '../src/domains/space/schedule.js';
+import { openHoursWithin } from '../src/domains/space/schedule.js';
 
 describe('isOpenAt', () => {
   it('returns true for 24x7 schedule', () => {
@@ -120,5 +121,48 @@ describe('isOpenAt evaluates in Asia/Kolkata, not the server timezone', () => {
     // 03:30Z is exactly 09:00 IST, 12:30Z is exactly 18:00 IST.
     expect(isOpenAt(nineToSix, new Date('2026-01-05T03:30:00Z'))).toBe(true);
     expect(isOpenAt(nineToSix, new Date('2026-01-05T12:30:00Z'))).toBe(false);
+  });
+});
+
+describe('openHoursWithin (S-82)', () => {
+  const allWeek = (opensAt: string, closesAt: string) =>
+    ({
+      is24x7: false,
+      days: Object.fromEntries(
+        ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((d) => [
+          d,
+          { isOpen: true, opensAt, closesAt },
+        ]),
+      ),
+    }) as never;
+  // 2026-10-12 is a Monday. 00:00 IST is 18:30 UTC the day before.
+  const ist = (day: number, hhmm: string) => {
+    const [h, m] = hhmm.split(':').map(Number);
+    return new Date(Date.UTC(2026, 9, day, (h ?? 0) - 5, (m ?? 0) - 30));
+  };
+
+  it('is the whole window for a 24x7 space', () => {
+    expect(openHoursWithin({ is24x7: true }, ist(12, '00:00'), ist(13, '00:00'))).toBe(24);
+  });
+
+  it('counts only open hours for a space that closes overnight', () => {
+    // Open 08:00–20:00 every day: a full IST day holds 12 open hours.
+    expect(openHoursWithin(allWeek('08:00', '20:00'), ist(12, '00:00'), ist(13, '00:00'))).toBe(12);
+  });
+
+  it('clips a window that starts or ends inside the open hours', () => {
+    expect(openHoursWithin(allWeek('08:00', '20:00'), ist(12, '18:00'), ist(13, '10:00'))).toBe(4);
+  });
+
+  it('skips a closed day', () => {
+    const schedule = allWeek('08:00', '20:00') as { days: Record<string, unknown> };
+    schedule.days['tue'] = { isOpen: false };
+    expect(openHoursWithin(schedule as never, ist(12, '00:00'), ist(14, '00:00'))).toBe(12);
+  });
+
+  it('makes a space booked for every open hour read full', () => {
+    const open = openHoursWithin(allWeek('08:00', '20:00'), ist(12, '00:00'), ist(19, '00:00'));
+    const booked = 7 * 12;
+    expect(Math.round((booked / open) * 10_000)).toBe(10_000);
   });
 });

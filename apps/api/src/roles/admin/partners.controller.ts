@@ -32,7 +32,7 @@ import type { AdminActor } from '../../platform/observability/audit.service.js';
 import { Roles } from '../../platform/rbac/roles.decorator.js';
 import { CloudinaryService } from '../../platform/storage/cloudinary.service.js';
 
-import { partnerDocumentsOf } from './views/partner-documents.view.js';
+import { documentsIncomplete, partnerDocumentsOf } from './views/partner-documents.view.js';
 
 const partnersPageSchema = offsetPageOf(adminPartnerSchema);
 
@@ -97,12 +97,10 @@ export class AdminPartnersController {
     if (found === undefined) throw new NotFoundException('Partner not found.');
 
     const { documentIds, ...partner } = found;
+    const documents = partnerDocumentsOf(this.storage, documentIds, { userId: found.userId, kind });
     return parseOutgoing(
       adminPartnerDetailSchema,
-      {
-        ...partner,
-        documents: partnerDocumentsOf(this.storage, documentIds, { userId: found.userId, kind }),
-      },
+      { ...partner, documents, documentsIncomplete: documentsIncomplete(kind, documents) },
       'admin partner detail',
     );
   }

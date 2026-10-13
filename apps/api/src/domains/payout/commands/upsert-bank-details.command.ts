@@ -17,8 +17,15 @@ import { RAZORPAYX, type RazorpayXClient } from '../razorpayx.client.js';
 export interface UpsertBankDetailsInput {
   readonly userId: string;
   readonly role: string | null;
-  readonly details: UpdateBankDetails;
+  /** The step-up token is checked by the caller (`ReauthService`) and never reaches here. */
+  readonly details: Omit<UpdateBankDetails, 'reauthToken'>;
 }
+
+/**
+ * How long payouts wait after bank details change (S-100). The holder is told of every change;
+ * this is the window to report one they did not make before any money moves to the new account.
+ */
+export const BANK_CHANGE_PAYOUT_HOLD_MS = 48 * 60 * 60 * 1000;
 
 /**
  * Saves bank details and registers them with RazorpayX (§16.4, security.md §6.5).
@@ -54,6 +61,9 @@ export class UpsertBankDetailsCommand {
       details,
     );
     const last4 = details.accountNumber.slice(-4);
+    // A change, not a first set of details: the new account waits (S-100).
+    const payoutsHeldUntil =
+      existing === undefined ? null : new Date(Date.now() + BANK_CHANGE_PAYOUT_HOLD_MS);
 
     return withTransaction(this.db, async (tx) => {
       const row = await this.payouts.upsertBank(tx, {
@@ -65,6 +75,7 @@ export class UpsertBankDetailsCommand {
         ifscPrefix: details.ifscCode.slice(0, 4),
         razorpayxContactId: contactId,
         razorpayxFundAccountId: fundAccountId,
+        payoutsHeldUntil,
       });
 
       const cancelled = await this.payouts.cancelPending(tx, userId);
@@ -83,7 +94,11 @@ export class UpsertBankDetailsCommand {
         targetId: row.id,
         // Never the old details, not even masked or encrypted.
         before: null,
-        after: { last4, cancelledPayouts: cancelled.length },
+        after: {
+          last4,
+          cancelledPayouts: cancelled.length,
+          payoutsHeldUntil: payoutsHeldUntil?.toISOString() ?? null,
+        },
         ipAddress: null,
       });
 
@@ -91,7 +106,11 @@ export class UpsertBankDetailsCommand {
         tx,
         {
           type: 'notification.dispatch',
-          payload: { userId, template: 'payout.bank_details_updated', data: { last4 } },
+          payload: {
+            userId,
+            template: 'payout.bank_details_updated',
+            data: { last4, held: payoutsHeldUntil !== null },
+          },
         },
         ...(cancelled.length === 0
           ? []
@@ -114,7 +133,7 @@ export class UpsertBankDetailsCommand {
   private async register(
     userId: string,
     contactId: string | null,
-    details: UpdateBankDetails,
+    details: UpsertBankDetailsInput['details'],
   ): Promise<{ contactId: string; fundAccountId: string }> {
     try {
       const contact =

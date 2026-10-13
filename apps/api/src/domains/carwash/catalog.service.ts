@@ -1,10 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { CarwashServiceName, VehicleType } from '@parkease/contracts/enums';
-import { washServices } from '@parkease/db/schema';
+import { washerProfiles, washServices } from '@parkease/db/schema';
 import { and, asc, eq, sql } from 'drizzle-orm';
 
 import { DB, type Database } from '../../platform/db/db.module.js';
-import type { TxHandle } from '../../platform/db/transaction.js';
+import { type TxHandle, withTransaction } from '../../platform/db/transaction.js';
 
 export interface StandardService {
   readonly name: CarwashServiceName;
@@ -194,18 +194,34 @@ export class CatalogService {
       },
     ];
 
-    return this.db
-      .insert(washServices)
-      .values(rows)
-      .onConflictDoUpdate({
-        target: [washServices.washerUserId, washServices.serviceName, washServices.vehicleType],
-        set: {
-          pricePaise: sql`excluded.price_paise`,
-          durationMinutes: sql`excluded.duration_minutes`,
-          isActive: sql`excluded.is_active`,
+    return withTransaction(this.db, async (tx) => {
+      const saved = await tx
+        .insert(washServices)
+        .values(rows)
+        .onConflictDoUpdate({
+          target: [washServices.washerUserId, washServices.serviceName, washServices.vehicleType],
+          set: {
+            pricePaise: sql`excluded.price_paise`,
+            durationMinutes: sql`excluded.duration_minutes`,
+            isActive: sql`excluded.is_active`,
+            updatedAt: new Date(),
+          },
+        })
+        .returning();
+      // `capabilities` answers the same question as the active menu rows, so it is derived from
+      // them in the same transaction (S-56): a toggle can no longer leave the two disagreeing.
+      await tx
+        .update(washerProfiles)
+        .set({
+          capabilities: sql`coalesce((
+            SELECT array_agg(DISTINCT s.service_name ORDER BY s.service_name)
+            FROM wash_services s
+            WHERE s.washer_user_id = ${input.washerUserId} AND s.is_active
+          ), '{}')`,
           updatedAt: new Date(),
-        },
-      })
-      .returning();
+        })
+        .where(eq(washerProfiles.userId, input.washerUserId));
+      return saved;
+    });
   }
 }

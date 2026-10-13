@@ -4,19 +4,19 @@ import PgBoss from 'pg-boss';
 import { env } from './config/env.js';
 import { closeRedis, type JobDeps, redisClient } from './deps.js';
 import { registerHandlers } from './handlers.js';
+import { startOutboxPump } from './jobs/outbox/relay.job.js';
 import { logger } from './logger.js';
-import { ensureQueues } from './queues.js';
+import { startQueueMonitor } from './monitor.js';
+import { ensureQueues, PGBOSS_SCHEMA } from './queues.js';
 import { registerSchedule } from './schedule.js';
+import { createShutdown } from './shutdown.js';
 
-const boss = new PgBoss({
-  connectionString: env.DATABASE_URL,
-  schema: 'pgboss',
-  retryLimit: 3,
-  retryBackoff: true,
-});
+// Retry, expiry, retention and dead-lettering are set per queue from the registry (queues.ts), so
+// nothing here: a constructor default would only apply to a queue the registry forgot.
+const boss = new PgBoss({ connectionString: env.DATABASE_URL, schema: PGBOSS_SCHEMA });
 
-boss.on('error', (error: Error) => {
-  logger.error({ err: error }, 'pg-boss error');
+boss.on('error', (error: Error & { queue?: string; worker?: string }) => {
+  logger.error({ err: error, queue: error.queue, worker: error.worker }, 'pg-boss error');
 });
 
 await boss.start();
@@ -28,16 +28,25 @@ const deps: JobDeps = { db, boss, redis: redisClient() };
 await ensureQueues(boss);
 await registerHandlers(boss, deps);
 await registerSchedule(boss);
+// The outbox lag budget is 30s (prd.md §12) and cron ticks once a minute, so the relay also runs
+// in-process every second. The `outbox.relay` cron job stays as the safety net.
+const outboxPump = startOutboxPump(deps);
+// Queue depth and age against each tier's SLO, and any dead letter (QUEUE_SLO, DEAD_LETTER).
+const queueMonitor = startQueueMonitor(deps);
 
-logger.info({ schema: 'pgboss' }, 'worker started');
+logger.info({ schema: PGBOSS_SCHEMA }, 'worker started');
+
+const shutdown = createShutdown({
+  boss,
+  outboxPump,
+  queueMonitor,
+  closeRedis,
+  closeDb: () => db.$client.end({ timeout: 5 }),
+  exit: (code) => process.exit(code),
+});
 
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
-    void boss
-      .stop({ graceful: true })
-      .then(closeRedis)
-      .then(() => {
-        process.exit(0);
-      });
+    void shutdown(signal);
   });
 }

@@ -28,6 +28,7 @@ import { and, asc, count, eq, inArray, notInArray, sql } from 'drizzle-orm';
 import { DB, type Database } from '../../platform/db/db.module.js';
 import type { TxHandle } from '../../platform/db/transaction.js';
 import { parseOutgoing } from '../../platform/http/outgoing-contract.js';
+import { UploadRegistry } from '../../platform/storage/upload-registry.js';
 
 import {
   BookingNotWashEligibleError,
@@ -97,7 +98,10 @@ export class ConcurrentWashTransitionError extends Error {
  */
 @Injectable()
 export class CarwashService {
-  constructor(@Inject(DB) private readonly db: Database) {}
+  constructor(
+    @Inject(DB) private readonly db: Database,
+    private readonly uploads: UploadRegistry,
+  ) {}
 
   /**
    * The booking a wash is being requested against, if this driver owns it.
@@ -402,6 +406,11 @@ export class CarwashService {
     photoId: string,
   ): Promise<WashJobRow | undefined> {
     const mine = and(eq(washJobs.id, jobId), eq(washJobs.washerUserId, washerUserId));
+    // Not yours is a 404 before anything is said about the photo (R-SEC-04).
+    const [assigned] = await this.db.select({ id: washJobs.id }).from(washJobs).where(mine);
+    if (assigned === undefined) return undefined;
+    // Evidence is only evidence if it is this partner's own upload (S-50).
+    await this.uploads.assertOwned(washerUserId, 'proofs', [photoId]);
 
     const [updated] = await this.db
       .update(washJobs)
@@ -413,9 +422,7 @@ export class CarwashService {
       .returning();
     if (updated !== undefined) return updated;
 
-    // Nothing written: say why, without saying more than the caller may know.
-    const [owned] = await this.db.select({ id: washJobs.id }).from(washJobs).where(mine);
-    if (owned === undefined) return undefined;
+    // Ours, and nothing written: the slot is closed. Only the owner gets to learn that.
     throw new PhotoSlotClosedError();
   }
 
@@ -471,6 +478,23 @@ export class CarwashService {
     washerUserId: string,
     input: { idDocumentId: string; businessPhotoIds?: string[] },
   ): Promise<WasherProfileView> {
+    // The ids must be uploads this partner was given (S-50). What the profile already holds is not
+    // a new attach: re-sending it is how a partner replaces only the other half.
+    const [current] = await this.db
+      .select({
+        idDocumentId: washerProfiles.idDocumentId,
+        photos: washerProfiles.businessPhotoIds,
+      })
+      .from(washerProfiles)
+      .where(eq(washerProfiles.userId, washerUserId));
+    if (current === undefined) throw new WasherProfileNotFoundError();
+    await this.uploads.assertOwned(washerUserId, 'documents', [input.idDocumentId], {
+      alreadyAttached: current.idDocumentId === null ? [] : [current.idDocumentId],
+    });
+    await this.uploads.assertOwned(washerUserId, 'spaces', input.businessPhotoIds ?? [], {
+      alreadyAttached: current.photos,
+    });
+
     const [row] = await this.db
       .update(washerProfiles)
       .set({

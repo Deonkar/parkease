@@ -83,6 +83,10 @@ describe('owner screens', () => {
     expect(earnings).toContain('Refresh your transactions');
     expect(earnings).toContain('isFetchNextPageError');
     expect(earnings).toMatch(/isFetchNextPageError[\s\S]{0,300}fetchNextPage\(\)/);
+    // A scroll past a failed page does not re-request it behind the footer's retry (S-116).
+    expect(earnings).toMatch(
+      /onEndReached[\s\S]{0,300}!transactions\.isFetchNextPageError[\s\S]{0,80}fetchNextPage\(\)/,
+    );
     // The Payouts row stays in the footer alongside the new retry state.
     expect(earnings).toContain('href="/(owner)/earnings/payouts"');
   });

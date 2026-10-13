@@ -27,6 +27,37 @@ describe('formatDateIST', () => {
     const result = formatDateIST(date);
     expect(result).toBe('15 Jan 2026');
   });
+
+  it('prints September as "Sep" from the fixed table, never ICU\'s "Sept" (S-41)', () => {
+    expect(formatDateIST(new Date('2026-09-12T04:49:00.000Z'))).toBe('12 Sep 2026');
+  });
+
+  it('adds the weekday for list rows', () => {
+    expect(formatDateIST(new Date('2026-09-12T04:49:00.000Z'), { weekday: true })).toBe(
+      'Sat 12 Sep 2026',
+    );
+  });
+
+  it('takes the year in IST: 31 Dec 20:00 UTC is already the new year', () => {
+    expect(formatDateIST(new Date('2026-12-31T20:00:00.000Z'))).toBe('1 Jan 2027');
+  });
+
+  it.each([
+    ['2026-01-10', 'Jan'],
+    ['2026-02-10', 'Feb'],
+    ['2026-03-10', 'Mar'],
+    ['2026-04-10', 'Apr'],
+    ['2026-05-10', 'May'],
+    ['2026-06-10', 'Jun'],
+    ['2026-07-10', 'Jul'],
+    ['2026-08-10', 'Aug'],
+    ['2026-09-10', 'Sep'],
+    ['2026-10-10', 'Oct'],
+    ['2026-11-10', 'Nov'],
+    ['2026-12-10', 'Dec'],
+  ])('%s prints %s', (day, month) => {
+    expect(formatDateIST(new Date(`${day}T06:00:00.000Z`))).toBe(`10 ${month} 2026`);
+  });
 });
 
 describe('formatTimeIST', () => {

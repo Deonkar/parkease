@@ -4,6 +4,8 @@ import { bookingIdSchema } from '../primitives/ids.js';
 import { paginationQuerySchema } from '../primitives/pagination.js';
 import { paiseDeltaSchema, paiseSchema } from '../primitives/paise.js';
 
+import { driverShortNameSchema } from './driver-name.js';
+
 export const OWNER_EARNINGS_PERIOD_VALUES = ['today', 'week', 'month'] as const;
 export const ownerEarningsPeriodSchema = z.enum(OWNER_EARNINGS_PERIOD_VALUES);
 export type OwnerEarningsPeriod = z.infer<typeof ownerEarningsPeriodSchema>;
@@ -27,7 +29,7 @@ export const statementLineSchema = z
   .object({
     bookingId: bookingIdSchema,
     occurredAt: z.string().datetime(),
-    driverName: z.string(),
+    driverName: driverShortNameSchema,
     spaceName: z.string(),
     durationLabel: z.string(),
     basePaise: paiseSchema,

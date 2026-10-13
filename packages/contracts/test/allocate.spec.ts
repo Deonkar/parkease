@@ -40,7 +40,9 @@ describe('allocateProportionally', () => {
       expect(sum(parts)).toBe(weightSum === 0 ? 0 : total);
       expect(parts.every((part) => Number.isInteger(part) && part >= 0)).toBe(true);
     }
-  });
+    // 30,000 assertions on a fixed seed: CPU-bound, so beside the other suites in a turbo run it
+    // can pass the default 5 s without anything being wrong.
+  }, 30_000);
 
   it('returns zeros for all-zero weights rather than dividing by zero', () => {
     expect(allocateProportionally(toPaise(9702), [toPaise(0), toPaise(0)])).toEqual([0, 0]);

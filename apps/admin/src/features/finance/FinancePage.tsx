@@ -179,6 +179,7 @@ function Explorer({ range, initialTxn }: { range: Range; initialTxn?: string | u
       <Space wrap style={{ marginBottom: 12 }}>
         <Select
           allowClear
+          aria-label="Filter by account"
           placeholder="Account"
           style={{ width: 200 }}
           value={account}

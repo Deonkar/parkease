@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { CarwashServiceName } from '@parkease/contracts/enums';
 import type { CreateWasherProfile, SubmitWasherDocuments } from '@parkease/contracts/washer';
-import { colors, fontSize, lineHeight, spacing } from '@parkease/tokens';
+import { colors, fontSize, iconSize, lineHeight, spacing } from '@parkease/tokens';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
@@ -95,7 +95,7 @@ export function GigForm({ idPhoto, onTakeIdPhoto, submitting, failure, onSubmit 
         <View style={styles.reassure}>
           <MaterialCommunityIcons
             name="shield-check-outline"
-            size={16}
+            size={iconSize.sm}
             color={colors.primaryDark}
           />
           <Text style={styles.reassureText}>We verify your identity, not your number.</Text>

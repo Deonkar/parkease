@@ -1,10 +1,14 @@
-import { refunds } from '@parkease/db/schema';
-import { eq } from 'drizzle-orm';
+import { outboxMessages, refunds } from '@parkease/db/schema';
+import { and, eq, isNull } from 'drizzle-orm';
 
 import type { JobDeps } from '../../deps.js';
 import { logger } from '../../logger.js';
 
-import { issueRefundPayloadSchema, parsePaymentJobPayload } from './payload.js';
+import {
+  issueRefundPayloadSchema,
+  PAYMENT_REVERSE_TRANSFER_JOB,
+  parsePaymentJobPayload,
+} from './payload.js';
 import { razorpayRefunds, type RefundGateway } from './razorpay.js';
 
 /**
@@ -74,10 +78,19 @@ export async function issueRefund(
   }
 
   await deps.db.transaction(async (tx) => {
-    await tx
+    const [stored] = await tx
       .update(refunds)
       .set({ razorpayRefundId: issued.id, updatedAt: new Date() })
-      .where(eq(refunds.id, payload.refundId));
+      .where(and(eq(refunds.id, payload.refundId), isNull(refunds.razorpayRefundId)))
+      .returning({ routeReversalPaise: refunds.routeReversalPaise });
+    // Route paid the partner their share at capture: take it back now the driver's refund is
+    // on its way (S-98). Same transaction as the id, so a retry cannot chain it twice.
+    if (stored?.routeReversalPaise != null) {
+      await tx.insert(outboxMessages).values({
+        type: PAYMENT_REVERSE_TRANSFER_JOB,
+        payload: { refundId: payload.refundId },
+      });
+    }
   });
 
   // No ledger write here. `refunds_payable` was credited when we committed to

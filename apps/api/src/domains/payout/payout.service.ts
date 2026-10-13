@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { routeStatusSchema, type RouteStatus } from '@parkease/contracts/enums';
 import { draftsFromLedgerRows, type LedgerEntryDraft } from '@parkease/contracts/money';
 import type { RouteRequirement } from '@parkease/contracts/shared';
-import { PAYABLE_BALANCE, partnerPayable } from '@parkease/db/queries';
+import { PAYABLE_BALANCE, partnerPayable, sumPaise } from '@parkease/db/queries';
 import {
   bankDetails,
   bookings,
@@ -55,6 +55,8 @@ export interface BankDetailsWrite {
   readonly ifscPrefix: string;
   readonly razorpayxContactId: string;
   readonly razorpayxFundAccountId: string;
+  /** Set on a change of details (S-100); null for a first set of details. */
+  readonly payoutsHeldUntil: Date | null;
 }
 
 /**
@@ -167,7 +169,7 @@ export class PayoutService {
       .from(ledgerEntries)
       .leftJoin(bookings, eq(bookings.id, ledgerEntries.bookingId))
       .where(partnerPayable(userId));
-    return Number(row?.balance ?? 0);
+    return sumPaise(row?.balance);
   }
 
   async phoneOf(userId: string): Promise<string> {

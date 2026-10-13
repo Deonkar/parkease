@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { CarwashJobStatus } from '@parkease/contracts/enums';
-import { colors, fontSize, fontWeight, radius, spacing } from '@parkease/tokens';
+import { colors, fontSize, fontWeight, iconSize, radius, spacing } from '@parkease/tokens';
 import { StyleSheet, Text, View } from 'react-native';
 
 const STEPS = ['On the way', 'Washing', 'Completed'] as const;
@@ -50,7 +50,7 @@ export function StepRail({ status }: { readonly status: CarwashJobStatus }) {
       <View style={styles.cancelled}>
         <MaterialCommunityIcons
           name="close-circle-outline"
-          size={18}
+          size={iconSize.md}
           color={colors.textSecondary}
         />
         <Text style={styles.cancelledText}>
@@ -86,7 +86,11 @@ export function StepRail({ status }: { readonly status: CarwashJobStatus }) {
               ]}
             >
               {state === 'done' ? (
-                <MaterialCommunityIcons name="check" size={14} color={colors.textInverse} />
+                <MaterialCommunityIcons
+                  name="check"
+                  size={iconSize.xs}
+                  color={colors.textInverse}
+                />
               ) : null}
             </View>
             <Text

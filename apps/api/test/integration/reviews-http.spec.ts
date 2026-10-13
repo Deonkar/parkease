@@ -112,11 +112,11 @@ describe('reviews HTTP', () => {
       await h.sql`
         INSERT INTO wash_jobs (booking_id, driver_user_id, washer_user_id, status, service_name,
                                vehicle_type, price_paise, commission_rate, txn_id, space_location,
-                               before_photo_id, after_photo_id)
+                               before_photo_id, after_photo_id, completed_at)
         VALUES (${id}, ${h.driverId}, ${washer}, 'completed', 'basic_exterior', 'car', 30000, 0.150,
                 ${crypto.randomUUID()},
                 ST_SetSRID(ST_MakePoint(${ORIGIN.lng}, ${ORIGIN.lat}), 4326)::geography,
-                ${`before-${String(n)}-${id}`}, ${`after-${String(n)}-${id}`})`;
+                ${`before-${String(n)}-${id}`}, ${`after-${String(n)}-${id}`}, now())`;
     }
     return id;
   }
@@ -143,6 +143,17 @@ describe('reviews HTTP', () => {
                          washer_profiles, audit_log, outbox_messages, idempotency_keys CASCADE`;
     await truncateSpaces(h);
     spaceId = await seedSpace(h, { ...ORIGIN, title: 'Basement Parking, 5th Cross' });
+    // The second driver has parked here before, so they may report its reviews (S-129).
+    const theirs = await seedBooking(h, {
+      spaceId,
+      vehicleType: 'car',
+      slotIndex: 7,
+      slotStatus: 'released',
+      startsInMinutes: -60 * 24 * 3,
+      endsInMinutes: -60 * 24 * 3 + 120,
+      driverId: otherDriverId,
+    });
+    await h.sql`UPDATE bookings SET status = 'completed' WHERE id = ${theirs}`;
     await seedPartnerProfiles();
     bookingId = await seedCompletedBooking();
     vi.restoreAllMocks();
@@ -429,6 +440,20 @@ describe('reviews HTTP', () => {
       expect(
         (await post(`/api/v1/owner/reviews/${reviewId}/report`, { reason: 'other' })).status,
       ).toBe(404);
+    });
+
+    it('refuses a report from a driver who has never parked at the space (S-129)', async () => {
+      as(await seedUser(h, 'driver'), 'driver');
+
+      const res = await post(`/api/v1/driver/reviews/${reviewId}/report`, {
+        reason: 'spam_or_fake',
+      });
+
+      expect(res.status).toBe(403);
+      expect(codeOf(res)).toBe('REPORT_NEEDS_BOOKING');
+      const [flag] = await h.sql<{ reported: boolean }[]>`
+        SELECT is_reported AS reported FROM reviews WHERE id = ${reviewId}`;
+      expect(flag?.reported).toBe(false);
     });
 
     it("answers 404 to a driver reporting a review that is not of a space — it isn't public", async () => {

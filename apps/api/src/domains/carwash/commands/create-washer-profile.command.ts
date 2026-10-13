@@ -5,6 +5,7 @@ import { eq } from 'drizzle-orm';
 
 import { DB, type Database } from '../../../platform/db/db.module.js';
 import { withTransaction } from '../../../platform/db/transaction.js';
+import { UploadRegistry } from '../../../platform/storage/upload-registry.js';
 import { CarwashService } from '../carwash.service.js';
 import { CatalogService } from '../catalog.service.js';
 import { WasherProfileExistsError, WasherProfileNotFoundError } from '../errors.js';
@@ -34,6 +35,7 @@ export class CreateWasherProfileCommand {
     @Inject(DB) private readonly db: Database,
     private readonly carwash: CarwashService,
     private readonly catalog: CatalogService,
+    private readonly uploads: UploadRegistry,
   ) {}
 
   async execute(input: CreateWasherProfileInput): Promise<WasherProfileView> {
@@ -45,6 +47,8 @@ export class CreateWasherProfileCommand {
     // A 409 rather than an upsert: re-registering would silently overwrite a
     // business name and a document trail an admin may already have reviewed.
     if (existing !== undefined) throw new WasherProfileExistsError();
+    // Business photos must be this partner's own uploads (S-50).
+    await this.uploads.assertOwned(input.userId, 'spaces', input.businessPhotoIds);
 
     await withTransaction(this.db, async (tx) => {
       await tx.insert(washerProfiles).values({

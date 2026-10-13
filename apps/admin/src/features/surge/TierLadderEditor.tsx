@@ -31,6 +31,7 @@ export function TierLadderEditor({
             title: 'Occupancy above',
             render: (_, t, i) => (
               <InputNumber
+                aria-label={`Tier ${String(i + 1)} occupancy above`}
                 min={0}
                 max={100}
                 value={t.minOccupancyBp / 100}
@@ -46,6 +47,7 @@ export function TierLadderEditor({
             title: 'Multiplier',
             render: (_, t, i) => (
               <InputNumber
+                aria-label={`Tier ${String(i + 1)} multiplier`}
                 min={1}
                 max={5}
                 step={0.05}
@@ -62,6 +64,7 @@ export function TierLadderEditor({
             title: 'Badge',
             render: (_, t, i) => (
               <Select
+                aria-label={`Badge for tier ${String(i + 1)}`}
                 style={{ width: 180 }}
                 value={t.badge}
                 disabled={i === 0}

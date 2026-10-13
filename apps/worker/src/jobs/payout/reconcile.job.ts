@@ -1,7 +1,7 @@
 import { LedgerAccount } from '@parkease/contracts/enums';
 import { settlementClearedEntries } from '@parkease/contracts/money';
 import { ledgerEntries, payments, payouts, reconciliationMismatches } from '@parkease/db/schema';
-import { and, asc, eq, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
 
 import type { JobDeps } from '../../deps.js';
 import { logger } from '../../logger.js';
@@ -12,7 +12,7 @@ import {
   type TransferGateway,
 } from '../payment/razorpay.js';
 
-import { failPayout } from './fail.js';
+import { applyPayoutStatus } from './apply-status.job.js';
 import { PAYOUT_RECONCILE_JOB } from './payload.js';
 import { istStartOfDay } from './period.js';
 import { type PayoutGateway, razorpayxPayouts } from './razorpayx.js';
@@ -30,7 +30,9 @@ import { type PayoutGateway, razorpayxPayouts } from './razorpayx.js';
  *   money that left without the ledger knowing.
  * - **RazorpayX.** Every payout in flight: `processed` → paid and cleared;
  *   `reversed`/`failed`/`rejected`/`cancelled` → failed, owed again. A claim
- *   that never reached RazorpayX in a day is a mismatch.
+ *   that never reached RazorpayX in a day is a mismatch. The `payout.*` webhook
+ *   applies the same transitions as they happen (S-102); this is its safety
+ *   net, and asks a week of paid payouts whether the bank returned them.
  *
  * Idempotent (R-ASYNC-03): clearings are guarded on a row lock and an existing
  * clearing, mismatches on `unique(kind, reference)`. A lookup that fails is
@@ -44,9 +46,10 @@ const DAY_MS = 86_400_000;
 const STUCK_AFTER_MS = DAY_MS;
 /** A Route transfer still unprocessed this long after capture is a mismatch, not a wait. */
 const TRANSFER_OVERDUE_MS = 3 * DAY_MS;
-const PAYOUT_FAILED_STATUSES = new Set(['reversed', 'failed', 'rejected', 'cancelled']);
 /** How far back the unrecorded-transfer check looks, so a missed run or two loses nothing. */
 const UNRECORDED_LOOKBACK_MS = 3 * DAY_MS;
+/** How long after it was paid a payout is still asked whether the bank returned it. */
+const REVERSAL_LOOKBACK_MS = 7 * DAY_MS;
 
 export async function reconcilePayouts(
   deps: JobDeps,
@@ -83,6 +86,25 @@ export async function reconcilePayouts(
   for (const { id, razorpayPayoutId } of inFlight) {
     // The WHERE excludes NULL; this narrows it for the type, and never lets a
     // blank id reach `GET /payouts/` (the list endpoint).
+    if (razorpayPayoutId === null) continue;
+    await attempt({ payoutId: id }, () =>
+      reconcilePayout(deps, opts.payouts, id, razorpayPayoutId),
+    );
+  }
+
+  // A missed `payout.reversed` webhook (S-102): the bank can return a payout days after it was
+  // processed, so payouts paid in the last week are asked again. Only a reversal changes them.
+  const recentlyPaid = await deps.db
+    .select({ id: payouts.id, razorpayPayoutId: payouts.razorpayPayoutId })
+    .from(payouts)
+    .where(
+      and(
+        eq(payouts.status, 'paid'),
+        isNotNull(payouts.razorpayPayoutId),
+        gt(payouts.completedAt, new Date(opts.now.getTime() - REVERSAL_LOOKBACK_MS)),
+      ),
+    );
+  for (const { id, razorpayPayoutId } of recentlyPaid) {
     if (razorpayPayoutId === null) continue;
     await attempt({ payoutId: id }, () =>
       reconcilePayout(deps, opts.payouts, id, razorpayPayoutId),
@@ -305,22 +327,7 @@ async function reconcilePayout(
   razorpayPayoutId: string,
 ): Promise<void> {
   const sent = await gateway.fetch(razorpayPayoutId);
-
-  if (PAYOUT_FAILED_STATUSES.has(sent.status)) {
-    await failPayout(deps, payoutId, `razorpayx ${sent.status}`);
-    return;
-  }
-  if (sent.status !== 'processed') return; // queued / pending / processing: tomorrow
-
-  await deps.db.transaction(async (tx) => {
-    const [paid] = await tx
-      .update(payouts)
-      .set({ status: 'paid', completedAt: new Date(), updatedAt: new Date() })
-      .where(and(eq(payouts.id, payoutId), eq(payouts.status, 'processing')))
-      .returning({ netPaise: payouts.netPaise });
-    if (paid === undefined) return;
-    await postLedger(tx, { payoutId, entries: settlementClearedEntries(paid.netPaise) });
-  });
+  await applyPayoutStatus(deps, payoutId, sent.status);
 }
 
 async function flag(

@@ -214,6 +214,7 @@ function BookingGroup({
   if (query.isError && query.data === undefined) {
     return (
       <Pressable
+        accessibilityLabel={`Retry loading ${title.toLowerCase()} bookings`}
         accessibilityRole="button"
         onPress={() => void query.refetch()}
         style={styles.bookingRetry}
@@ -237,6 +238,7 @@ function BookingGroup({
           notice rather than the full-width RefreshNotice banner. */}
       {query.isError ? (
         <Pressable
+          accessibilityLabel="Retry refreshing bookings"
           accessibilityRole="button"
           onPress={() => void query.refetch()}
           style={styles.bookingRetry}

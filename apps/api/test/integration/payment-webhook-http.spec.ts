@@ -621,6 +621,31 @@ describe('razorpay webhook over HTTP', () => {
       expect(row?.n).toBe('1');
     });
 
+    it('a refund after capture records the owner share to take back from the transfer (S-98)', async () => {
+      const booking = await bookWithTransfer(null);
+      await h.sql`UPDATE payments SET route_transfer_paise = ${booking.ownerEarningsPaise}
+                  WHERE booking_id = ${booking.id}`;
+      razorpay.fetchOrder.mockResolvedValue(ok(booking.totalPaise));
+      await capture(booking.totalPaise, 'evt_reverse');
+
+      await stack.cancel.execute({
+        bookingId: booking.id,
+        reason: 'plans changed',
+        by: { kind: 'driver', driverId: h.driverId },
+      });
+
+      const [refund] = await h.sql<{ share: string | null }[]>`
+        SELECT route_reversal_paise::text AS share FROM refunds`;
+      const [owed] = await h.sql<{ debits: string }[]>`
+        SELECT sum(amount_paise)::text AS debits FROM ledger_entries
+        WHERE account = 'owner_payable' AND direction = 'debit'
+          AND txn_id IN (SELECT txn_id FROM ledger_entries WHERE account = 'refunds_payable')`;
+      // Exactly what the refund's posting took off the owner, and never more than Route paid them.
+      expect(refund?.share).toBe(owed?.debits);
+      expect(Number(refund?.share)).toBeGreaterThan(0);
+      expect(Number(refund?.share)).toBeLessThanOrEqual(booking.ownerEarningsPaise);
+    });
+
     it('the order endpoint records the transfer it attached, which capture then discharges', async () => {
       // Every discharge test above writes route_transfer_paise by hand; this is
       // the one proof that the real order path writes it at all.
@@ -685,9 +710,23 @@ describe('razorpay webhook over HTTP', () => {
                 ${job?.id ?? ''}, 31920)
       `;
       razorpay.fetchOrder.mockResolvedValue(ok(50_000));
+      const [before] = await h.sql<{ status: string }[]>`
+        SELECT status FROM bookings WHERE id = ${booking.id}`;
 
       await capture(50_000, 'evt_wash_1');
       await capture(50_000, 'evt_wash_2');
+
+      // S-22: a wash capture marks its own payment captured and leaves the parking booking alone
+      // (read as a booking capture, it would have been an orphan and auto-refunded).
+      const [payment] = await h.sql<{ status: string }[]>`
+        SELECT status FROM payments WHERE razorpay_order_id = ${ORDER_ID}`;
+      expect(payment?.status).toBe('captured');
+      const [after] = await h.sql<{ status: string }[]>`
+        SELECT status FROM bookings WHERE id = ${booking.id}`;
+      expect(after?.status).toBe(before?.status);
+      expect(
+        await h.sql`SELECT 1 FROM outbox_messages WHERE type = 'payment.issue-refund'`,
+      ).toHaveLength(0);
 
       const rows = await h.sql<
         { account: string; direction: string; amount: string; cp: string | null }[]
@@ -719,6 +758,59 @@ describe('razorpay webhook over HTTP', () => {
       const body =
         '{"entity": "event", "event": "payment.captured", "payload": {"payment": {"entity": {"id": "pay_x", "amount": 9702, "currency": "INR", "status": "captured"}}}}';
       const response = await post(body, { 'x-razorpay-signature': sign(body) });
+
+      expect(response.status).toBe(400);
+    });
+  });
+
+  /** S-102: RazorpayX's payout events, on their own path under their own secret. */
+  describe('razorpayx payout webhook', () => {
+    const PAYOUT_URL = '/api/v1/webhooks/razorpayx';
+    const signX = (body: string) =>
+      createHmac('sha256', 'fake_payout_webhook_secret_000').update(body).digest('hex');
+    const payoutBody = (event: string, status: string) =>
+      JSON.stringify({
+        entity: 'event',
+        event,
+        payload: { payout: { entity: { id: 'pout_QK7l1nFirst', amount: 50_000, status } } },
+      });
+    const postX = (body: string, headers: Record<string, string>) =>
+      http.request({ method: 'POST', url: PAYOUT_URL, rawPayload: body, headers });
+    const queued = () =>
+      h.sql<{ payload: { razorpayPayoutId: string; status: string } }[]>`
+        SELECT payload FROM outbox_messages WHERE type = 'payout.apply-status'`;
+
+    it('records a verified payout event for the worker, once per delivery', async () => {
+      const body = payoutBody('payout.reversed', 'reversed');
+      const headers = { 'x-razorpay-signature': signX(body), 'x-razorpay-event-id': 'evt_px1' };
+
+      expect((await postX(body, headers)).status).toBe(200);
+      expect((await postX(body, headers)).status).toBe(200);
+
+      expect((await queued()).map((m) => m.payload)).toEqual([
+        { razorpayPayoutId: 'pout_QK7l1nFirst', status: 'reversed' },
+      ]);
+    });
+
+    it('refuses the payment webhook secret: each sender has its own', async () => {
+      const body = payoutBody('payout.processed', 'processed');
+      const response = await postX(body, { 'x-razorpay-signature': sign(body) });
+
+      expect(response.status).toBe(401);
+      expect(await queued()).toEqual([]);
+    });
+
+    it('answers 200 to a payout event it does not act on, and records nothing', async () => {
+      const body = payoutBody('payout.queued', 'queued');
+      const response = await postX(body, { 'x-razorpay-signature': signX(body) });
+
+      expect(response.status).toBe(200);
+      expect(await queued()).toEqual([]);
+    });
+
+    it('rejects a handled event with a malformed payout', async () => {
+      const body = JSON.stringify({ entity: 'event', event: 'payout.processed', payload: {} });
+      const response = await postX(body, { 'x-razorpay-signature': signX(body) });
 
       expect(response.status).toBe(400);
     });

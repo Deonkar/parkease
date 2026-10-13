@@ -229,7 +229,9 @@ export const NOTIFICATION_CATALOG = {
     category: 'payouts',
     title: 'Bank details updated',
     body: (d) =>
-      `Payouts now go to the account ending ${str(d.last4) ?? 'on file'}. If this wasn't you, contact support.`,
+      `Payouts now go to the account ending ${str(d.last4) ?? 'on file'}.` +
+      (d.held === true ? ' The first one waits 48 hours, in case this was not you.' : '') +
+      " If this wasn't you, contact support now.",
     link: payouts,
   },
   'payout.bank_changed': {

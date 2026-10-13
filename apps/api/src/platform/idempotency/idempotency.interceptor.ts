@@ -5,6 +5,7 @@ import {
   type CallHandler,
   ConflictException,
   type ExecutionContext,
+  HttpException,
   HttpStatus,
   Injectable,
   type NestInterceptor,
@@ -12,14 +13,15 @@ import {
 } from '@nestjs/common';
 import { trace } from '@opentelemetry/api';
 import type { FastifyRequest } from 'fastify';
-import { type Observable, catchError, of, tap, throwError } from 'rxjs';
+import { Observable, catchError, concatMap, from, of, throwError } from 'rxjs';
 import { z } from 'zod';
 
 import type { AuthUser } from '../auth/current-user.decorator.js';
 import { routePattern } from '../http/route-pattern.js';
 import { logger } from '../observability/logger.js';
 
-import { IdempotencyService, hashRequest } from './idempotency.service.js';
+import { idempotencyClaim } from './claim-context.js';
+import { IdempotencyService, hashRequest, legacyHashRequest } from './idempotency.service.js';
 
 const uuidSchema = z.string().uuid();
 
@@ -87,10 +89,10 @@ export class IdempotencyInterceptor implements NestInterceptor {
     // ADMIN_AUTH_PATH_PREFIX). Folding the cookie into the hash makes the replay answer
     // only the caller who holds the same credential; anyone else gets the
     // key-reused-with-a-different-request 422.
-    const requestHash =
-      request.user === undefined
-        ? credentialBoundHash(hashRequest(request.params, request.body), request.headers.cookie)
-        : hashRequest(request.params, request.body);
+    const bind = (bodyHash: string) =>
+      request.user === undefined ? credentialBoundHash(bodyHash, request.headers.cookie) : bodyHash;
+    const requestHash = bind(hashRequest(request.params, request.body));
+    const legacyRequestHash = bind(legacyHashRequest(request.params, request.body));
     const endpoint = `${request.method} ${route}`;
     // This attempt's claim token: `store` and `release` carry it back, so a
     // write from an attempt a newer retry has taken over lands on nothing.
@@ -101,6 +103,7 @@ export class IdempotencyInterceptor implements NestInterceptor {
       userId,
       endpoint,
       requestHash,
+      legacyRequestHash,
       claimedAt,
     });
 
@@ -112,6 +115,15 @@ export class IdempotencyInterceptor implements NestInterceptor {
         throw new UnprocessableEntityException(
           'Something changed in that request. Please try again.',
         );
+
+      case 'committed':
+        // The first attempt's write committed and its answer was lost (S-64). Running it again
+        // would repeat the write, so the client is told to look instead: a booking list, a
+        // payment status. Its own code so the app can refresh rather than show an error.
+        throw new ConflictException({
+          error: 'REQUEST_ALREADY_APPLIED',
+          message: 'That request already went through. Refresh to see the result.',
+        });
 
       case 'in_flight':
         // Its own code, not the generic CONFLICT: a client must tell "your
@@ -144,7 +156,7 @@ export class IdempotencyInterceptor implements NestInterceptor {
          * the key was deleted under it. Nothing was written, and retrying would
          * only lose again, so it is logged and left.
          */
-        const observe = (write: Promise<boolean>, what: 'store' | 'release') => {
+        const observe = (write: Promise<boolean>, what: 'store' | 'release'): Promise<void> =>
           write.then(
             (held) => {
               if (!held) {
@@ -163,7 +175,6 @@ export class IdempotencyInterceptor implements NestInterceptor {
               );
             },
           );
-        };
 
         /**
          * A store is retried once, a release is not. The handler has already
@@ -181,13 +192,28 @@ export class IdempotencyInterceptor implements NestInterceptor {
           });
         };
 
-        return next.handle().pipe(
-          tap((payload) => {
-            observe(store(payload), 'store');
+        // The handler runs inside the claim, so each domain transaction it commits is fenced on
+        // it (`fenceOnClaim`, S-64). Subscribed inside `run`, not just created there, so the
+        // context holds however the handler's observable defers its work.
+        const handled = new Observable<unknown>((subscriber) =>
+          idempotencyClaim.run({ key, claimedAt }, () => next.handle().subscribe(subscriber)),
+        );
+        // The response waits for the store (or release) to settle, never for it to succeed: a
+        // client that retries the moment it has its answer must find the key replayable, not
+        // still in flight. A failed write is logged by `observe` and the answer goes out anyway.
+        return handled.pipe(
+          concatMap(async (payload) => {
+            await observe(store(payload), 'store');
+            return payload;
           }),
           catchError((error: unknown) => {
-            observe(this.service.release(key, claimedAt), 'release');
-            return throwError(() => error);
+            // A domain refusal after a saved step (route onboarding resumes this way) is meant
+            // to be retried with the same key. Anything else that failed after committing keeps
+            // its key settled, so the retry is not a second write.
+            const rerunnable = error instanceof HttpException && error.getStatus() < 500;
+            return from(
+              observe(this.service.release(key, claimedAt, { rerunnable }), 'release'),
+            ).pipe(concatMap(() => throwError(() => error)));
           }),
         );
       }

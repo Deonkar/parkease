@@ -61,7 +61,7 @@ const networkEarnings = ownerEarningsViewSchema.parse({
 const networkLine = statementLineSchema.parse({
   bookingId: '0192f2a1-0000-7000-8000-0000000000ab',
   occurredAt: '2026-09-24T06:00:00.000Z',
-  driverName: 'Network Driver',
+  driverName: 'Network D.',
   spaceName: 'Network Space',
   durationLabel: '1 hr',
   basePaise: 1_000,
@@ -72,7 +72,7 @@ const networkLine = statementLineSchema.parse({
 
 const networkBooking = ownerBookingSchema.parse({
   bookingId: '0192f2a1-0000-7000-8000-0000000000ac',
-  driverName: 'Network Driver',
+  driverName: 'Network D.',
   vehicleType: 'car',
   slotIndex: null,
   startsAt: '2026-09-24T06:00:00.000Z',

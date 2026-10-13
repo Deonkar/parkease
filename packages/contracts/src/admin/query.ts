@@ -5,7 +5,9 @@ import { z } from 'zod';
  * hence `coerce`. Defined once because six lists must agree on the same bounds.
  */
 export const adminPageQuerySchema = z.object({
-  page: z.coerce.number().int().min(1).default(1),
+  // Bounded (S-142): an unbounded page reached Postgres as OFFSET 1e300 and answered 500. Past
+  // 10,000 pages of 100 a list is filtered, not paged.
+  page: z.coerce.number().int().min(1).max(10_000).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
 

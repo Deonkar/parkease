@@ -5,6 +5,7 @@ import {
   easing,
   fontSize,
   fontWeight,
+  iconSize,
   opacity,
   radius,
   spacing,
@@ -136,7 +137,11 @@ function EvidenceSlot({ slot, view, fill, onCapture, onRetry }: EvidenceSlotProp
       case 'empty':
         return (
           <View testID={`evidence-${slot}-frame`} style={[styles.frame, styles.frameEmpty]}>
-            <MaterialCommunityIcons name="camera-outline" size={28} color={colors.textTertiary} />
+            <MaterialCommunityIcons
+              name="camera-outline"
+              size={iconSize.xl}
+              color={colors.textTertiary}
+            />
             <Text style={styles.owed}>{OWED[slot]}</Text>
             {writable ? <Text style={styles.cue}>Tap to take the photo</Text> : null}
           </View>
@@ -148,7 +153,7 @@ function EvidenceSlot({ slot, view, fill, onCapture, onRetry }: EvidenceSlotProp
             <View style={styles.band}>
               <MaterialCommunityIcons
                 name="cloud-upload-outline"
-                size={16}
+                size={iconSize.sm}
                 color={colors.textInverse}
               />
               <Text style={styles.bandText}>Uploading…</Text>
@@ -162,7 +167,7 @@ function EvidenceSlot({ slot, view, fill, onCapture, onRetry }: EvidenceSlotProp
             <View style={styles.band}>
               <MaterialCommunityIcons
                 name="cloud-off-outline"
-                size={16}
+                size={iconSize.sm}
                 color={colors.textInverse}
               />
               <Text style={styles.bandText}>Not sent</Text>
@@ -178,14 +183,14 @@ function EvidenceSlot({ slot, view, fill, onCapture, onRetry }: EvidenceSlotProp
               <View style={styles.attachedBlank}>
                 <MaterialCommunityIcons
                   name="image-check-outline"
-                  size={28}
+                  size={iconSize.xl}
                   color={colors.primaryDark}
                 />
                 <Text style={styles.attachedBlankText}>Photo attached</Text>
               </View>
             )}
             <View style={styles.badge} accessibilityElementsHidden importantForAccessibility="no">
-              <MaterialCommunityIcons name="check" size={16} color={colors.textInverse} />
+              <MaterialCommunityIcons name="check" size={iconSize.sm} color={colors.textInverse} />
             </View>
           </View>
         );

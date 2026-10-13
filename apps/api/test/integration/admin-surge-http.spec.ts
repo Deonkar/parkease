@@ -212,7 +212,9 @@ describe('admin surge HTTP', () => {
     it('records the before and the after state, and who changed it', async () => {
       await write('PUT', CONFIG_URL, { ...validConfig(), occupancyWindowMinutes: 90 });
 
-      const rows = await h.sql<{ before: Record<string, unknown>; after: Record<string, unknown> }[]>`
+      const rows = await h.sql<
+        { before: Record<string, unknown>; after: Record<string, unknown> }[]
+      >`
         SELECT actor_user_id, action, before, after
         FROM audit_log WHERE action = 'admin.surge.config.replace' LIMIT 1
       `;
@@ -253,7 +255,8 @@ describe('admin surge HTTP', () => {
       const after = await http.request({ method: 'GET', url: CONFIG_URL });
       expect(data(after)['maxMultiplierBp']).toBe(GLOBAL_CAP_BP);
 
-      const rows = await h.sql`SELECT count(*)::int AS n FROM audit_log WHERE action LIKE '%replace'`;
+      const rows =
+        await h.sql`SELECT count(*)::int AS n FROM audit_log WHERE action LIKE '%replace'`;
       expect(rows[0]?.['n']).toBe(0);
     });
 
@@ -447,7 +450,9 @@ describe('admin surge HTTP', () => {
     it('records the before and after of the amendment', async () => {
       await write('PATCH', `${ZONES_URL}/${AIRPORT_ZONE}`, { enabled: false });
 
-      const rows = await h.sql<{ before: Record<string, unknown>; after: Record<string, unknown> }[]>`
+      const rows = await h.sql<
+        { before: Record<string, unknown>; after: Record<string, unknown> }[]
+      >`
         SELECT before, after FROM audit_log
         WHERE action = 'admin.surge.zone.update' LIMIT 1
       `;

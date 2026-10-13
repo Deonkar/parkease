@@ -1,11 +1,13 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Role } from '@parkease/contracts/enums';
-import { colors, fontSize, spacing } from '@parkease/tokens';
+import { colors, fontSize, opacity, spacing } from '@parkease/tokens';
+import { Redirect } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/contexts/AuthContext';
+import { ADMIN_ONLY_ROUTE, isAdminOnly } from '@/lib/landing-route';
 
 const roles = [
   {
@@ -47,10 +49,19 @@ export default function ChooseRoleScreen() {
   const [loading, setLoading] = useState(false);
   const insets = useSafeAreaInsets();
 
+  // Every role offered below is one an admin-only account does not hold (S-54).
+  if (auth.status === 'authenticated' && isAdminOnly(auth.roles)) {
+    return <Redirect href={ADMIN_ONLY_ROUTE} />;
+  }
+
   const handleSelect = async (role: Role) => {
     setLoading(true);
     try {
-      await auth.switchRole(role);
+      // A role this account does not hold yet is taken on, not switched to (S-149). Drivers
+      // are every account's starting role.
+      const held = auth.status === 'authenticated' && auth.roles.includes(role);
+      if (held || role === Role.DRIVER || role === Role.ADMIN) await auth.switchRole(role);
+      else await auth.addRole(role);
     } catch {
       Alert.alert('Error', 'Failed to set your role. Please try again.');
     } finally {
@@ -137,7 +148,7 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
   },
   cardDisabled: {
-    opacity: 0.5,
+    opacity: opacity.dimmed,
   },
   iconContainer: {
     width: 48,

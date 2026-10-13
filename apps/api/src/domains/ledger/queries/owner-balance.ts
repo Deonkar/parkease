@@ -1,10 +1,16 @@
-import { BadRequestException, Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { type BookingStatus, type DurationType, LedgerAccount } from '@parkease/contracts/enums';
+import { sumPaise } from '@parkease/db/queries';
 import { bookings, ledgerEntries, spaces, users } from '@parkease/db/schema';
 import { and, desc, eq, inArray, notInArray, sql, type SQL } from 'drizzle-orm';
 import { z } from 'zod';
 
 import { DB, type Database } from '../../../platform/db/db.module.js';
+import {
+  decodeJsonCursor,
+  encodeJsonCursor,
+  InvalidCursorError,
+} from '../../../platform/http/json-cursor.js';
 import { signedBalancePaise } from '../accounts.js';
 import { type EarningsPeriod, istDays, periodBound } from '../period-bound.js';
 import { notSettlement } from '../settlement.js';
@@ -77,20 +83,11 @@ const FIRST_CREDIT = () =>
 const cursorSchema = z.object({ t: z.string().datetime(), i: z.string().uuid() });
 
 const encodeCursor = (row: StatementRow) =>
-  Buffer.from(JSON.stringify({ t: row.occurredAt.toISOString(), i: row.bookingId })).toString(
-    'base64url',
-  );
+  encodeJsonCursor({ t: row.occurredAt.toISOString(), i: row.bookingId });
 
 function decodeCursor(raw: string): { at: string; id: string } | undefined {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'));
-  } catch {
-    // Malformed base64url or JSON: a typed failure, answered as 400 below.
-    return undefined;
-  }
-  const payload = cursorSchema.safeParse(parsed);
-  return payload.success ? { at: payload.data.t, id: payload.data.i } : undefined;
+  const payload = decodeJsonCursor(raw, cursorSchema);
+  return payload === undefined ? undefined : { at: payload.t, id: payload.i };
 }
 
 /**
@@ -137,7 +134,7 @@ export class OwnerBalanceQuery {
       .innerJoin(spaces, eq(spaces.id, bookings.spaceId))
       .where(and(eq(spaces.ownerId, ownerId), ownerSide()));
 
-    return net(Number(row?.debitsPaise ?? 0), Number(row?.creditsPaise ?? 0));
+    return net(sumPaise(row?.debitsPaise), sumPaise(row?.creditsPaise));
   }
 
   /** The same question scoped to one booking, for a statement line. */
@@ -148,7 +145,7 @@ export class OwnerBalanceQuery {
       .innerJoin(bookings, eq(bookings.id, ledgerEntries.bookingId))
       .where(and(ownerSide(), notSettlement(), eq(ledgerEntries.bookingId, bookingId)));
 
-    return net(Number(row?.debitsPaise ?? 0), Number(row?.creditsPaise ?? 0));
+    return net(sumPaise(row?.debitsPaise), sumPaise(row?.creditsPaise));
   }
 
   /** Owner-side EARNINGS rows: settlements excluded, so a transfer is not a reversal. */
@@ -182,8 +179,8 @@ export class OwnerBalanceQuery {
       .innerJoin(spaces, eq(spaces.id, bookings.spaceId))
       .where(and(this.ownerScope(ownerId), bound));
 
-    const creditsPaise = Number(row?.creditsPaise ?? 0);
-    const debitsPaise = Number(row?.debitsPaise ?? 0);
+    const creditsPaise = sumPaise(row?.creditsPaise);
+    const debitsPaise = sumPaise(row?.debitsPaise);
     return { creditsPaise, debitsPaise, netPaise: net(debitsPaise, creditsPaise) };
   }
 
@@ -199,7 +196,7 @@ export class OwnerBalanceQuery {
       .groupBy(day);
 
     const moved = new Map(
-      rows.map((r) => [r.day, net(Number(r.debitsPaise), Number(r.creditsPaise))]),
+      rows.map((r) => [r.day, net(sumPaise(r.debitsPaise), sumPaise(r.creditsPaise))]),
     );
     // Union with the posted days: a request straddling IST midnight must not
     // drop a bucket the database already counted in the period total.
@@ -250,10 +247,7 @@ export class OwnerBalanceQuery {
   ) {
     const cursor = opts.cursor === undefined ? undefined : decodeCursor(opts.cursor);
     if (opts.cursor !== undefined && cursor === undefined) {
-      throw new BadRequestException({
-        error: 'INVALID_CURSOR',
-        message: 'That page link is no longer valid. Pull to refresh.',
-      });
+      throw new InvalidCursorError();
     }
 
     const { query, firstCredit } = this.statementQuery(ownerId, reader);
@@ -271,8 +265,8 @@ export class OwnerBalanceQuery {
 
     const hasMore = rows.length > opts.limit;
     const items: StatementRow[] = rows.slice(0, opts.limit).map((row) => {
-      const creditsPaise = Number(row.creditsPaise);
-      const debitsPaise = Number(row.debitsPaise);
+      const creditsPaise = sumPaise(row.creditsPaise);
+      const debitsPaise = sumPaise(row.debitsPaise);
       return {
         bookingId: row.bookingId,
         occurredAt: row.occurredAt,
@@ -310,7 +304,7 @@ export class OwnerBalanceQuery {
       .where(and(this.ownerScope(ownerId), inArray(ledgerEntries.bookingId, [...bookingIds])))
       .groupBy(ledgerEntries.bookingId);
     return new Map(
-      rows.map((r) => [r.bookingId ?? '', net(Number(r.debitsPaise), Number(r.creditsPaise))]),
+      rows.map((r) => [r.bookingId ?? '', net(sumPaise(r.debitsPaise), sumPaise(r.creditsPaise))]),
     );
   }
 }

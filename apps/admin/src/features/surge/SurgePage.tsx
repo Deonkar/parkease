@@ -103,6 +103,7 @@ function GlobalConfig() {
             <Form layout="inline">
               <Form.Item label="Peak">
                 <InputNumber
+                  aria-label="Peak modifier"
                   step={0.05}
                   value={config.peakHourModifierBp / BASIS_POINTS}
                   onChange={(v) => {
@@ -112,6 +113,7 @@ function GlobalConfig() {
               </Form.Item>
               <Form.Item label="Weekend">
                 <InputNumber
+                  aria-label="Weekend modifier"
                   step={0.05}
                   value={config.weekendModifierBp / BASIS_POINTS}
                   onChange={(v) => {
@@ -121,6 +123,7 @@ function GlobalConfig() {
               </Form.Item>
               <Form.Item label="Event">
                 <InputNumber
+                  aria-label="Event modifier"
                   step={0.05}
                   value={config.eventModifierBp / BASIS_POINTS}
                   onChange={(v) => {
@@ -130,6 +133,7 @@ function GlobalConfig() {
               </Form.Item>
               <Form.Item label="Cap">
                 <InputNumber
+                  aria-label="Multiplier cap"
                   step={0.05}
                   value={config.maxMultiplierBp / BASIS_POINTS}
                   suffix="×"
@@ -140,6 +144,7 @@ function GlobalConfig() {
               </Form.Item>
               <Form.Item label="Window">
                 <InputNumber
+                  aria-label="Occupancy window in minutes"
                   min={15}
                   value={config.occupancyWindowMinutes}
                   suffix="min"
@@ -268,6 +273,7 @@ function ZoneOverrides() {
               title: 'Enabled',
               render: (_, zone) => (
                 <Switch
+                  aria-label={`Surge enabled in ${zone.zoneId}`}
                   checked={zone.enabled}
                   loading={toggle.isPending}
                   onChange={(enabled) => {
@@ -364,6 +370,7 @@ function ZoneDialog({ zone, onClose }: { zone: Zone | null; onClose: () => void 
         <Space>
           Cap{' '}
           <InputNumber
+            aria-label="Zone multiplier cap"
             step={0.05}
             placeholder="inherit"
             value={cap === null ? null : cap / BASIS_POINTS}

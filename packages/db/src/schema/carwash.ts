@@ -76,6 +76,20 @@ export const washerProfiles = pgTable(
       'washer_profiles_business_name_check',
       sql`${t.partnerType} <> 'business' OR ${t.businessName} IS NOT NULL`,
     ),
+    // 0050 (S-57): a business is reviewed with 1–10 photos; no display name is blank.
+    check(
+      'washer_profiles_business_photos_check',
+      sql`${t.partnerType} <> 'business' OR cardinality(${t.businessPhotoIds}) BETWEEN 1 AND 10`,
+    ),
+    check(
+      'washer_profiles_business_name_not_blank_check',
+      sql`${t.businessName} IS NULL OR btrim(${t.businessName}) <> ''`,
+    ),
+    // 0050 (S-56): only catalogue services.
+    check(
+      'washer_profiles_capabilities_check',
+      sql`${t.capabilities} <@ ARRAY['basic_exterior','premium_wash','interior_only','full_detailing','quick_wipe']::text[]`,
+    ),
     check(
       'washer_profiles_verification_status_check',
       sql`${t.verificationStatus} IN ('unverified','pending','verified','rejected')`,
@@ -126,6 +140,8 @@ export const washServices = pgTable(
     // drops zero amounts because the ledger CHECK is amount_paise > 0 — and
     // assertEntriesBalance rejects an empty posting, so a free wash is a 500.
     check('wash_services_price_check', sql`${t.pricePaise} > 0`),
+    // 0050 (S-47): MIN/MAX_SERVICE_PRICE_PAISE.
+    check('wash_services_price_range_check', sql`${t.pricePaise} BETWEEN 1000 AND 999900`),
     check('wash_services_duration_check', sql`${t.durationMinutes} > 0`),
     check('wash_services_vehicle_type_check', sql`${t.vehicleType} IN ('car','two_wheeler')`),
   ],
@@ -183,6 +199,10 @@ export const washJobs = pgTable(
     index('wash_jobs_booking_id_idx').on(t.bookingId),
     index('wash_jobs_driver_user_id_idx').on(t.driverUserId),
     index('wash_jobs_washer_user_id_idx').on(t.washerUserId),
+    // 0054 (S-58): a partner's earnings lines, newest first, with id as the tiebreak.
+    index('wash_jobs_earnings_lines_idx')
+      .on(t.washerUserId, t.completedAt.desc(), t.id.desc())
+      .where(sql`${t.status} = 'completed'`),
     index('wash_jobs_status_idx').on(t.status),
     // The busy-partner exclusion in the candidate query. Partial, so completed
     // and cancelled jobs never enter it — the cost of asking "are they free"
@@ -208,6 +228,11 @@ export const washJobs = pgTable(
       sql`${t.commissionRate} >= 0 AND ${t.commissionRate} <= 1`,
     ),
     check('wash_jobs_offer_round_check', sql`${t.offerRound} >= 0`),
+    // 0050 (S-32): a completed wash has a completion time.
+    check(
+      'wash_jobs_completed_at_check',
+      sql`${t.status} <> 'completed' OR ${t.completedAt} IS NOT NULL`,
+    ),
     check('wash_jobs_offer_radius_check', sql`${t.offerRadiusM} > 0`),
     // The candidate query excludes the driver from its own offer set, so a row
     // that violates this means the exclusion was bypassed.

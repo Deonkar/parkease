@@ -13,6 +13,7 @@ import {
 } from '@parkease/contracts/valet';
 
 import type { ValetJobRow } from '../../../domains/valet/valet.service.js';
+import { parseOutgoing } from '../../../platform/http/outgoing-contract.js';
 
 /**
  * Events a valet may fire from here, derived from the machine rather than from a
@@ -53,22 +54,26 @@ function earningsFor(feePaise: number | null, commissionRate: string): number | 
 }
 
 export function toValetJobView(job: ValetJobRow): ValetJobView {
-  return valetJobViewSchema.parse({
-    id: job.id,
-    bookingId: job.bookingId,
-    status: job.status,
-    pickupAddress: job.pickupAddress,
-    pickupLocation: job.pickupLocation,
-    returnDropLocation: job.returnDropLocation,
-    distanceM: job.distanceM,
-    earningsPaise: earningsFor(job.feePaise, job.commissionRate),
-    returnEarningsPaise: earningsFor(job.returnFeePaise, job.commissionRate),
-    availableEvents: availableEventsFor(parseValetJobStatus(job.status)),
-    proofPhotoId: job.proofPhotoId,
-    acceptedAt: job.acceptedAt?.toISOString() ?? null,
-    arrivedAt: job.arrivedAt?.toISOString() ?? null,
-    parkedAt: job.parkedAt?.toISOString() ?? null,
-  });
+  return parseOutgoing(
+    valetJobViewSchema,
+    {
+      id: job.id,
+      bookingId: job.bookingId,
+      status: job.status,
+      pickupAddress: job.pickupAddress,
+      pickupLocation: job.pickupLocation,
+      returnDropLocation: job.returnDropLocation,
+      distanceM: job.distanceM,
+      earningsPaise: earningsFor(job.feePaise, job.commissionRate),
+      returnEarningsPaise: earningsFor(job.returnFeePaise, job.commissionRate),
+      availableEvents: availableEventsFor(parseValetJobStatus(job.status)),
+      proofPhotoId: job.proofPhotoId,
+      acceptedAt: job.acceptedAt?.toISOString() ?? null,
+      arrivedAt: job.arrivedAt?.toISOString() ?? null,
+      parkedAt: job.parkedAt?.toISOString() ?? null,
+    },
+    'valet job view',
+  );
 }
 
 export interface OfferRow {
@@ -87,14 +92,18 @@ export interface OfferRow {
 export function toValetOffer(row: OfferRow): ValetOffer {
   const fee = computeValetLegFee(row.distanceM, toRate(Number(row.job.commissionRate)));
 
-  return valetOfferSchema.parse({
-    jobId: row.job.id,
-    bookingId: row.job.bookingId,
-    pickupAddress: row.job.pickupAddress,
-    pickupLocation: row.job.pickupLocation,
-    distanceM: Math.round(row.distanceM),
-    earningsPaise: fee.valetEarningsPaise,
-    offeredAt: row.offeredAt.toISOString(),
-    expiresAt: new Date(row.offeredAt.getTime() + ACCEPT_TIMEOUT_MS).toISOString(),
-  });
+  return parseOutgoing(
+    valetOfferSchema,
+    {
+      jobId: row.job.id,
+      bookingId: row.job.bookingId,
+      pickupAddress: row.job.pickupAddress,
+      pickupLocation: row.job.pickupLocation,
+      distanceM: Math.round(row.distanceM),
+      earningsPaise: fee.valetEarningsPaise,
+      offeredAt: row.offeredAt.toISOString(),
+      expiresAt: new Date(row.offeredAt.getTime() + ACCEPT_TIMEOUT_MS).toISOString(),
+    },
+    'valet offer',
+  );
 }

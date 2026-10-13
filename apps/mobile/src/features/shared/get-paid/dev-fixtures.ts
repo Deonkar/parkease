@@ -21,6 +21,7 @@ let bank: BankDetailsView | null = {
   accountNumberLast4: '6789',
   ifscPrefix: 'HDFC',
   updatedAt: '2026-09-01T10:00:00.000Z',
+  payoutsHeldUntil: null,
 };
 
 const PAYOUTS: PayoutView[] = [
@@ -33,6 +34,7 @@ const PAYOUTS: PayoutView[] = [
     netPaise: 280_000,
     status: 'processing',
     razorpayPayoutId: 'pout_QK7l1nFirst',
+    destinationLast4: '6789',
     createdAt: '2026-09-28T00:30:00.000Z',
   },
   {
@@ -44,6 +46,7 @@ const PAYOUTS: PayoutView[] = [
     netPaise: 160_000,
     status: 'paid',
     razorpayPayoutId: 'pout_QK7l1nSecnd',
+    destinationLast4: '6789',
     createdAt: '2026-09-21T00:30:00.000Z',
   },
   {
@@ -55,6 +58,7 @@ const PAYOUTS: PayoutView[] = [
     netPaise: 90_000,
     status: 'failed',
     razorpayPayoutId: null,
+    destinationLast4: null,
     createdAt: '2026-09-14T00:30:00.000Z',
   },
 ].map((p) => payoutViewSchema.parse(p));
@@ -83,12 +87,16 @@ export const devGetPaid = {
   }),
   bank: () => bank,
   saveBank: (form: UpdateBankDetails): BankDetailsView => {
-    bank = {
+    const changed = bank !== null;
+    const saved: BankDetailsView = {
       accountHolderName: form.accountHolderName,
       accountNumberLast4: form.accountNumber.slice(-4),
       ifscPrefix: form.ifscCode.slice(0, 4),
       updatedAt: new Date().toISOString(),
+      // As the server does (S-100): a change waits 48 hours, a first account does not.
+      payoutsHeldUntil: changed ? new Date(Date.now() + 48 * 3_600_000).toISOString() : null,
     };
-    return bank;
+    bank = saved;
+    return saved;
   },
 };

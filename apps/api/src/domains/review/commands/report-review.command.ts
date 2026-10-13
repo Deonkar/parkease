@@ -1,12 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { ReviewReportReason } from '@parkease/contracts/enums';
-import { reviewReports, reviews } from '@parkease/db/schema';
-import { and, eq, isNull } from 'drizzle-orm';
+import { bookings, reviewReports, reviews } from '@parkease/db/schema';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 
 import { DB, type Database } from '../../../platform/db/db.module.js';
 import { withTransaction } from '../../../platform/db/transaction.js';
 import { OutboxService } from '../../../platform/outbox/outbox.service.js';
-import { ReviewNotFoundError } from '../errors.js';
+import { ReportNeedsBookingError, ReviewNotFoundError } from '../errors.js';
 import { ReviewService } from '../review.service.js';
 import { sanitiseComment } from '../sanitise.js';
 
@@ -40,6 +40,15 @@ export class ReportReviewCommand {
         : await this.reviews.findOnOwnersSpace(input.reviewId, input.ownerId);
     if (review === undefined || review.targetType !== 'space') throw new ReviewNotFoundError();
 
+    // A driver reports only spaces they have actually parked at (S-129): a report must cost more
+    // than a fresh account. An owner is already limited to reviews of their own spaces.
+    if (
+      input.ownerId === undefined &&
+      !(await this.hasBooked(input.reporterUserId, review.targetId))
+    ) {
+      throw new ReportNeedsBookingError();
+    }
+
     await withTransaction(this.db, async (tx) => {
       // Denormalised so the moderation queue is a partial-index scan. Conditional on the review
       // still standing: an admin may have removed it since the read above, and a report on a
@@ -64,5 +73,21 @@ export class ReportReviewCommand {
         payload: { reviewId: review.id, reason: input.reason },
       });
     });
+  }
+
+  /** A booking that was real: paid for at some point, not an abandoned or expired hold. */
+  private async hasBooked(driverId: string, spaceId: string): Promise<boolean> {
+    const [row] = await this.db
+      .select({ id: bookings.id })
+      .from(bookings)
+      .where(
+        and(
+          eq(bookings.driverId, driverId),
+          eq(bookings.spaceId, spaceId),
+          inArray(bookings.status, ['confirmed', 'active', 'completed', 'no_show']),
+        ),
+      )
+      .limit(1);
+    return row !== undefined;
   }
 }

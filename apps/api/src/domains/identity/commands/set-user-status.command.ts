@@ -1,12 +1,13 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { UserStatus } from '@parkease/contracts/enums';
-import { users } from '@parkease/db/schema';
-import { eq } from 'drizzle-orm';
+import { Role, RoleStatus, UserStatus } from '@parkease/contracts/enums';
+import { userRoles, users } from '@parkease/db/schema';
+import { and, eq } from 'drizzle-orm';
 
 import { BLOCKED_REVOKE_REASON, TokenService } from '../../../platform/auth/token.service.js';
 import { DB, type Database } from '../../../platform/db/db.module.js';
 import { withTransaction } from '../../../platform/db/transaction.js';
 import { type AdminActor, AuditService } from '../../../platform/observability/audit.service.js';
+import { assertAdminsRemain } from '../admin-guard.js';
 import { IllegalUserStatusTransitionError, SelfDemotionError } from '../errors.js';
 
 export interface SetUserStatusInput {
@@ -58,6 +59,20 @@ export class SetUserStatusCommand {
       // case-insensitively, so `userId` may be the caller's own id in capitals and still be them.
       if (to === UserStatus.BLOCKED && user.id === actor.userId) throw new SelfDemotionError();
       if (user.status !== from) throw new IllegalUserStatusTransitionError();
+      // Blocking an admin takes their access as surely as revoking it.
+      if (to === UserStatus.BLOCKED) {
+        const [admin] = await tx
+          .select({ id: userRoles.id })
+          .from(userRoles)
+          .where(
+            and(
+              eq(userRoles.userId, user.id),
+              eq(userRoles.role, Role.ADMIN),
+              eq(userRoles.status, RoleStatus.ACTIVE),
+            ),
+          );
+        if (admin !== undefined) await assertAdminsRemain(tx, user.id, actor.userId);
+      }
 
       await tx
         .update(users)

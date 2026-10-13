@@ -40,6 +40,40 @@ export const layout = {
     /** A tall card: an offer. */
     tall: 260,
   },
+  /**
+   * The shared empty and error states' marks: the empty state's illustration
+   * circle and the error state's "!" badge. The badge's radius and line height
+   * are derived from its size where it is drawn, never typed beside it.
+   */
+  state: {
+    illustration: 120,
+    badge: 56,
+  },
 } as const;
+
+/**
+ * Icon sizes, smallest to largest (S-79). An icon is sized by what it sits
+ * beside, so a screen picks the step for its context instead of a number:
+ * a check inside a small badge, a glyph beside a caption, a row's leading
+ * icon, a chevron, a slot placeholder, an empty state's mark.
+ */
+export const iconSize = {
+  /** Inside a small badge or marker: a step rail's check. */
+  xs: 14,
+  /** Beside caption-sized text: a chip, a band, an inline failure. */
+  sm: 16,
+  /** Beside body text in a notice or a locked action. */
+  md: 18,
+  /** A row's leading icon, a stepper's glyph, a status rail's mark. */
+  base: 20,
+  /** A trailing chevron, an account or form-field affordance. */
+  lg: 24,
+  /** A slot placeholder or a picker's lead icon; the tab bar's icon box. */
+  xl: 28,
+  /** The mark of a full-screen empty or error state. */
+  hero: 48,
+} as const;
+
+export type IconSize = typeof iconSize;
 
 export type Layout = typeof layout;

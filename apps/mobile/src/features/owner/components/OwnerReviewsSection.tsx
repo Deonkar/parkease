@@ -43,6 +43,7 @@ export function OwnerReviewsSection({ spaceId }: { readonly spaceId: string }) {
   if (reviews.isError && reviews.data === undefined) {
     return (
       <Pressable
+        accessibilityLabel="Retry loading reviews"
         accessibilityRole="button"
         onPress={() => void reviews.refetch()}
         style={styles.retry}
@@ -98,6 +99,7 @@ export function OwnerReviewsSection({ spaceId }: { readonly spaceId: string }) {
       {reviews.isError ? (
         // A failed "Show more" or refresh keeps what is on screen and says so (BookingGroup's rule).
         <Pressable
+          accessibilityLabel="Retry loading more reviews"
           accessibilityRole="button"
           onPress={() => void reviews.refetch()}
           style={styles.retry}
@@ -229,7 +231,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
-    borderRadius: radius.sm,
+    borderRadius: radius.chip,
     backgroundColor: colors.warningLight,
   },
   reportedText: { fontSize: fontSize.xs, fontWeight: fontWeight.semibold, color: colors.warning },
@@ -246,7 +248,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
-    borderRadius: radius.sm,
+    borderRadius: radius.chip,
     backgroundColor: colors.warningLight,
   },
   needText: { fontSize: fontSize.xs, fontWeight: fontWeight.semibold, color: colors.warning },

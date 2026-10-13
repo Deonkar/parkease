@@ -17,6 +17,7 @@ import { CreateSessionCommand } from '../../src/domains/identity/commands/create
 import { GrantRoleCommand } from '../../src/domains/identity/commands/grant-role.command.js';
 import { ReviewPartnerCommand } from '../../src/domains/identity/commands/review-partner.command.js';
 import { RevokeRoleCommand } from '../../src/domains/identity/commands/revoke-role.command.js';
+import { SelfServeRoleCommand } from '../../src/domains/identity/commands/self-serve-role.command.js';
 import { SetUserStatusCommand } from '../../src/domains/identity/commands/set-user-status.command.js';
 import { SwitchRoleCommand } from '../../src/domains/identity/commands/switch-role.command.js';
 import { PartnerQueries } from '../../src/domains/identity/partner.queries.js';
@@ -40,6 +41,7 @@ import {
   type VerifiedPhone,
 } from '../../src/platform/auth/firebase-verifier.service.js';
 import { IS_PUBLIC_KEY } from '../../src/platform/auth/public.decorator.js';
+import { ReauthService } from '../../src/platform/auth/reauth.service.js';
 import { TokenService } from '../../src/platform/auth/token.service.js';
 import { DB, DbModule } from '../../src/platform/db/db.module.js';
 import { AllExceptionsFilter } from '../../src/platform/http/exception.filter.js';
@@ -76,7 +78,10 @@ import { OwnerEarningsController } from '../../src/roles/owner/earnings.controll
 import { OwnerReviewsController } from '../../src/roles/owner/reviews.controller.js';
 import { OwnerSpacesController } from '../../src/roles/owner/spaces.controller.js';
 import { AdminAuthController } from '../../src/roles/public/admin-auth.controller.js';
-import { RazorpayWebhookController } from '../../src/roles/public/webhooks/razorpay.controller.js';
+import {
+  RazorpayWebhookController,
+  RazorpayxWebhookController,
+} from '../../src/roles/public/webhooks/razorpay.controller.js';
 import { MeController } from '../../src/roles/shared/me.controller.js';
 import { MeNotificationsController } from '../../src/roles/shared/notifications.controller.js';
 import { MePayoutsController } from '../../src/roles/shared/payouts.controller.js';
@@ -104,7 +109,9 @@ export const actingAs = { user: null as AuthUser | null };
  * What the stubbed Firebase verifier says the next ID token proves. Set per test,
  * like `actingAs`. `null` makes `verify` refuse, the way a bad token does.
  */
-export const firebaseStub = { verified: null as VerifiedPhone | null };
+export const firebaseStub = {
+  verified: null as (Omit<VerifiedPhone, 'authTime'> & { authTime?: Date }) | null,
+};
 
 /**
  * Stands in for FirebaseVerifierService, which initialises firebase-admin in its
@@ -117,7 +124,8 @@ class StubFirebaseVerifier {
     if (firebaseStub.verified === null) {
       return Promise.reject(new UnauthorizedException('We could not verify that code.'));
     }
-    return Promise.resolve(firebaseStub.verified);
+    // A token minted by a sign-in that just happened, unless the test says when it was.
+    return Promise.resolve({ authTime: new Date(), ...firebaseStub.verified });
   }
 }
 
@@ -142,10 +150,14 @@ class StubAuthGuard implements CanActivate {
     ]);
     if (isPublic) return true;
 
-    if (actingAs.user === null) throw new UnauthorizedException('Authentication required.');
-
     const request = context.switchToHttp().getRequest<FastifyRequest & { user?: AuthUser }>();
-    request.user = actingAs.user;
+    // A per-request identity, for a stress test whose concurrent requests are different people;
+    // `actingAs` is one global and cannot say that. Test harness only.
+    const header = request.headers['x-test-user'];
+    const user = typeof header === 'string' ? (JSON.parse(header) as AuthUser) : actingAs.user;
+    if (user === null) throw new UnauthorizedException('Authentication required.');
+
+    request.user = user;
     return true;
   }
 }
@@ -217,6 +229,7 @@ class StubAuthGuard implements CanActivate {
     OwnerDashboardController,
     OwnerEarningsController,
     RazorpayWebhookController,
+    RazorpayxWebhookController,
     DriverValetController,
     ValetJobsController,
     ValetAvailabilityController,
@@ -245,6 +258,7 @@ class StubAuthGuard implements CanActivate {
     RoleRepository,
     UserRepository,
     SwitchRoleCommand,
+    SelfServeRoleCommand,
     CreateSessionCommand,
     // The admin user commands and queries are provided directly, like SwitchRoleCommand above:
     // none of them needs the verifier, so IdentityModule stays out of this test module.
@@ -255,6 +269,8 @@ class StubAuthGuard implements CanActivate {
     PartnerQueries,
     ReviewPartnerCommand,
     { provide: FirebaseVerifierService, useClass: StubFirebaseVerifier },
+    // Step-up for bank changes (S-100), over the stub verifier above.
+    ReauthService,
     // Registered exactly as AppModule does, and in its order. This is the whole
     // point of these tests: the interceptor and guard stack a real request
     // actually passes through. Only RateLimitModule's guard is absent —

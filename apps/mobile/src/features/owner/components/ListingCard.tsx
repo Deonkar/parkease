@@ -16,7 +16,12 @@ export function ListingCard({ listing, onPress, onToggle }: ListingCardProps) {
   const status = APPROVAL_STATUS_DISPLAY[listing.approvalStatus];
 
   return (
-    <Pressable style={styles.card} onPress={onPress} accessibilityRole="button">
+    <Pressable
+      accessibilityLabel={`Open listing ${listing.title}`}
+      style={styles.card}
+      onPress={onPress}
+      accessibilityRole="button"
+    >
       <View style={styles.row}>
         {listing.primaryPhoto ? (
           <Image

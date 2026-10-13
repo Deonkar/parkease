@@ -357,7 +357,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     // Restrained, not pill-shaped — the Wayfinder direction's chip shape.
-    borderRadius: radius.sm,
+    borderRadius: radius.chip,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,

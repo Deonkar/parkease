@@ -9,6 +9,8 @@ import { TokenReplayGuard } from './token-replay.guard.js';
 export interface VerifiedPhone {
   readonly firebaseUid: string;
   readonly phone: string;
+  /** When the user last completed sign-in (the OTP), from the token's `auth_time`. */
+  readonly authTime: Date;
 }
 
 @Injectable()
@@ -38,6 +40,10 @@ export class FirebaseVerifierService {
 
     await this.replayGuard.consume(idToken, decoded.exp);
 
-    return { firebaseUid: decoded.uid, phone: decoded.phone_number };
+    return {
+      firebaseUid: decoded.uid,
+      phone: decoded.phone_number,
+      authTime: new Date(decoded.auth_time * 1000),
+    };
   }
 }

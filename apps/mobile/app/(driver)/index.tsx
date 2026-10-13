@@ -634,7 +634,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     paddingHorizontal: spacing.md,
     minHeight: 48,
-    borderRadius: radius.sm,
+    borderRadius: radius.chip,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,

@@ -5,6 +5,7 @@ import {
   type WasherEarningsPeriod,
   type WasherEarningsView,
 } from '@parkease/contracts/washer';
+import { sumPaise } from '@parkease/db/queries';
 import { ledgerEntries, washJobs } from '@parkease/db/schema';
 import { and, desc, eq, sql } from 'drizzle-orm';
 
@@ -82,8 +83,8 @@ export class WasherEarningsQuery {
       { isolationLevel: 'repeatable read', accessMode: 'read only' },
     );
 
-    const creditsPaise = Number(summary?.creditsPaise ?? 0);
-    const debitsPaise = Number(summary?.debitsPaise ?? 0);
+    const creditsPaise = sumPaise(summary?.creditsPaise);
+    const debitsPaise = sumPaise(summary?.debitsPaise);
 
     /**
      * The sign comes from the chart of accounts, not from a subtraction written
@@ -118,8 +119,8 @@ export class WasherEarningsQuery {
           vehicleType: row.vehicleType,
           completedAt: row.completedAt === null ? null : row.completedAt.toISOString(),
           grossPaise: row.grossPaise,
-          feePaise: row.feePaise === null ? null : Number(row.feePaise),
-          netPaise: row.netPaise === null ? null : Number(row.netPaise),
+          feePaise: row.feePaise === null ? null : sumPaise(row.feePaise),
+          netPaise: row.netPaise === null ? null : sumPaise(row.netPaise),
         })),
       },
       'washer earnings view',
@@ -167,21 +168,22 @@ export class WasherEarningsQuery {
   private async lines(tx: ReadTx, washerUserId: string, period: WasherEarningsPeriod) {
     const bound = periodBound(washJobs.completedAt, period);
 
-    return tx
-      .select({
-        jobId: washJobs.id,
-        serviceName: washJobs.serviceName,
-        vehicleType: washJobs.vehicleType,
-        completedAt: washJobs.completedAt,
-        grossPaise: washJobs.pricePaise,
-        feePaise: sql<string | null>`coalesce((
+    return (
+      tx
+        .select({
+          jobId: washJobs.id,
+          serviceName: washJobs.serviceName,
+          vehicleType: washJobs.vehicleType,
+          completedAt: washJobs.completedAt,
+          grossPaise: washJobs.pricePaise,
+          feePaise: sql<string | null>`coalesce((
           select sum(${ledgerEntries.amountPaise})
           from ${ledgerEntries}
           where ${ledgerEntries.txnId} = ${JOB_TXN_ID}
             and ${ledgerEntries.account} = ${LedgerAccount.PLATFORM_REVENUE}
             and ${ledgerEntries.direction} = 'credit'
         ), case when ${washJobs.commissionRate} = 0 then 0 end)::text`,
-        netPaise: sql<string | null>`(
+          netPaise: sql<string | null>`(
           select sum(${ledgerEntries.amountPaise})
           from ${ledgerEntries}
           where ${ledgerEntries.txnId} = ${JOB_TXN_ID}
@@ -189,15 +191,17 @@ export class WasherEarningsQuery {
             and ${ledgerEntries.counterpartyUserId} = ${washerUserId}
             and ${ledgerEntries.direction} = 'credit'
         )::text`,
-      })
-      .from(washJobs)
-      .where(
-        and(
-          eq(washJobs.washerUserId, washerUserId),
-          eq(washJobs.status, 'completed'),
-          ...(bound === undefined ? [] : [bound]),
-        ),
-      )
-      .orderBy(desc(washJobs.completedAt));
+        })
+        .from(washJobs)
+        .where(
+          and(
+            eq(washJobs.washerUserId, washerUserId),
+            eq(washJobs.status, 'completed'),
+            ...(bound === undefined ? [] : [bound]),
+          ),
+        )
+        // id breaks a tie in completion time, so a page reads the same twice (S-58).
+        .orderBy(desc(washJobs.completedAt), desc(washJobs.id))
+    );
   }
 }

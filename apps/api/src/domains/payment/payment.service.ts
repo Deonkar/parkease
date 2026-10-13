@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { PaymentStatus } from '@parkease/contracts/enums';
+import { ORPHAN_CAPTURE_REFUND_REASON } from '@parkease/contracts/money';
 import { bookings, linkedAccounts, payments, refunds, spaces, washJobs } from '@parkease/db/schema';
 import { and, desc, eq, inArray, isNotNull, notExists } from 'drizzle-orm';
 
@@ -29,13 +30,11 @@ export const CAPTURED_PAYMENT_STATUSES: PaymentStatus[] = [
 ];
 
 /**
- * The `refunds.reason` the worker's `reconcile-orphan.job.ts` writes when it refunds, in full, a
- * capture that landed with no live booking behind it (a late capture on a failed order, or the
- * loser of two concurrent create-order calls). That payment is marked `refunded` with a fresh
- * `captured_at`, so it is the newest capture on the booking — and it is not the booking's money.
- * The worker cannot import from `apps/api`, so the literal lives in both places; change together.
+ * A capture that landed with no live booking behind it is refunded in full under this reason. That
+ * payment is marked `refunded` with a fresh `captured_at`, so it is the newest capture on the
+ * booking — and it is not the booking's money.
  */
-export const ORPHAN_CAPTURE_REFUND_REASON = 'orphan_capture';
+export { ORPHAN_CAPTURE_REFUND_REASON };
 
 /**
  * Every read and write against `payments`, `refunds` and `linked_accounts`.
@@ -321,20 +320,52 @@ export class PaymentService {
       .where(eq(payments.id, paymentId));
   }
 
+  /**
+   * Moves a captured payment to refunded (or partially). Checked like `insertRefund` beside it
+   * (S-19): a write that matches nothing would leave the payment `captured` while its refund row
+   * and the `payment.issue-refund` message commit, and anything keyed off `payments.status` would
+   * see it as refundable again. Only a payment that still holds money can move, and zero rows
+   * throws, rolling the refund back with it (R-FAIL-01).
+   */
   async markRefunded(tx: TxHandle, paymentId: string, fully: boolean): Promise<void> {
-    await tx
+    const moved = await tx
       .update(payments)
       .set({
         status: (fully ? 'refunded' : 'partially_refunded') satisfies PaymentStatus,
         updatedAt: new Date(),
       })
-      .where(eq(payments.id, paymentId));
+      .where(
+        and(
+          eq(payments.id, paymentId),
+          inArray(payments.status, ['captured', 'partially_refunded'] satisfies PaymentStatus[]),
+        ),
+      )
+      .returning({ id: payments.id });
+    if (moved.length === 0) {
+      throw new Error(`payment ${paymentId} could not be marked refunded: not captured, or gone`);
+    }
   }
 
+  /**
+   * Records a refund to send. `routeTransferPaise` (the payment's) and `partnerSharePaise` (the
+   * `owner_payable` debits of this refund's posting) are required so no refund path can forget the
+   * partner's share (S-98): when Route already paid the partner, that share is taken back from the
+   * transfer before the driver is refunded, never more than the transfer carried.
+   */
   async insertRefund(
     tx: TxHandle,
-    input: { readonly paymentId: string; readonly amountPaise: number; readonly reason: string },
+    input: {
+      readonly paymentId: string;
+      readonly amountPaise: number;
+      readonly reason: string;
+      readonly routeTransferPaise: number | null;
+      readonly partnerSharePaise: number;
+    },
   ) {
+    const routeReversalPaise =
+      input.routeTransferPaise === null || input.partnerSharePaise <= 0
+        ? null
+        : Math.min(input.partnerSharePaise, input.routeTransferPaise);
     const [row] = await tx
       .insert(refunds)
       .values({
@@ -342,6 +373,7 @@ export class PaymentService {
         amountPaise: input.amountPaise,
         reason: input.reason,
         status: 'pending',
+        routeReversalPaise,
       })
       .returning();
 

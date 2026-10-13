@@ -55,7 +55,6 @@ export class DriverQuotesController {
         surgePremiumPaise: quote.surgePremiumPaise,
         gstPaise: quote.gstPaise,
         totalPaise: quote.driverTotalPaise,
-        ownerEarningsPaise: quote.ownerEarningsPaise,
         surgeMultiplierBp: quote.surgeMultiplierBp,
         surgeBadge: quote.surgeBadge,
       },

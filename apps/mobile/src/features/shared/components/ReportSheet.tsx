@@ -87,6 +87,7 @@ export function ReportSheet({ as, reviewId, onDone }: ReportSheetProps) {
               const selected = reason === option.value;
               return (
                 <Pressable
+                  accessibilityLabel={option.label}
                   key={option.value}
                   onPress={() => {
                     setReason(option.value);

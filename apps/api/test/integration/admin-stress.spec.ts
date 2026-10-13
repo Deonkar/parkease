@@ -4,7 +4,14 @@ import vm from 'node:vm';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { type Harness, seedSpace, seedUser, startHarness, stopHarness } from './harness.js';
+import {
+  approveBody,
+  type Harness,
+  seedSpace,
+  seedUser,
+  startHarness,
+  stopHarness,
+} from './harness.js';
 import { actingAs, type HttpApp, startHttpApp, stopHttpApp } from './http-harness.js';
 
 const API = '/api/v1';
@@ -172,11 +179,11 @@ describe('admin-stress', () => {
       spaceIds.push(id);
     }
 
-    const approve = (id: string) =>
+    const approve = async (id: string) =>
       http.request({
         method: 'POST',
         url: `${API}/admin/spaces/${id}/approve`,
-        payload: {},
+        payload: await approveBody(h, id),
         headers: { 'idempotency-key': crypto.randomUUID() },
       });
 

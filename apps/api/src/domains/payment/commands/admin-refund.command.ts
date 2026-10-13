@@ -1,6 +1,10 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import type { AdminRefund } from '@parkease/contracts/admin';
-import { proportionalRefundEntries, receivableTotalsOf } from '@parkease/contracts/money';
+import {
+  proportionalRefundEntries,
+  receivableTotalsOf,
+  partnerShareOf,
+} from '@parkease/contracts/money';
 import { type Paise, subPaise } from '@parkease/contracts/primitives';
 import { bookings } from '@parkease/db/schema';
 import { and, eq, isNull } from 'drizzle-orm';
@@ -69,21 +73,24 @@ export class AdminRefundCommand {
       const amountPaise = resolveAdminRefund(input, refundablePaise);
       const refundedBeforePaise = prior.reduce((sum, r) => sum + r.amountPaise, 0);
 
+      const entries = proportionalRefundEntries(
+        receivableTotalsOf(booking),
+        amountPaise,
+        `refund: ${ADMIN_REFUND_REASON}`,
+      );
       await this.ledger.post(tx, {
         bookingId: booking.id,
         paymentId: payment.id,
         counterpartyUserId: booking.driverId,
-        entries: proportionalRefundEntries(
-          receivableTotalsOf(booking),
-          amountPaise,
-          `refund: ${ADMIN_REFUND_REASON}`,
-        ),
+        entries,
       });
 
       const refund = await this.payments.insertRefund(tx, {
         paymentId: payment.id,
         amountPaise,
         reason: ADMIN_REFUND_REASON,
+        routeTransferPaise: payment.routeTransferPaise,
+        partnerSharePaise: partnerShareOf(entries),
       });
       // `.returning()` gave nothing back, so the insert did not happen: never enqueue a gateway
       // call against a row that does not exist (R-FAIL-01).

@@ -17,6 +17,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import type { JobDeps } from '../../src/deps.js';
 import { postLedger } from '../../src/jobs/booking/ledger.js';
 import type { SourcedTransfer, TransferGateway } from '../../src/jobs/payment/razorpay.js';
+import { applyPayoutStatusJob } from '../../src/jobs/payout/apply-status.job.js';
 import { failPayout } from '../../src/jobs/payout/fail.js';
 import { type PayoutGateway, RazorpayXError } from '../../src/jobs/payout/razorpayx.js';
 import { reconcilePayouts } from '../../src/jobs/payout/reconcile.job.js';
@@ -762,5 +763,129 @@ describe('payout.reconcile', () => {
 
     expect((await payoutsOf(valet))[0]?.status).toBe('failed');
     expect(await owedTo(valet)).toBe(net);
+  });
+
+  /** S-102: the bank can return a payout after RazorpayX reported it processed. */
+  describe('a payout reversed after it was paid', () => {
+    const status = (s: string) =>
+      gateway({ fetch: vi.fn().mockResolvedValue({ id: 'pout_QK7l1nFirst', status: s }) });
+
+    it('the webhook marks it paid, then failed on reversal: owed again, flagged, ledger as if unsent', async () => {
+      const { valet, payoutId, net } = await processingPayout();
+      const event = { razorpayPayoutId: 'pout_QK7l1nFirst', status: 'processed' };
+
+      await applyPayoutStatusJob(deps, event);
+      await applyPayoutStatusJob(deps, event);
+      expect((await payoutsOf(valet))[0]?.status).toBe('paid');
+      expect(await owedTo(valet)).toBe(0);
+
+      await applyPayoutStatusJob(deps, { ...event, status: 'reversed' });
+      await applyPayoutStatusJob(deps, { ...event, status: 'reversed' });
+
+      expect((await payoutsOf(valet))[0]?.status).toBe('failed');
+      expect(await owedTo(valet)).toBe(net);
+      expect(await clearingFor('payout_id', payoutId)).toMatchObject({ net: 0 });
+      expect(await mismatches()).toEqual([
+        { kind: 'payout_failed', reference: payoutId, expected: expect.any(String), actual: '0' },
+      ]);
+      const [unbalanced] = await pg.sql<{ n: string }[]>`
+        SELECT count(*)::text AS n FROM (
+          SELECT txn_id FROM ledger_entries GROUP BY txn_id
+          HAVING sum(CASE direction WHEN 'debit' THEN amount_paise ELSE -amount_paise END) <> 0) t`;
+      expect(unbalanced?.n).toBe('0');
+    });
+
+    it('a late "failed" for a paid payout is drift, and changes nothing', async () => {
+      const { valet } = await processingPayout();
+      await applyPayoutStatusJob(deps, {
+        razorpayPayoutId: 'pout_QK7l1nFirst',
+        status: 'processed',
+      });
+      await applyPayoutStatusJob(deps, { razorpayPayoutId: 'pout_QK7l1nFirst', status: 'failed' });
+
+      expect((await payoutsOf(valet))[0]?.status).toBe('paid');
+    });
+
+    it('an event that outruns the send is retried, not dropped', async () => {
+      await expect(
+        applyPayoutStatusJob(deps, { razorpayPayoutId: 'pout_unknown', status: 'processed' }),
+      ).rejects.toThrow(/no payout carries/);
+    });
+
+    it('reconcile is the safety net: it asks a week of paid payouts whether the bank returned them', async () => {
+      const { valet, net } = await processingPayout();
+      await run(transfers([]), status('processed'));
+      expect((await payoutsOf(valet))[0]?.status).toBe('paid');
+
+      await run(transfers([]), status('reversed'));
+
+      expect((await payoutsOf(valet))[0]?.status).toBe('failed');
+      expect(await owedTo(valet)).toBe(net);
+    });
+  });
+});
+
+/**
+ * S-100: after bank details change, money waits 48 hours before it moves to the new account. The
+ * payout is still recorded on Monday (the balance is owed); only the send waits.
+ */
+describe('the bank-change payout hold', () => {
+  const holdFor = async (userId: string, hours: number) => {
+    await pg.sql`
+      UPDATE bank_details SET payouts_held_until = now() + make_interval(hours => ${hours})
+      WHERE user_id = ${userId}`;
+  };
+
+  it('records the payout on Monday and makes its send wait for the hold', async () => {
+    const valet = await seedUser('valet');
+    await withBank(valet);
+    await holdFor(valet, 24);
+    await earn(valet);
+
+    await runWeeklyPayouts(deps, ON);
+
+    expect((await payoutsOf(valet))[0]?.status).toBe('pending');
+    const [send] = await pg.sql<{ waits: boolean }[]>`
+      SELECT available_at > now() + interval '23 hours' AS waits
+      FROM outbox_messages WHERE type = 'payout.send'`;
+    expect(send?.waits).toBe(true);
+  });
+
+  it('sends at once when nothing is held', async () => {
+    const valet = await seedUser('valet');
+    await withBank(valet);
+    await earn(valet);
+
+    await runWeeklyPayouts(deps, ON);
+
+    const [send] = await pg.sql<{ ready: boolean }[]>`
+      SELECT available_at <= now() AS ready FROM outbox_messages WHERE type = 'payout.send'`;
+    expect(send?.ready).toBe(true);
+  });
+
+  it('never pays a held account early, whatever delivers the send: it reschedules instead', async () => {
+    const valet = await seedUser('valet');
+    await withBank(valet);
+    await earn(valet);
+    await runWeeklyPayouts(deps, ON);
+    const [payout] = await payoutsOf(valet);
+    await holdFor(valet, 24);
+    const pay = gateway();
+    const send = vi.fn().mockResolvedValue('job-id');
+
+    await sendPayout(
+      { ...deps, boss: { send } as unknown as JobDeps['boss'] },
+      { payoutId: payout?.id },
+      pay,
+      ON.accountNumber,
+    );
+
+    expect(pay.create).not.toHaveBeenCalled();
+    expect((await payoutsOf(valet))[0]?.status).toBe('pending');
+    expect(send).toHaveBeenCalledWith(
+      'payout.send',
+      { payoutId: payout?.id },
+      expect.objectContaining({ startAfter: expect.any(Date) as Date }),
+    );
   });
 });

@@ -20,7 +20,7 @@ import {
   type ValetCandidateRow,
 } from '@parkease/db/queries';
 import { outboxMessages, valetJobOffers, valetJobs } from '@parkease/db/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
 import type { JobDeps } from '../../deps.js';
 import { logger } from '../../logger.js';
@@ -77,7 +77,7 @@ export async function acceptTimeout(deps: JobDeps, raw: unknown): Promise<void> 
     excludeUserId: job.driverUserId,
   });
 
-  await deps.db.transaction(async (tx) => {
+  const widened = await deps.db.transaction(async (tx) => {
     /**
      * `offered --offer--> offered` is a legal self-transition: the status does
      * not change, the radius and the round do. Asserting it anyway keeps the
@@ -89,7 +89,14 @@ export async function acceptTimeout(deps: JobDeps, raw: unknown): Promise<void> 
       throw new Error(`Valet job ${job.id} cannot be re-offered from '${job.status}'`);
     }
 
-    await tx
+    /**
+     * The WHERE pins the status and the round this widening was computed from (S-18). The guards
+     * above ran before `findCandidates`, a PostGIS query that takes real time, and a valet can win
+     * `AcceptJobCommand`'s conditional UPDATE inside that window: assignee, fee, `txn_id` and four
+     * ledger entries committed. Matching on `id` alone would put the row back to `offered` on top of
+     * all of that. Zero rows is the normal "somebody got there first", not an error.
+     */
+    const updated = await tx
       .update(valetJobs)
       .set({
         status: to,
@@ -98,7 +105,15 @@ export async function acceptTimeout(deps: JobDeps, raw: unknown): Promise<void> 
         offeredAt: new Date(),
         updatedAt: new Date(),
       })
-      .where(eq(valetJobs.id, job.id));
+      .where(
+        and(
+          eq(valetJobs.id, job.id),
+          eq(valetJobs.status, job.status),
+          eq(valetJobs.offerRound, round),
+        ),
+      )
+      .returning({ id: valetJobs.id });
+    if (updated.length === 0) return false;
 
     if (candidates.length > 0) {
       await tx.insert(valetJobOffers).values(
@@ -132,7 +147,16 @@ export async function acceptTimeout(deps: JobDeps, raw: unknown): Promise<void> 
         },
       })),
     ]);
+    return true;
   });
+
+  if (!widened) {
+    logger.info(
+      { jobId: job.id, round },
+      'valet accept-timeout: job moved on while we were searching, nothing widened',
+    );
+    return;
+  }
 
   logger.info(
     { jobId: job.id, round: nextRound, radiusM: nextRadiusM, offered: candidates.length },
@@ -147,13 +171,15 @@ export async function acceptTimeout(deps: JobDeps, raw: unknown): Promise<void> 
  * nobody was dispatched, so nobody is owed. The absence is the correct posting.
  */
 async function giveUp(deps: JobDeps, job: typeof valetJobs.$inferSelect): Promise<void> {
-  await deps.db.transaction(async (tx) => {
+  const cancelled = await deps.db.transaction(async (tx) => {
     const to = nextValetStatus(parseValetJobStatus(job.status), 'cancel');
     if (to === null) {
       throw new Error(`Valet job ${job.id} cannot be cancelled from '${job.status}'`);
     }
 
-    await tx
+    // Pinned like the widening (S-18). `cancelled` is unconstrained by the assignee CHECK, so a
+    // blind write here would bury a job a valet had just accepted, ledger and all.
+    const updated = await tx
       .update(valetJobs)
       .set({
         status: to,
@@ -161,7 +187,15 @@ async function giveUp(deps: JobDeps, job: typeof valetJobs.$inferSelect): Promis
         cancellationReason: 'no_valet_available',
         updatedAt: new Date(),
       })
-      .where(eq(valetJobs.id, job.id));
+      .where(
+        and(
+          eq(valetJobs.id, job.id),
+          eq(valetJobs.status, job.status),
+          eq(valetJobs.offerRound, job.offerRound),
+        ),
+      )
+      .returning({ id: valetJobs.id });
+    if (updated.length === 0) return false;
 
     await tx.insert(outboxMessages).values({
       type: 'notification.dispatch',
@@ -171,8 +205,16 @@ async function giveUp(deps: JobDeps, job: typeof valetJobs.$inferSelect): Promis
         data: { jobId: job.id },
       },
     });
+    return true;
   });
 
+  if (!cancelled) {
+    logger.info(
+      { jobId: job.id },
+      'valet accept-timeout: job was taken while we were giving up, left alone',
+    );
+    return;
+  }
   logger.info({ jobId: job.id }, 'valet accept-timeout: no valet available, job cancelled');
 }
 

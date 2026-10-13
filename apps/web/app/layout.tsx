@@ -2,7 +2,7 @@ import { webColors } from '@parkease/tokens';
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
 
-import { atkinson, bigShoulders, bigShouldersStencil } from '@/app/fonts';
+import { atkinson, bigShoulders, bigShouldersStencil, rupeeDisplay, rupeeSans } from '@/app/fonts';
 import { Footer } from '@/components/layout/Footer';
 import { Header } from '@/components/layout/Header';
 import { JsonLd } from '@/components/ui/JsonLd';
@@ -45,7 +45,7 @@ export default function RootLayout({ children }: { readonly children: ReactNode 
   return (
     <html
       lang="en-IN"
-      className={`${bigShoulders.variable} ${bigShouldersStencil.variable} ${atkinson.variable}`}
+      className={`${bigShoulders.variable} ${bigShouldersStencil.variable} ${atkinson.variable} ${rupeeSans.variable} ${rupeeDisplay.variable}`}
     >
       <head>
         <style dangerouslySetInnerHTML={{ __html: themeCss }} />

@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { LedgerAccount } from '@parkease/contracts/enums';
 import { valetEarningsSummarySchema } from '@parkease/contracts/valet';
+import { sumPaise } from '@parkease/db/queries';
 import { ledgerEntries, valetJobs } from '@parkease/db/schema';
 import { and, count, eq, sql } from 'drizzle-orm';
 
@@ -46,8 +47,8 @@ export class ValetEarningsQuery {
         ),
       );
 
-    const creditsPaise = Number(balance?.creditsPaise ?? 0);
-    const debitsPaise = Number(balance?.debitsPaise ?? 0);
+    const creditsPaise = sumPaise(balance?.creditsPaise);
+    const debitsPaise = sumPaise(balance?.debitsPaise);
 
     /**
      * The sign comes from the chart of accounts, not from a subtraction written

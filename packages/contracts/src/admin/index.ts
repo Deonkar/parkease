@@ -30,6 +30,10 @@ export {
   type AdminSpaceQueueItem,
   adminSpaceDetailSchema,
   type AdminSpaceDetail,
+  adminSpaceDecisionResultSchema,
+  type AdminSpaceDecisionResult,
+  spaceApproveSchema,
+  type SpaceApprove,
 } from './spaces.js';
 export {
   PARTNER_KIND_VALUES,

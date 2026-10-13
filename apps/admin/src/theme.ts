@@ -8,9 +8,19 @@ export const theme: ThemeConfig = {
     colorInfo: colors.info,
     colorSuccess: colors.available,
     colorWarning: colors.warning,
-    colorError: colors.error,
+    // The ink red, not the alert red: #DC2626 on a pale tint is 4.4:1, under AA for tag text.
+    colorError: colors.errorInk,
     colorText: colors.text,
     colorTextSecondary: colors.textSecondary,
+    // AntD's own greys and derived status tints fall under WCAG AA on white (S-157, axe):
+    // secondary text was #8c8c8c (3.4:1), a success tag sat on a mid-tone it derived (2.6:1).
+    colorTextDescription: colors.textSecondary,
+    colorTextTertiary: colors.textTertiary,
+    colorSuccessBg: colors.availableSoft,
+    colorSuccessBorder: colors.availableVivid,
+    colorErrorBg: colors.errorLight,
+    colorInfoBg: colors.infoLight,
+    colorWarningBg: colors.warningLight,
     colorBorder: colors.border,
     colorBgLayout: colors.surfaceSecondary,
     colorBgContainer: colors.surface,

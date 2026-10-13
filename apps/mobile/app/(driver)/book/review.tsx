@@ -303,6 +303,7 @@ function FailureNotice({
 
         {recovery === 'back-to-search' ? (
           <Pressable
+            accessibilityLabel="Find another spot"
             onPress={() => {
               router.replace('/(driver)');
             }}
@@ -316,6 +317,7 @@ function FailureNotice({
 
         {recovery === 'none' && failure.code !== 'NETWORK' ? (
           <Pressable
+            accessibilityLabel="Back to this space"
             onPress={() => {
               router.replace({ pathname: '/(shared)/space/[id]', params: { id: spaceId } });
             }}

@@ -135,6 +135,7 @@ export default function OwnerEarningsScreen() {
     <View style={styles.columnInset}>
       {transactions.isFetchNextPageError ? (
         <Pressable
+          accessibilityLabel="Retry loading more transactions"
           accessibilityRole="button"
           onPress={() => void transactions.fetchNextPage()}
           style={styles.loadMoreRetry}
@@ -180,7 +181,12 @@ export default function OwnerEarningsScreen() {
         refreshing={pulling}
         onRefresh={onPull}
         onEndReached={() => {
-          if (transactions.hasNextPage && !transactions.isFetchingNextPage) {
+          // Not after a failed page: the footer's "Tap to retry" owns that, or a scroll loops it.
+          if (
+            transactions.hasNextPage &&
+            !transactions.isFetchingNextPage &&
+            !transactions.isFetchNextPageError
+          ) {
             void transactions.fetchNextPage();
           }
         }}

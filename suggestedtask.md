@@ -322,113 +322,6 @@ depends on someone remembering.
 
 - **Done means:** a GitHub Actions step fails the build on a match.
 
-### S-18 — The valet accept-timeout can overwrite an accept
-
-- **Status:** `open`
-- **Found in:** task 13, silent-failure review (the car wash twin was fixed in this task)
-- **Surface:** worker
-
-`apps/worker/src/jobs/valet/accept-timeout.job.ts` reads the job with a plain unlocked SELECT,
-runs `findCandidates` (a PostGIS query on a cold index — real time), then writes with
-`.where(eq(valetJobs.id, job.id))` in both the widening branch and `giveUp`. The status it read
-is never pinned.
-
-A valet accepting inside that window wins `AcceptJobCommand`'s conditional UPDATE — assignee,
-distance, fee, `txn_id` and four ledger entries all committed — and the timeout's blind UPDATE
-then puts the row back to `offered`, or to `cancelled` with `no_valet_available`, on top of it.
-`valet_jobs_assignee_presence_check` catches the `offered` case loudly (the assignee is still
-set, so the constraint fails and pg-boss retries into the guard). It does **not** catch the
-`cancelled` case: that status is unconstrained, so the job is buried while the ledger says a
-valet earned money for it, and the assigned valet is never told.
-
-The car wash version of this was fixed in task 13 by pinning `status` (and the round) in the
-UPDATE's WHERE and treating zero rows as the normal "somebody got there first" outcome.
-`handlers.ts` also claims these handlers "take a row lock on valet_jobs"; there is no
-`SELECT ... FOR UPDATE` anywhere in the file.
-
-- **Why deferred:** task 11's code, and the fix wants its own regression test at the right seam —
-  the guards catch a naively-staged accept, so a test that moves the row up front passes with or
-  without the fix. The car wash tests show the shape that actually works.
-- **Done means:** both valet branches pin the status, a mutation of either turns a test red, and
-  the `handlers.ts` comment says what the code does.
-
-### S-19 — `markRefunded` is an unchecked write next to a checked one
-
-- **Status:** `open`
-- **Found in:** task 13, silent-failure review
-- **Surface:** api
-
-`PaymentService.markRefunded` (`payment.service.ts`) is an `UPDATE ... WHERE id = ?` with no
-`.returning()` and no row-count check. Both callers — `RefundService.refundForCancellation` and
-task 13's `CancelWashCommand` — check `insertRefund` for `undefined` immediately before it and
-throw loudly if the row was not created, citing R-FAIL-01 in a comment. The very next line
-applies none of that scrutiny.
-
-If it matches zero rows the `refunds` row still exists and the `payment.issue-refund` outbox
-message still commits, so a refund is issued at the gateway against a payment whose local status
-was never moved off `captured` — leaving it eligible to be refunded again by anything that keys
-off `payments.status`.
-
-- **Why deferred:** shared with the booking refund path that shipped in task 9, so the change
-  needs its regression test there rather than in a car wash suite.
-- **Done means:** `markRefunded` returns the updated row or throws, and a test proves a
-  zero-match is loud.
-
-### S-20 — `wash_job_offers` has no database guard against a self-offer
-
-- **Status:** `open`
-- **Found in:** task 13, database review
-- **Surface:** database
-
-`wash_jobs` carries `wash_jobs_washer_is_not_driver_check`, and the candidate query excludes the
-driver from their own offer set. `wash_job_offers` has neither: nothing in the database stops a
-direct write recording an offer whose `washer_user_id` is the job's own `driver_user_id`.
-
-Not cheap to close — the guard needs a value from a different row (`wash_jobs.driver_user_id`),
-which a plain CHECK cannot see, so it is a trigger rather than a constraint. `valet_job_offers`
-has the identical gap.
-
-- **Why deferred:** a trigger is a different class of object from everything else in these
-  migrations, and it would be the first one in the schema that exists purely to re-state an
-  application filter. Worth deciding deliberately rather than adding in passing.
-- **Done means:** either the trigger exists on both offer tables, or an ADR records that the
-  query-level exclusion plus the `wash_jobs` CHECK is the accepted depth.
-
-### S-21 — `valet_job_offers_job_id_idx` duplicates a prefix of its unique key
-
-- **Status:** `open`
-- **Found in:** task 13, database review (the car wash twin was dropped in migration 0030)
-- **Surface:** database
-
-`valet_job_offers_job_valet_key` is `UNIQUE (job_id, valet_user_id)`, so Postgres already serves
-`WHERE job_id = ?` from its leading column. `valet_job_offers_job_id_idx` adds a second B-tree to
-maintain on every offer row written — five per job at valet's fan-out, on every dispatch and
-every widened round — and covers no query the composite does not.
-
-0030 dropped the car wash equivalent. The valet one was left alone because dropping an index on
-a table task 11 ships against is a change that wants its own migration and its own verification.
-
-- **Done means:** the index is dropped in its own migration, with `EXPLAIN` output on the offers
-  lookup before and after showing the composite serving it.
-
-### S-22 — The wash capture path has no end-to-end test
-
-- **Status:** `open`
-- **Found in:** task 13, building the Razorpay order path
-- **Surface:** api
-
-`ConfirmPaymentCommand` now branches on `payments.purpose` so a car wash capture marks the
-payment captured and leaves the booking alone — without that branch a wash capture would have
-been read as an orphan and auto-refunded. The branch is covered by typecheck and by reading, not
-by a test: `carwash-http.spec.ts` stops at minting the order, because driving a capture needs the
-Razorpay double and the webhook route wired into the car wash harness.
-
-- **Why deferred:** the fixture is the work, not the assertion — `payment-webhook-http.spec.ts`
-  already has the double and the signature machinery, and the honest fix is to extend that file
-  with a wash payment rather than rebuild the harness in a car wash suite.
-- **Done means:** a captured wash payment leaves `bookings.status` untouched, marks the payment
-  `captured`, and posts no ledger entries — asserted over HTTP through the webhook route.
-
 ### S-23 — Business photos and operating hours have no reader
 
 - **Status:** `open`
@@ -463,58 +356,6 @@ The two should be decided together: the radius ladder is server-side for both pa
 - **Done means:** either both partner types can set it and the next offer set respects it
   server-side, asserted by a test, or `rules.md` records that dispatch radius is not partner
   -configurable in v1 and both task files are corrected.
-
-### S-25 — `pnpm audit` is red, and R-GIT-07 says it must be green
-
-- **Status:** `fixed on chore/dep-audit-2026-10` — close when it merges. `pnpm audit --audit-level=high`
-  exits 0; 37 high/critical → 0 (4 accepted below, each with no reachable path).
-- **Found in:** task 13, the pre-PR gate
-- **Surface:** tooling / dependencies
-
-`pnpm audit` reports **62 vulnerabilities** (2 critical, 19 high, 35 moderate, 6 low), of which
-**33 reach production dependencies** (16 high, 14 moderate, 3 low). R-GIT-07 lists a clean
-`pnpm audit` as a condition of opening a PR, and this has not been true for at least task 12 —
-`pnpm-lock.yaml` and every `package.json` are byte-identical to `main`, so task 13 introduced
-none of it and could not have cleared it either.
-
-The bulk is transitive and concentrated in a handful of roots, most of which are a version bump
-rather than a migration: `undici` (several advisories, patched at 6.23 → 6.28 depending on the
-finding), `@opentelemetry/*` (core, sdk-node, propagator-jaeger, exporter-prometheus,
-auto-instrumentations-node), `sharp`, `tar-fs`, `postcss`, `image-size`, `decode-uri-component`
-and `uuid`.
-
-Recording it rather than fixing it inside task 13: a dependency sweep changes the lockfile under
-five apps at once, and the honest way to do that is its own branch with the full suite run
-afterwards — not a drive-by at the end of a feature. Doing it here would also mean a PR whose
-diff is half car wash and half unrelated version bumps.
-
-Task 16b (2026-09-30), lockfile still identical to `main`: **63** (2 critical, 19 high, 35
-moderate, 7 low), **34** in production dependencies. The growth since task 13 is advisories
-published against unchanged versions (e.g. `sharp` 2026-09-08); both criticals are dev-only
-`vitest`.
-
-- **Why deferred:** pre-existing and orthogonal to this task; the fix is a lockfile change with
-  a repo-wide blast radius.
-- **Done means:** `pnpm audit --prod` is clean, `pnpm audit` has no critical or high, the full
-  suite is green afterwards, and either CI enforces it or `rules.md` records the accepted
-  residual with a reason per advisory.
-
-**Resolved 2026-10-06.** Direct upgrades: vitest 3.2.7, vite 6.4.3, fastify 5.12.5, @nestjs/_ 12.0.4,
-next 15.5.27, testcontainers 11.14.0, @opentelemetry/_ 0.222 / 2.x (`Resource` → `resourceFromAttributes`).
-Scoped overrides: brace-expansion 1/2/5, @grpc/grpc-js 1.14.5, tar-fs@2, postcss, next>sharp 0.35.5,
-vitest>tinypool 2.1.2 and compression 1.8.2 (three advisories published 2026-10-05, mid-sweep).
-**Accepted residual** (`auditConfig.ignoreGhsas` in the root `package.json`), no patched release exists or
-the patch breaks the consumer:
-
-- `GHSA-86w9-cpqp-85rv` node-forge — RSA signature verification inside `@expo/cli`'s code-signing helper.
-  ParkEase uses no `expo-updates` and no code signing, so the path never runs. No fixed version exists.
-- `GHSA-vfj7-8cjw-p6xm` braces — stack-exhaustion DoS on nested patterns, reached only through the eslint
-  import resolver on our own glob patterns. No fixed version exists.
-- `GHSA-5p2g-fcmc-qvqq`, `GHSA-w3rx-r6r6-pgpr` image-size — DoS on crafted JXL/HEIF/ICNS files. Metro sizes
-  only our own committed assets at build time. The fix (2.x) drops path input, and Metro 0.87 calls
-  `imageSize(path)`, so overriding it breaks every image asset in the bundle (verified: it throws).
-  Moderates remain (16, none in a request path we control); `rules.md` allows them.
-  Re-check the four when Expo, eslint or Metro next upgrade — any of them may ship a fix.
 
 ### S-26 — No erasure path for partner and job personal data
 
@@ -612,33 +453,6 @@ both arguments.
   `ProofDeps.compress` explains why an identity implementation is expected to
   stay valid there.
 
-### S-30 — `carwash-http.spec.ts` seeds its space with a `slots` field `SeedSpaceOptions` does not have
-
-- **Status:** `open`
-- **Found in:** task 14 task-3 (earnings period filter and per-job lines)
-- **Surface:** api (test)
-
-`apps/api/test/integration/carwash-http.spec.ts`'s `beforeAll` calls
-`seedSpace(h, { ..., slots: { car: 4 } })`, but `SeedSpaceOptions` in
-`harness.ts` only has `carSlots?: number` and `twoWheelerSlots?: number` — there
-is no `slots` field. `seedSpace` silently ignores the unknown property and
-falls back to its default of one car slot. Vitest transpiles test files without
-a type check, so this compiles and runs without ever erroring; the suite
-happens to pass because none of its tests need more than one live car slot at
-once. Writing `washer-earnings-http.spec.ts` for task-3 needed the same fixture
-and used the correct field name (`carSlots: 4`) rather than copy the mistake.
-
-- **Why deferred:** out of scope for task-3. Task-3 does edit
-  `carwash-http.spec.ts`, but only its earnings assertion — first for the new
-  response shape, then to request `?period=all` so it keeps its lifetime meaning
-  — and not its `beforeAll` fixture. The fix is a one-line rename with no
-  behavioural risk, but it belongs to whoever next touches that spec's fixtures,
-  or a drive-by hygiene pass.
-- **Done means:** `slots: { car: 4 }` becomes `carSlots: 4` in
-  `carwash-http.spec.ts`, and ideally `tsconfig` for `apps/api/test` is checked
-  by `tsc --noEmit` somewhere in CI so an excess-property typo like this one
-  fails loud next time instead of silently seeding one slot.
-
 ### S-31 — `GET /washer/earnings?period=all` is unbounded
 
 - **Status:** `open`
@@ -657,52 +471,6 @@ the job's `txn_id`). There is no limit and no pagination.
   `EXPLAIN ANALYZE` on a seeded partner with a realistic history), the lines become cursor
   paginated by `completed_at, id`, or the two subqueries become one grouped join, and the
   summary stays a single aggregate.
-
-### S-32 — Nothing requires `completed_at` on a completed wash job
-
-- **Status:** `open`
-- **Found in:** task 14 task-3 review (earnings period filter and per-job lines)
-- **Surface:** database
-
-Migration 0030's `wash_jobs_assignee_presence_check` makes `price_paise` and `txn_id` NOT NULL
-once a job is accepted, but no CHECK ties `completed_at` to `status = 'completed'`. The earnings
-query used to paper over that with a 1970 fallback; it now passes the raw value, so a completed
-row with a null `completed_at` fails the response parse loudly instead — which is the right
-failure, but the database should make the row impossible.
-
-- **Why deferred:** a schema change is a migration with its own review gate
-  (`postgres-migration-reviewer`, R-GIT-07), and task-3 is a read-path change with no migration.
-- **Done means:** a migration adds
-  `CHECK (status <> 'completed' OR completed_at IS NOT NULL)` to `wash_jobs` (as `NOT VALID`
-  then `VALIDATE CONSTRAINT`), reviewed SAFE, with an integration test that a completed row
-  without `completed_at` is refused.
-
-### S-33 — A server-side response parse failure answers `400 VALIDATION_FAILED` (washer surface done)
-
-- **Status:** `open` (the washer surface is done; the rest of the repo remains)
-- **Found in:** task 14 task-3 review (earnings period filter and per-job lines)
-- **Surface:** api
-
-`apps/api/src/platform/http/exception.filter.ts` (`map()`, around line 106) maps ANY `ZodError`
-to `400 VALIDATION_FAILED`. That is right for request validation, and wrong for a query or
-command that parses its own RESPONSE through Zod (R-VAL-01) and finds the server built
-something invalid — that is a server bug and should be a `500`, logged at error with the trace
-id, not blamed on the caller. Task-3's review found exactly this: a negative period net failed
-`washerEarningsViewSchema.parse` and the partner's default earnings screen answered 400.
-
-**Done for the washer surface (task 14 final fix wave).** `parseOutgoing(schema, value, what)` in
-`apps/api/src/platform/http/outgoing-contract.ts` parses an outgoing value and rethrows a failure
-as `500 INTERNAL_ERROR` carrying the `ZodError` as its cause, logged at error with the trace id.
-The earnings view, `washerCard()`, the washer profile view and the service menu (`toMenu`) use it;
-`test/outgoing-contract.spec.ts` and two HTTP tests (a completed job with no posting, a washer
-card with no name) prove the 500. **What remains** is every other role's outgoing parse — valet,
-driver, owner and admin views still call `schema.parse()` on their responses and still answer
-400 on a broken row.
-
-- **Why deferred:** the remaining call sites are other roles' endpoints, outside task 14's files.
-- **Done means:** every response parse in `apps/api/src` goes through `parseOutgoing` (a grep for
-  `ViewSchema.parse(` / `Schema.parse(` on response values finds none), and one HTTP test per role
-  proves a malformed response answers 500 while a malformed request still answers 400.
 
 ### S-34 — A wash offer carries no address and no duration, so the card cannot show either
 
@@ -733,35 +501,6 @@ from, so the number is the partner's own quote; it is dropped when the menu has 
   gains `spaceName`, `vehiclePlate` and `bookingEndsAt` (plate masked per the privacy
   rules), and the active header's subtitle shows them.
 
-### S-35 — Shared client error matching expects a `NOT_FOUND` code the API never sends
-
-- **Status:** `open`
-- **Found in:** task 14 task-6 review (CRITICAL 1, unregistered washer saw an error screen)
-- **Surface:** mobile, api
-
-`apps/api/src/platform/http/exception.filter.ts` (`errorCodeFor`, lines 58-65) builds
-`error.code` from the `error` field of an HttpException's response. A bare
-`new NotFoundException()` in Nest 11 carries no such field, so it answers code `'ERROR'`, never
-`'NOT_FOUND'`. `apps/mobile/src/features/shared/hooks/useMessageForError.ts:26` matches
-`case 'NOT_FOUND'`, which therefore never fires. Task 6 fixed the one place this broke a flow
-(`GET /washer/profile` now throws `WasherProfileNotFoundError`), but bare
-`new NotFoundException()` is still thrown in at least ten commands, including
-`accept-wash.command.ts:48,51`, `advance-wash.command.ts:29`, `cancel-wash.command.ts:33`,
-`create-wash-order.command.ts:55`, `request-carwash.command.ts:40`, the valet `accept-job` /
-`advance-job` / `cancel-job` commands, and `roles/washer/jobs.controller.ts:136`.
-
-The hook is also dead code, not only a matcher for a code that never arrives (task 14 task-11).
-`useMessageForError.ts` exports `messageForError`, and nothing anywhere in `apps/` or
-`packages/` imports it. Deleting the file is the smallest way to close its half of this row.
-Wiring it into the screens that should use it is the other way.
-
-- **Why deferred:** the fix spans the global filter or every command's 404, plus the shared
-  client hook. That is cross-role, far outside one screen's fix round.
-- **Done means:** shared error matching uses domain codes. Either every 404 the app routes on
-  throws a domain error with a stable code, or the filter derives a code from the status when the
-  response has no `error` field (e.g. 404 → `NOT_FOUND`). An HTTP test pins the code for a bare 404. `useMessageForError.ts` is either deleted or has callers and matches only codes the API
-  actually emits.
-
 ### S-36 — The step rail advances without its `spring.gentle` motion
 
 - **Status:** `open`
@@ -780,23 +519,6 @@ the direction specified.
 - **Done means:** the current-step marker animates its fill with `spring.gentle` from
   `@parkease/tokens`, skipped under `useReducedMotion()`, checked on an Android device in the
   task-11 walkthrough.
-
-### S-37 — Older literal opacities should use the new `opacity` token
-
-- **Status:** `open`
-- **Found in:** task 14 task-7 fix round 1 (minor 8 added `opacity` to `packages/tokens`)
-- **Surface:** ui-native, mobile
-
-`packages/tokens/src/opacity.ts` now defines `opacity.dimmed` (0.5) and `opacity.muted` (0.7),
-and `EvidencePair` uses `opacity.dimmed`. Four literals predate it: `packages/ui-native/src/Button.tsx:69`
-(`0.5`, disabled) and `:76` (`0.7`, disabled label), `apps/mobile/app/(auth)/choose-role.tsx:140`
-(`0.5`) and `apps/mobile/src/features/driver/components/PhotoCarousel.tsx:92` (`0.5`, inactive dot).
-
-- **Why deferred:** three surfaces outside the washer screen, one of them the shared Button
-  every app renders — a visual change that deserves its own look on a device, not a rider on a
-  fix round.
-- **Done means:** the four literals read `opacity.dimmed` / `opacity.muted`, and
-  `grep -rnE "opacity: 0\.[0-9]" apps/mobile packages/ui-native/src` returns nothing.
 
 ### S-38 — Two copies of the camera modal and the capture hook
 
@@ -872,25 +594,6 @@ time, so client-summed bars would not even agree with the headline above them.
   parsed by the contract, and the mobile sparkline renders them with no arithmetic beyond
   scaling bar heights to the largest bucket — with the bars labelled in text (R-FE-12).
 
-### S-41 — `formatDateIST` renders "Sept" and no weekday
-
-- **Status:** `open`
-- **Found in:** task 14 task-9 (earnings screen)
-- **Surface:** mobile
-
-`apps/mobile/src/lib/format.ts` `formatDateIST` asks `toLocaleString('en-IN', { month: 'short' })`,
-which Node's ICU renders as `Sept` for September (`12 Sept 2026`), not `Sep`. Hermes on
-Android may or may not match, depending on its ICU build. The earnings line wanted a weekday
-too ("Fri 12 Sep · 2:22 PM"), which the shared formatter does not produce.
-
-- **Why deferred:** the task ruled "reuse, do not write new date formatting", and the formatter
-  is app-wide (driver bookings, valet, washer) — changing its output is its own change with its
-  own callers to check. `earnings-arithmetic.test.tsx` asserts through the formatter, not a
-  pinned month spelling, so it holds either way.
-- **Done means:** `formatDateIST` uses a fixed month table (`Jan`…`Dec`) so the output is
-  identical on Node and Hermes, an optional weekday variant exists for list rows, and
-  `format.test.ts` covers September.
-
 ### S-42 — The ID proof has one side; §14.2 draws a front and a back
 
 - **Status:** `open`
@@ -928,48 +631,6 @@ collected in v1 (T10-D2).
   `business_name` and makes `display_name NOT NULL`. A `PATCH /me` for an avatar is its own row
   if still wanted.
 
-### S-47 — Service prices: the DB CHECK is looser than the contract bound
-
-- **Status:** `open`
-- **Found in:** task 14 task-8 (service menu)
-- **Surface:** database, contracts, mobile
-
-The write contract bounds a service price to ₹10–₹9,999 (`MIN_SERVICE_PRICE_PAISE` /
-`MAX_SERVICE_PRICE_PAISE`, `packages/contracts/src/washer/service-menu.ts`). The database check
-is only `wash_services_price_check CHECK (price_paise > 0)` (`0008_services.sql`), and the read
-schema accepts any positive price. A stored price outside the range can only get there from
-outside the API: a seed, a manual fix, or a pre-bound row. Such a row cannot be toggled off
-from the menu screen, because the toggle re-saves the server's prices through the bounded
-write schema and the save fails validation.
-
-- **Why deferred:** tightening a CHECK on a populated table needs an audit of existing rows
-  first. It also needs a migration reviewed with `postgres-migration-reviewer` (`NOT VALID`,
-  then `VALIDATE`), and task 8 was a mobile screen.
-- **Done means:** existing rows are audited and any out-of-range rows are fixed. Then either a
-  migration adds `CHECK (price_paise BETWEEN 1000 AND 999900)`, reviewed SAFE, or the toggle
-  becomes a toggle-only write that does not re-send prices. A test covers the out-of-range row.
-
-### S-48 — Valet screens keep stale data after a failed refresh with no notice
-
-- **Status:** `open`
-- **Found in:** task 14 task-7 review (ruling T7-I2, `resolveScreenState` returns `ready` for an
-  errored query that still holds data)
-- **Surface:** mobile
-
-`apps/mobile/src/features/shared/screen-state.ts` now keeps a screen on its data when a refetch
-fails. That is the right call, so a failed refresh no longer swaps a live job for an error
-screen. The washer active, earnings, menu and profile screens pair it with a `RefreshNotice`
-that says the latest refresh failed and offers another. Two valet screens do not: the valet
-active screen (`app/(valet)/active/index.tsx`) and the valet offers feed
-(`app/(valet)/offers.tsx`). On those, a valet looks at data of unknown age with no sign that it
-is stale. (The washer offers feed was the third; the task 14 final fix wave, J1, gave it the
-`RefreshNotice`, so this row is valet only.)
-
-- **Why deferred:** the valet screens were outside task 14's file list.
-- **Done means:** both valet screens show a refresh notice when `isError` is true and data is
-  held. It uses a shared component (`RefreshNotice` moved to `features/shared/` on this second
-  role's use, R-ARCH-07), and a test per screen renders the stale-with-error state.
-
 ### S-49 — No endpoint writes a user's avatar
 
 - **Status:** `open`
@@ -987,36 +648,6 @@ face has the same gap.
   folder, checked as S-50 describes, and writes `users.avatar_url`. The gig registration and
   profile screens collect and show it, and an HTTP test covers the write and its ownership
   check.
-
-### S-50 — Upload ids are never checked for existence or ownership (security)
-
-- **Status:** `open`
-- **Found in:** task 14 task-11 review stack, security lens (the task-1 upload path and the
-  task-7 / task-10 attach endpoints); corrected in the task 14 final fix wave
-- **Surface:** api (washer, valet, owner)
-
-`attachWashPhotoSchema.photoId`, `submitWasherDocumentsSchema.idDocumentId` /
-`businessPhotoIds`, `createWasherProfileSchema.businessPhotoIds` and valet's `proofPhotoId`
-are well-formed upload ids. Nothing checks two things: that the upload exists, and that it
-belongs to the caller. Two consequences follow:
-
-- A partner can reach `verification_status = 'pending'` with an id they made up.
-- An evidence photo, the before/after pair whose value is that it can't be forged, can point
-  at another user's upload in the same folder.
-
-**Corrected.** This row used to say "the regex blocks URLs". That was true only of
-`attachWashPhotoSchema`: the profile fields were `z.string().min(1).max(255)` and took a URL.
-The task 14 final fix wave closed the URL and folder half: every field above now parses through
-`uploadIdIn(folder)` (`packages/contracts/src/shared/upload-signature.ts`), which refuses a URL
-and requires the `parkease/<folder>/` prefix the signer uses (`proofs`, `documents`, `spaces`).
-What remains is existence and ownership, which a schema cannot know.
-
-- **Why deferred:** the fix is a new record of issued upload signatures, and the washer, valet
-  and owner attach paths would all have to check against it. That is a cross-role security
-  change with its own migration, not a fix inside the mobile screens.
-- **Done means:** the API records each signed upload (id, owner, folder) when it issues the
-  signature. Every attach endpoint checks the id against that record, and rejects an unknown
-  id or another user's id with a 4xx. An HTTP test covers each rejection.
 
 ### S-51 — Valet location heartbeat idempotency keys are not UUIDs
 
@@ -1073,26 +704,9 @@ land in all of them) is the R-ARCH-07 extraction trigger.
   (never `utils/`), used by all four role layouts; `tab-icons.test.ts` updated to follow it;
   each role's bar checked at 375x812 and at desktop width.
 
-### S-54 — An admin-only account lands on choose-role, where every choice fails
-
-- **Status:** `open`
-- **Found in:** task 14 whole-branch spec review (task 11c, role routing)
-- **Surface:** mobile
-
-An account whose only role is `admin` signs in to the mobile app and lands on the choose-role
-screen. Every role offered there is one the account does not hold, so each tap calls
-`POST /me/roles/active`, gets a 403, and the screen says "please try again". Nothing the user
-does from there can work. The admin surface is the web admin panel, not the app.
-
-- **Why deferred:** the task 14 fix wave covers the partner surfaces; an admin-only landing is a
-  new screen in the shared auth flow with its own design gate.
-- **Done means:** an admin-only session lands on a screen that says to use the admin panel and
-  offers sign-out, never on choose-role. A test signs in with `roles: ['admin']` and asserts
-  that screen, and that choose-role is not reachable.
-
 ### S-55 — `owner_payable` by partner has no covering index
 
-- **Status:** `open`
+- **Status:** `open` — measured 2026-10-13, not needed yet: at 1M ledger rows the washer summary is 1.8 ms on `ledger_entries_counterparty_user_id_idx` (500 heap blocks). Re-measure at 10M.
 - **Found in:** task 14 final review, database lens M2
 - **Surface:** database
 
@@ -1108,96 +722,6 @@ which would make the summary an index-only scan.
   production-sized ledger shows the sequential scan or heap cost. Then a
   `CREATE INDEX CONCURRENTLY` migration, alone in its file and reviewed SAFE, adds the index,
   and the plan is re-run to show it used.
-
-### S-56 — `washer_profiles.capabilities` is unchecked, and is a second source of truth
-
-- **Status:** `open`
-- **Found in:** task 14 final review, database lens L4
-- **Surface:** database, api
-
-`washer_profiles.capabilities` is a `text[]`. The contract limits it to the closed catalogue at
-registration (ruling T10-S1), but the database accepts any string. It is also a second answer to
-the question `wash_services.is_active` already answers ("which services does this partner
-offer"). Registration writes both, and a menu toggle updates only `is_active`, so the two
-disagree after the first edit.
-
-- **Why deferred:** choosing which one is the truth is a design decision, and it touches the
-  menu, the profile view and dispatch. A CHECK alone would harden a column that may be dropped.
-- **Done means:** either `capabilities` is dropped (expand-contract) and the profile view derives
-  it from active menu rows, or a CHECK (`capabilities <@ ARRAY[...catalogue]`, NOT VALID then
-  VALIDATE, reviewed SAFE) is added and the menu toggle keeps it in step. A test toggles a
-  service and reads both.
-
-### S-57 — No database check on a business's photo count or a blank `business_name`
-
-- **Status:** `open`
-- **Found in:** task 14 final review, database lens L5
-- **Surface:** database
-
-The contract requires a business to register with 1–10 photos, and every partner to have a
-non-blank `business_name` (rulings T10-C1, T10-C2). `washer_profiles` enforces neither, so a
-console fix or a future write path can leave a business with no photos under review, or a
-partner whose washer card has only whitespace for a name.
-
-- **Why deferred:** rows written before T10-C2 have a NULL `business_name`. The CHECK needs a
-  backfill decision first, and a migration reviewed on its own.
-- **Done means:** existing rows are audited. Then a migration adds
-  `CHECK (partner_type <> 'business' OR cardinality(business_photo_ids) BETWEEN 1 AND 10)` and
-  `CHECK (business_name IS NULL OR btrim(business_name) <> '')`, both NOT VALID then VALIDATE
-  and reviewed SAFE, and a test shows each direct write refused.
-
-### S-58 — The earnings lines have no index and no stable order
-
-- **Status:** `open`
-- **Found in:** task 14 final review, database lens L6
-- **Surface:** database, api
-
-The earnings lines query filters `wash_jobs` by `washer_user_id` and `status = 'completed'` and
-orders by `completed_at DESC`. `wash_jobs_washer_user_id_idx` serves only the equality, so the
-sort covers every job the partner has done. Two jobs completed in the same instant also have no
-tiebreak, so their order can change between two reads of the same page.
-
-- **Why deferred:** a partner has few jobs today, so the cost is unmeasured. The index is a
-  `CONCURRENTLY` migration of its own.
-- **Done means:** a partial index
-  `wash_jobs (washer_user_id, completed_at DESC, id) WHERE status = 'completed'` is added (alone
-  in its file, reviewed SAFE), the query orders by `completed_at DESC, id DESC`, and a test with
-  two equal `completed_at` values asserts a stable order.
-
-### S-59 — ID images are `private`, but transformed renditions can still be public
-
-- **Status:** `open`
-- **Found in:** task 14 final review, security lens M3
-- **Surface:** api, infrastructure (Cloudinary account)
-
-`CloudinaryService` uploads `documents` with `type: 'private'`. Cloudinary's `private` delivery
-protects the original, but a derived rendition (a resize, a crop) is publicly deliverable
-unless Strict Transformations is enabled on the account. An ID image is exactly what must never
-be reachable by a guessable transformation URL. The `authenticated` delivery type closes this
-for every rendition.
-
-- **Why deferred:** the choice between `authenticated` and `private` plus Strict
-  Transformations is an account-level setting and a delivery decision for task 18's admin
-  review screen, which has to render the image.
-- **Done means:** either `documents` uploads use `type: 'authenticated'` and task 18 renders them
-  through signed delivery URLs, or Strict Transformations is recorded as enabled on the account
-  (with the date and who checked). A test pins the upload type for `documents`.
-
-### S-60 — The name a driver sees is chosen by the partner, unreviewed
-
-- **Status:** `open`
-- **Found in:** task 14 final review, security lens L3
-- **Surface:** api, admin
-
-The washer card shows the driver `business_name`, which the partner types at registration
-(ruling T10-C2). Nothing reviews it, so a partner can show drivers an impersonating or abusive
-name ("ParkEase Support", a competitor's brand) from the moment they are verified.
-
-- **Why deferred:** review is task 18's admin surface. Until it exists, verification itself is
-  manual, so no partner reaches a driver without an admin having looked at the account.
-- **Done means:** task 18's verification view shows the display name as part of what is
-  approved. A name change after verification returns the partner to `pending` (or holds the new
-  name until approved), and an HTTP test covers the change.
 
 ### S-61 — `washJobViewSchema.availableEvents` is `z.array(z.string())`
 
@@ -1251,60 +775,6 @@ compression would upload it.
   and an over-limit file is recompressed or refused, with a test, or the ceiling is recorded as a
   device-test check in `docs/testcases.md` with the device and the measured size.
 
-### S-64 — A stale-lock takeover can run a side effect twice
-
-- **Status:** `open`
-- **Found in:** task 14 final fix wave (C1, choosing `IDEMPOTENCY_IN_FLIGHT_STALE_MS`); widened by
-  the C1 re-review and the server fix wave's guard rails
-- **Surface:** api
-
-`IdempotencyService` treats an unfinished claim older than five minutes as stale and lets a
-retry take it over, and **a takeover runs the handler again**. Two paths make that a second
-side effect — a second payment order, a second booking:
-
-1. **A slow live attempt.** Only safe if no attempt runs longer than the threshold, and nothing in
-   the API guarantees it: Fastify has no `requestTimeout`, the API's database connection has no
-   `statement_timeout`, and the Razorpay client call has no timeout of its own. The five minutes
-   is a judgement, not a derived bound.
-2. **A committed write that was never stored.** The handler commits, then `store` fails. The key
-   has no response to replay, so the retry that takes it over five minutes later re-runs the
-   write. Before C1 the same failure blocked the key for 24 hours — stuck, but safe.
-
-What the guard rails did (server fix wave): the interceptor retries a failed `store` once, so
-path 2 needs two consecutive write failures, and each is logged at warn with the key and trace
-id. `store` and `release` are conditioned on the claim's own `locked_at`, so a zombie attempt
-cannot store its answer over a newer retry's claim or delete it to let a third attempt in, and
-a write that finds its claim gone logs at warn. Rare and loud, not impossible.
-
-- **Why deferred:** the timeouts are cross-cutting settings for every endpoint, each needing its
-  own value argued; closing path 2 changes how every command commits.
-- **Done means:** path 2 closes for good when the stored response is written **inside the
-  handler's own transaction** — the domain write and the idempotency row commit or roll back
-  together, so a committed write can never be left unstored (the `store` write, like the outbox,
-  goes into rule 3's one transaction). Path 1 closes when a Fastify `requestTimeout`, a pool
-  `statement_timeout` and a gateway client timeout are set, each below
-  `IDEMPOTENCY_IN_FLIGHT_STALE_MS`, the constant's comment names them as its bound, and a unit
-  test asserts the ordering.
-
-### S-65 — `switch-exhaustiveness-check` is not on, so exhaustiveness is a convention
-
-- **Status:** `open`
-- **Found in:** task 14 final fix wave, I1 (TypeScript lens)
-- **Surface:** mobile + admin + web + api
-
-I1 ended every `switch` over a union in the washer screens and components in
-`default: return assertNever(x)` (`apps/mobile/src/lib/assert-never.ts`), and
-`features/washer/__tests__/exhaustive-switch.test.ts` pins the files the fix wave named. Every
-other role's `switch` still falls through silently when a union gains a member, and the pin is a
-grep over named files, not a rule.
-
-- **Why deferred:** turning on `@typescript-eslint/switch-exhaustiveness-check` in the shared
-  ESLint config touches driver, owner, valet, admin, web and api code, far outside task 14's
-  file list, and each hit needs a decision rather than a mechanical default.
-- **Done means:** the rule is on in the shared config with
-  `requireDefaultForNonUnion: true`, every hit is fixed with a case or `assertNever`, and the
-  washer grep test is deleted as redundant.
-
 ### S-66 — `washerKeys` are bare arrays, so a cache write is not type-checked
 
 - **Status:** `open`
@@ -1322,39 +792,6 @@ held ID upload) and each is correct only by reading.
 - **Done means:** each key is a `queryOptions({ queryKey, queryFn })`, every `setQueryData`,
   `getQueryData` and `invalidateQueries` uses it, and a type test shows a wrong value for a key
   failing `tsc`.
-
-### S-67 — No test proves presence `stop()` returns without waiting out the GPS timeout
-
-- **Status:** `open`
-- **Found in:** task 14 final fix wave, test-adequacy lens
-- **Surface:** mobile
-
-`presence.test.ts` › "stop() resolves while a beat is stuck on the GPS" advances the fake clock
-by `LOCATE_TIMEOUT_MS * 2` before it awaits `stop()`. So it passes whether `stop()` returns
-straight away or only after the stuck beat times out. The promise the code makes is the first
-one: a partner switching off in a basement goes offline now, not in 15 seconds.
-
-- **Why deferred:** found while reading the suite for I5; the fix wave's brief lists it as a row.
-- **Done means:** a test holds the GPS promise open, calls `stop()`, advances the clock by less
-  than `LOCATE_TIMEOUT_MS` (or not at all), and asserts `stop()` has resolved and the offline
-  PATCH has been sent.
-
-### S-68 — The bare-href guard only sees template literals
-
-- **Status:** `open`
-- **Found in:** task 14 final fix wave, test-adequacy lens
-- **Surface:** mobile
-
-`src/lib/__tests__/landing-route.test.ts` › "no file under app/ or src/ builds a bare
-/(${...}) href" matches `` `/(${`` only. A bare group href written as a string literal
-(`'/(washer)'`) or built by concatenation (`'/(' + role + ')'`) resolves nowhere for a group
-with no `index.tsx` (T11-W1), and the guard does not see it.
-
-- **Why deferred:** widening the pattern means auditing every `href` and `router.*` call across
-  every role for false positives.
-- **Done means:** the guard also catches a string-literal `'/(group)'` and a concatenated one,
-  or `landingRouteFor`'s route type is narrowed so a bare group is a type error, with a test
-  that fails on each form.
 
 ### S-69 — Dev-mock preview leftovers (task 11b)
 
@@ -1456,42 +893,6 @@ memory only and is cleared on sign-out; the files are not.
 - **Done means:** after an ID upload succeeds (and on sign-out) the original and compressed files
   are deleted, a test asserts the delete is called with both uris, and S-26 references this row.
 
-### S-75 — The webhook path stores and releases its claim by key alone
-
-- **Status:** `open`
-- **Found in:** task 14 server fix wave (idempotency stale-lock guard rails)
-- **Surface:** api
-
-`IdempotencyService.store` and `release` now take the claim's `claimedAt` and write only while
-that claim still holds the key. `IdempotencyInterceptor` passes it; `WebhookService.handle`
-(`apps/api/src/domains/payment/webhook.service.ts`) does not, so a Razorpay delivery that
-stalls past `IDEMPOTENCY_IN_FLIGHT_STALE_MS` and is taken over by a redelivery can still store
-over, or release, the redelivery's claim. Its store is also not retried: a failed store falls
-into its `catch`, releases the key, and Razorpay's redelivery re-runs `dispatch`.
-
-- **Why deferred:** the fix wave's edit scope was `platform/idempotency/`; the webhook lives in
-  `domains/payment/`, and the optional parameter keeps it on the old behaviour unchanged.
-- **Done means:** `WebhookService` mints a `claimedAt`, passes it to `claim`, `store` and
-  `release`, and logs a `false` from either at warn with the event id; a test in
-  `payment-webhook-http.spec.ts` shows a zombie delivery's store landing on nothing.
-
-### S-76 — A 2xx the app cannot parse is retried twice before "Update the app" shows
-
-- **Status:** `open`
-- **Found in:** task 14 fix wave B1 scoped re-review (section N row)
-- **Surface:** mobile
-
-`apps/mobile/src/lib/query.ts`'s default `retry` stops on a 4xx but retries anything else up
-to twice, and a `ZodError` (a 2xx body this build cannot read) is "anything else". G1 made the
-classifier call that "outdated" and the copy say "Update the app to continue", but every query
-fetches the same unreadable body two more times first, with the skeleton on screen meanwhile.
-
-- **Why deferred:** `lib/query.ts` is every role's query client, older than task 14, and B2's
-  scope was the washer UI audit.
-- **Done means:** the default `retry` returns `false` for a `ZodError` (and for anything the
-  shared classifier calls final), with a test that an unparseable 2xx is fetched once and lands
-  on the error state's "Update the app" copy.
-
 ### S-77 — The app has no support surface, so "Contact support" can go nowhere
 
 - **Status:** `open`
@@ -1532,47 +933,6 @@ versus "not yet paid" (a wash whose driver has not paid, or a transfer not yet s
   server, the hero shows them (no client arithmetic, R-FE-06), and the period total becomes the
   secondary figure.
 
-### S-79 — Icon sizes, and the shared empty and error states' shapes, are still literals
-
-- **Status:** `open`
-- **Found in:** task 14 fix wave B2 (M1, M3, M13)
-- **Surface:** tokens, ui-native, mobile
-
-B2 moved touch targets, the content width, the tab bar height and skeleton heights into
-`packages/tokens` (`touchTarget`, `layout`). Two groups of sizes are still typed where they are
-used: every `MaterialCommunityIcons size={16|18|20|24|28|48}` across the washer screens and
-components, and in `packages/ui-native` the EmptyState's 120px illustration circle and the
-ErrorState's 56px "!" badge (with its hand-computed radius and line height).
-
-- **Why deferred:** B2's brief allowed new tokens for what section M named; an icon-size scale
-  touches every role's screens and wants one decision on the steps.
-- **Done means:** an `iconSize` scale in `packages/tokens`, the washer surface and ui-native
-  reading it, and a scan test like `touch-targets.test.ts` that fails on a literal icon size.
-- **Extended in task 14 final fix wave (B2):** `WashOfferCard.tsx` line 196 and `WashActionBar.tsx`
-  line 60 both use `minHeight: 52`, which escapes the touch-target scan because 52 is neither 44 nor 48. This is `touchTarget` (48) plus `spacing.xs` (4), and should be `touchTarget + spacing.xs` or
-  a named token.
-
-### S-80 — `IdempotencyService.claim()` returns `proceed` when the row vanished
-
-- **Status:** `open`
-- **Found in:** task 14 final fix wave, server review
-- **Surface:** api
-
-`IdempotencyService.claim` (`apps/api/src/platform/idempotency/idempotency.service.ts` line 103)
-inserts a new claim row and then selects it back. If the row vanishes between the insert and
-select (for example, a reaper job deletes stale claims from multiple threads at once), the
-select returns `undefined`, and later `store` matches no row. This is now logged at warn ("or
-the key is gone"), not silent, but the caller still treats `claim === undefined` as a fresh
-attempt and has two paths to a re-run: a zombie that stored its answer after the key aged past
-the reaper's window, and a legitimate retry whose claim was cleaned up while it was committing.
-
-- **Why deferred:** the fix is either to treat a vanished row as a fresh claim (insert and select
-  again, accept the reaper race), or to answer 409 and let the API retry. Both need the reaper's
-  window time and a replay decision.
-- **Done means:** the claim logic handles a vanished row (either by re-inserting or by returning a
-  409), and a unit test covers the race by mocking `claim()` to return `undefined` after a successful
-  insert.
-
 ### S-81 — Empty and error states inside an outer ScrollView are top-aligned, not centred
 
 - **Status:** `open`
@@ -1590,29 +950,6 @@ top-aligned with no vertical breathing room. The screens pass no centring prop.
   the empty/error state and using `flex: 1` with the centring.
 - **Done means:** one of those screens shows its empty state both top-aligned (when it overflows)
   and centred (when there is room), asserted in a test at 375px and at 812px tall.
-
-### S-82 — Owner occupancy assumes 24h opening, ignoring the space's own schedule
-
-- **Status:** `open`
-- **Found in:** task 15 (owner dashboard), task 3 — `SpaceOccupancyQuery.forOwner`
-- **Surface:** api
-
-`apps/api/src/domains/space/queries/occupancy.ts` computes each space's available hours as
-`slots × windowHours`, where `windowHours` is the wall-clock span of the requested window with
-no reference to `spaces.schedule` (`SpaceSchedule`, which can carry `is24x7: false` and explicit
-open/close times). An owner whose space closes overnight gets a denominator inflated by the
-closed hours, so `occupancyBp` reads lower than it should — a space fully booked during its own
-open hours would not show 10,000 bp.
-
-- **Why deferred:** task 3's brief scopes the query to slots × window only; intersecting the
-  window with the schedule is its own piece of interval arithmetic (a schedule can have
-  per-weekday open/close pairs) and its own test matrix (24x7, a single daily window, a window
-  spanning a midnight close). Doing it inline would have grown task 3 past a single grouped
-  query.
-- **Done means:** `forOwner` intersects `[window.from, window.to)` with the space's own open
-  hours (falling back to the full window when `is24x7` is true) before computing `available`,
-  with a test asserting a space that closes overnight reports 10,000 bp when every open hour in
-  the window is booked.
 
 ### S-83 — The owner statement re-aggregates the owner's whole ledger history on every page
 
@@ -1653,49 +990,6 @@ carries `owedCaption()` — paid as the driver pays, not yet paid, or a refund a
 - **Why deferred:** belongs to the task that creates its data (17: reviews).
 - **Done means:** task 17 ships `GET /owner/reviews` (and respond) with a reviews section on the
   listing detail.
-
-### S-85 — Owner response contracts accept any string as `driverName`
-
-- **Status:** `open`
-- **Found in:** task 15 security review
-- **Surface:** contracts
-
-`statementLineSchema.driverName` and `ownerBookingSchema.driverName` are `z.string()`. The
-"Ravi K." privacy shape is guaranteed only by `shortName()` in the owner views; a future producer
-that skipped it would ship a driver's full name to owners and every schema would accept it.
-
-- **Why deferred:** not reachable today — every producer routes through `shortName()`.
-- **Done means:** the contracts constrain the shape (first name plus optional initial, length-capped),
-  with a contract test that a full two-word name is refused.
-
-### S-86 — Ledger sums are read as `::text` and converted with `Number()`
-
-- **Status:** `open`
-- **Found in:** task 15 TypeScript review (`owner-balance.ts`; the pattern pre-dates task 15 in `forOwner`)
-- **Surface:** api
-
-`CREDITS`/`DEBITS` cast `sum(amount_paise)` to text and `Number()` it. `money.md` specifies
-`bigint` paise; a sum past `Number.MAX_SAFE_INTEGER` would lose precision silently. Task 15 spread
-the pattern from one query to five.
-
-- **Why deferred:** unreachable at any plausible single-owner volume; the fix is a shared helper
-  touching every ledger read, which is its own change.
-- **Done means:** one helper parses a sum string to a safe integer and throws (500, logged) above
-  `MAX_SAFE_INTEGER`, used by every ledger read, with a unit test at the boundary.
-
-### S-87 — Two near-identical keyset cursor codecs
-
-- **Status:** `open`
-- **Found in:** task 15 ponytail review
-- **Surface:** api
-
-`owner-balance.ts` has its own base64url-JSON cursor (`{t, i}`) beside `booking.service.ts`'s
-(`{f, t, i}`). Both parse through Zod and answer a bad cursor with `400 INVALID_CURSOR`.
-
-- **Why deferred:** merging them changes the driver's booking-list path, outside task 15's surface,
-  for about 15 lines saved.
-- **Done means:** one `encodeCursor(payload)` / `decodeCursor(raw, schema)` pair serves both, and the
-  driver and owner cursor tests stay green unchanged.
 
 ### S-88 — Owner mobile leftovers: dead `deleteSpace`, no QR icon on the scan button, stacked refresh notices
 
@@ -1759,20 +1053,6 @@ was chosen by the implementer, not specified anywhere.
 
 - **Why deferred:** needs a product decision, not code.
 - **Done means:** product confirms or changes the limit, and the policy table cites the decision.
-
-### S-93 — A confirmed booking past its start, not yet checked in, is in neither booking group
-
-- **Status:** `open`
-- **Found in:** task 15 final review
-- **Surface:** api · mobile
-
-The listing detail's groups are Active (`status = active`) and Upcoming (`confirmed AND starts_at >
-now()`). A driver who is late — confirmed, start time passed, not checked in — appears in neither,
-which is exactly the booking the owner is looking for at the gate. This follows spec §3 as written.
-
-- **Why deferred:** a product decision about the group's meaning, not a defect in the code as specified.
-- **Done means:** Upcoming (or a new "Arriving" group) includes confirmed bookings whose window has
-  started and not ended, with an HTTP test.
 
 ### S-94 — Two pre-existing owner-listing a11y misses: rejection reason contrast, 36dp action button
 
@@ -1838,24 +1118,6 @@ is harmed, but it is wasted traffic, rate-limit budget, and a re-render under th
 - **Done means:** scanning pauses while a result card is shown (until "Done" or a new-scan action), with a
   component test asserting one POST per QR presentation.
 
-### S-98 — A refund after capture does not reverse the Route transfer
-
-- **Status:** `open`
-- **Found in:** task 16a design (ADR-030 consequences)
-- **Surface:** api · money
-
-Route moves the owner's (or washer's) share at capture, and task 16a now records that. A later
-refund reverses the booking's credits in the ledger, but the money already sits in the owner's
-Linked Account. Their balance goes negative and stays there, and nothing asks Razorpay to reverse
-the transfer. The payout job never pays a negative balance, so this cannot overpay. It can, however,
-leave us out of pocket.
-
-- **Why deferred:** needs `transfers.reverse` (an external call, so it goes through the outbox),
-  the reversal's own ledger posting, and a policy for partial refunds. That is a feature, not a fix.
-- **Done means:** a refund after capture enqueues a transfer reversal for the owner's share of the
-  refunded amount, the posting brings the balance back to zero, and an integration test covers a
-  full and a partial refund.
-
 ### S-99 — Owners and washers have no rail for money Route cannot carry
 
 - **Status:** `open`
@@ -1872,56 +1134,9 @@ dispute outcome. Nothing creates such a residual today.
   "not Route-settled" (for example an adjustment `txn` kind), with a test that a capture next to an
   adjustment pays only the adjustment.
 
-### S-100 — A hijacked session can redirect next Monday's payout
-
-- **Status:** `open`
-- **Found in:** task 16a security review (finding 3)
-- **Surface:** api · mobile · security
-
-`PUT /me/bank-details` needs only a valid session. The defences are the notification and the
-cancellation of unsent payouts: after-the-fact, and the notification goes to the same device.
-
-- **Why deferred:** step-up auth needs a re-OTP flow in mobile (Firebase re-auth). A holdoff (for
-  example no payout within 72h of a change) is a product policy that delays legitimate payouts, so
-  it is a decision for the user, not a code-review fix.
-- **Done means:** the chosen control (re-OTP on change, a holdoff window, or both) plus a notice on
-  a second channel, with tests.
-
-### S-101 — The idempotency store hashes the bank-details body with unsalted SHA-256
-
-- **Status:** `open`
-- **Found in:** task 16a security review (finding 5)
-- **Surface:** api · platform/idempotency
-
-`idempotency_keys.request_hash` is SHA-256 of the canonical body, and for `PUT /me/bank-details`
-that body holds the account number. If the table leaked, account numbers could be brute-forced
-offline (9–18 digits with a known IFSC and name). Task 16b widens it: `PUT /me/route-onboarding`
-carries the PAN (5 letters, 4 digits, 1 letter — a small space) and the account number together.
-
-- **Why deferred:** the fix changes a shared service for every route. Existing keys (24h TTL) would
-  mismatch across the deploy, which needs its own small plan.
-- **Done means:** `request_hash` is HMAC-SHA256 under a server secret, with a test that the stored
-  hash is not the plain SHA-256 of the body.
-
-### S-102 — A payout reversed after it was marked paid is never noticed
-
-- **Status:** `open`
-- **Found in:** task 16a silent-failure review (finding 5), plus the `ponytail:` ceiling on daily polling
-- **Surface:** worker · money
-
-Reconcile polls only `processing` payouts. RazorpayX can report `processed` and later `reversed`
-(the bank returned it), and by then the row is `paid` and cleared. The ledger says paid while the
-money came back. Status also lags up to a day because it is polled, not pushed.
-
-- **Why deferred:** the right fix is RazorpayX's `payout.*` webhook (a second verified webhook
-  endpoint), which also removes the lag.
-- **Done means:** a verified `payout.processed/reversed/failed` webhook drives the same transitions
-  as reconcile, a reversal after `paid` fails the payout and flags `payout_failed`, and reconcile
-  stays as the safety net.
-
 ### S-103 — Payout and reconciliation queries scan more than they will need to
 
-- **Status:** `open`
+- **Status:** `open` — measured 2026-10-13, not needed yet: at 1M ledger rows the weekly candidate query is 304 ms (a weekly cron); at 300k payments the reconcile candidates are 64 ms (nightly). The reconcile switch to `transfers.all` stays the next step when capture volume grows.
 - **Found in:** task 16a database review, plus the per-payment `ponytail:` ceiling
 - **Surface:** db · worker
 
@@ -1943,20 +1158,6 @@ All are fine at launch volume.
 
   Also switch reconcile to `transfers.all({ from, to })`. Each change is justified by an EXPLAIN
   before and after.
-
-### S-107 — The web map never renders a frame (driver discovery, owner listing step 1)
-
-- **Status:** `fixed on fix/web-map (905016f)` — PR pending; close when it merges
-- **Found in:** launch series (brag) capture — 2026-09-29
-- **Surface:** mobile (web build) · packages/ui-native `ParkMap.tsx`
-
-Blank since task 6. Three stacked causes, each confirmed by instrumenting the running page (learnings.md,
-"The web map was blank since task 6"): MapLibre 6's worker resolved against the Metro bundle URL and got
-Expo's HTML fallback; the injected CSS clipped `.maplibregl-canvas-container` (zero height) with
-`overflow:hidden`; the marker entrance animated `transform` on the element MapLibre positions, pinning every
-marker to the top-left.
-
-- **Done means:** fix/web-map merged; the driver map shows every marker at its own position on web.
 
 ### S-108 — Uncaught "12000ms timeout exceeded" from an icon font on the web build
 
@@ -1985,28 +1186,6 @@ layout. Resetting `scrollLeft` on every element does not, so it is layout overfl
 - **Why deferred:** web-only, found while filming; the video uses a blurred still.
 - **Done means:** the focused input stays inside its row (width constrained, focus ring inset), checked at 390px
   width on web, and on Android with the keyboard open.
-
-### S-105 — `booking-concurrency` flaked once under full-suite load with a non-409 loser
-
-- **Status:** `open`
-- **Found in:** task 16a final gate run, 2026-09-29 (1 failure in 10 runs; 8 isolated runs green)
-- **Surface:** api · booking · a mandatory test (R-TEST-03)
-
-In "never oversells three slots", one of ten racing inserts into `bookings` failed with an error
-that was not `SlotUnavailableError`. The oversell invariant held (winners ≤ 3). The run was the
-whole API integration suite, sequentially, so the container was under more load than an isolated
-run. The log kept only Drizzle's "Failed query" wrapper, not the SQLSTATE; the likeliest candidate
-is a deadlock (40P01) between concurrent GiST exclusion checks, which the domain catch does not map.
-Task 16a changes nothing on the booking path (verified by diff).
-
-Task 16b did the first half of "done means": the assertion now reports `pgSqlState` and
-`pgConstraintName` of any unexpected rejection. The 16b runs it appeared in did not flake, so the
-code is still unseen.
-
-- **Why deferred:** pre-existing, unrelated to payouts, and the root cause needs the SQLSTATE first.
-- **Done means:** the test logs the cause code of any unexpected rejection; once seen, the create
-  path maps it (40P01/40001 → retry once or answer 409 SLOT_UNAVAILABLE), and 20 consecutive
-  full-suite runs stay green.
 
 ### S-110 — A MapLibre runtime error on web leaves a blank map instead of the fallback
 
@@ -2039,41 +1218,6 @@ nearby-but-distinct pins stay separate and stacked. Contrast and target sizes th
 - **Done means:** pins that would overlap at the current zoom merge into a count cluster (or the initial zoom
   frames them apart), checked with the dev fixtures at 390px, with a clustering unit test for overlap.
 
-### S-112 — Route onboarding cannot recover a step whose response was lost, and two devices can race it
-
-- **Status:** `open`
-- **Found in:** task 16b review (silent-failure and security lenses), 2026-09-30
-- **Surface:** api · `SubmitRouteOnboardingCommand`
-
-Each Razorpay id is saved before the next call, so a _refused_ step resumes. But a step that
-Razorpay performed and whose response we never read (a 10s timeout, an unreadable 200) saves no
-id: the next submit POSTs again, Razorpay refuses the duplicate with a 400, and the user is told
-"check your PAN and bank account" on every retry. Separately, two PUTs from two devices with
-different Idempotency-Keys can both find no row and both create a Linked Account; the upsert
-keeps the second and orphans the first (a PAN-bearing stakeholder at Razorpay).
-
-- **Why deferred:** the recovery needs Razorpay's lookup behaviour verified first (fetch an
-  account by `reference_id`, or read the duplicate error's code) — research, not a guess. The
-  race needs two devices within seconds under a 3/min rate limit. The log now names the step and
-  the reason, so support can resolve a stuck payee by hand.
-- **Done means:** a POST that timed out or answered unreadably is recovered by looking the
-  resource up before re-creating it; a per-user claim (inserted before the first Razorpay call,
-  outside any transaction) serialises submits; an integration test covers both.
-
-### S-113 — A payout row cannot say which account it was paid to
-
-- **Status:** `open`
-- **Found in:** task 16b UI walk, 2026-09-30
-- **Surface:** db · contracts · mobile `PayoutRow`
-
-Payout history said "To bank ····6789" by stamping the _current_ bank on every row, so after a
-bank change every past payout named the new account. 16b now says "To your bank". `payouts` keeps
-`razorpayx_fund_account_id` but not the account's last 4.
-
-- **Why deferred:** needs a column and a backfill-free migration; "To your bank" is honest meanwhile.
-- **Done means:** `payouts.destination_last4` is written at payout creation, `payoutViewSchema`
-  carries it, and the row shows it, with a test that a bank change does not rename old rows.
-
 ### S-114 — The one-rail rule reads the payee's status today, not how each entry was paid
 
 - **Status:** `open`
@@ -2090,33 +1234,6 @@ debits `owner_payable` with the same counterparty at capture, so Route-paid rows
 - **Done means:** the predicate keys on the entry (a Route discharge marks what Route paid), not
   on the payee's current status, with a test of a pre-activation balance being paid.
 
-### S-115 — `useIntent` reuses a key after a lost response even when the body changes
-
-- **Status:** `open`
-- **Found in:** task 16b React review, 2026-09-30
-- **Surface:** mobile · every mutation using `useIntent`
-
-The key resets only on success, which is right for a retry of the same intent. But if the server
-committed and the response was lost, and the user then edits the form and resubmits, the key
-comes back with a new body hash: a 422 "Something changed in that request" on every retry until
-they leave the screen.
-
-- **Why deferred:** project-wide (every mutation hook), not a Get paid defect.
-- **Done means:** `useIntent` mints a new key when the payload changes (stored body hash), with a
-  hook test for lost-response-then-edit.
-
-### S-116 — Owner earnings re-requests a failed page on every scroll
-
-- **Status:** `open`
-- **Found in:** task 16b React review (fixed in the valet Get paid screen), 2026-09-30
-- **Surface:** mobile `app/(owner)/earnings/index.tsx`
-
-`onEndReached` guards on `hasNextPage && !isFetchingNextPage` but not `isFetchNextPageError`, so
-after a failed page the footer's "Tap to retry" is bypassed by a scroll that re-requests it.
-
-- **Why deferred:** a different screen from 16b's.
-- **Done means:** the guard adds `!isFetchNextPageError`, as `ValetPayoutsScreen` does.
-
 ### S-117 — Route onboarding only knows individuals
 
 - **Status:** `open`
@@ -2130,33 +1247,6 @@ PAN, not a personal PAN).
 - **Why deferred:** P2P parking in the launch market is individuals; business owners need their
   own form and document set.
 - **Done means:** a business-type choice on Get paid, the matching Razorpay fields, and tests.
-
-### S-118 — Chips are 6px, the Wayfinder direction says 8px
-
-- **Status:** `open`
-- **Found in:** task 16b design audit, 2026-09-30
-- **Surface:** packages/tokens · every chip
-
-CLAUDE.md fixes "10px radius, 8px chips"; `radius` has no 8 (`sm` is 6), and every chip in the app
-uses `radius.sm`, including 16b's payout status chips.
-
-- **Why deferred:** app-wide token change, not a 16b decision.
-- **Done means:** either a `radius.chip = 8` token used by every chip, or CLAUDE.md corrected to
-  6px — one of the two, decided once.
-
-### S-119 — The Get paid status card shows a stale status after a failed refetch
-
-- **Status:** `open`
-- **Found in:** task 16b silent-failure review, 2026-09-30
-- **Surface:** mobile `RouteOnboardingScreen`
-
-On the reviewing, active or blocked card, a background refetch that fails leaves the last status
-on screen with no sign it is old.
-
-- **Why deferred:** low impact — the status changes rarely and a push notification carries each
-  change.
-- **Done means:** a `RefreshNotice` above the card when `isError` with data, as the earnings
-  screens do.
 
 ### S-120 — Commission waivers can only be granted by activation, never by an operator
 
@@ -2198,77 +1288,9 @@ commission without warning.
   surface); the window is visible on the dashboard meanwhile.
 - **Done means:** a daily job notifies each owner 7 days before `ends_at`, once, idempotently.
 
-### S-123 — One person can hold several commission-free slots through several accounts
-
-- **Status:** `open`
-- **Found in:** task 16c security review, 2026-10-05
-- **Surface:** pricing · `CommissionWaiverService`
-
-The 50-slot cap is per account. Someone who registers several owner accounts and completes Route
-KYC on each takes a slot each, and nothing requires a live space, so a slot can be held for 3
-months while nothing is listed.
-
-- **Why deferred:** either fix changes the eligibility rule approved for 16c (grant at first
-  activation): dedupe on a Razorpay-verified PAN or settlement account needs Razorpay to return
-  one, and requiring an approved space moves the grant to space approval. Exposure is bounded:
-  50 slots, 15% of base, no payout without real bookings.
-- **Done means:** a product decision between the two; then the grant refuses a second slot for the
-  same verified identity, or waits for a first approved space, with a test.
-
-### S-124 — Drivers can tell which owners are commission-free
-
-- **Status:** `open`
-- **Found in:** task 16c security review, 2026-10-05
-- **Surface:** contracts (driver views) · mobile `PriceBreakdown`
-
-"Owner earns" is the full base for a waived owner and 85% of it otherwise, so comparing the two
-reveals the owner's waiver.
-
-- **Why deferred:** low impact (a promotional status, not personal data); fixing it removes a
-  driver-visible line the fee-model explanation relies on, which is a design-gate change.
-- **Done means:** a design decision to keep, reword ("Most of this goes to the owner") or drop the
-  line, and the driver contracts follow it.
-
-### S-125 — The worker's tests are never linted, and one already fails
-
-- **Status:** `open`
-- **Found in:** S-104 fix, 2026-10-05
-- **Surface:** worker · tooling
-
-`apps/worker`'s lint script is `eslint src/`, so `test/` is never linted: `test/surge-recalculate.spec.ts:212-213`
-already has two `no-unused-vars` errors.
-
-- **Why deferred:** pre-existing and unrelated to queues; widening the lint scope may surface more.
-- **Done means:** the worker lints `src/` and `test/`, and passes.
-
-### S-126 — Search and space detail still send the rating as a float
-
-- **Status:** `fixed on feature/task-17b-reviews-mobile` — close when it merges
-- **Found in:** task 17a, 2026-10-05
-- **Surface:** contracts (`spaceSearchItemSchema`, `spaceDetailSchema`) · mobile
-
-Both responses carry `rating: number` (bp / 10000, e.g. 4.2) next to the new integer-backed `badge`.
-Task 17 says no float in a contract; the field stayed because mobile reads it until 17b.
-
-- **Why deferred:** removing it breaks the shipped mobile client; 17b moves the UI to `badge`.
-- **Done means:** mobile reads `badge` only, and `rating` is removed from both contracts.
-
-### S-127 — Drivers cannot page past the three newest reviews of a space
-
-- **Status:** `fixed on feature/task-17b-reviews-mobile` (`GET /driver/spaces/:id/reviews` + list screen) — close when it merges
-- **Found in:** task 17a, 2026-10-05
-- **Surface:** api (driver) · mobile
-
-Space detail returns `reviewSummary` + the 3 most recent reviews. The spec's "See all 18 reviews →"
-needs a list endpoint the §17.9 table does not define.
-
-- **Why deferred:** the screen that needs it is 17b's, and its design decides the shape.
-- **Done means:** 17b's design either drops "see all" or adds `GET /driver/spaces/:id/reviews`
-  (cursor-paged, public view) with an HTTP test that pages to the end.
-
 ### S-128 — The nightly review recompute scans `reviews` by `created_at` with no index
 
-- **Status:** `open`
+- **Status:** `open` — measured 2026-10-13, not needed yet: 75 ms over 300k reviews (a nightly job). Linear; re-measure past 3M reviews.
 - **Found in:** task 17a database review, 2026-10-05
 - **Surface:** db · worker
 
@@ -2278,33 +1300,6 @@ Fine at launch volume, linear in total reviews.
 - **Why deferred:** no volume yet; an index is a write cost on every review.
 - **Done means:** an EXPLAIN on a seeded volume shows the scan matters, then
   `CREATE INDEX CONCURRENTLY … (created_at) WHERE deleted_at IS NULL` in its own migration.
-
-### S-129 — A fleet of new accounts can flood the moderation queue
-
-- **Status:** `open`
-- **Found in:** task 17a security review, 2026-10-05
-- **Surface:** api (reports)
-
-Reports are rate-limited per user (10/min) and need no relationship to the space. Each account costs
-a phone OTP, which bounds it, but nothing caps reports per review or requires a booking at the space.
-
-- **Why deferred:** reporting never hides a review, so a flood costs admin time, not content; the
-  right cap needs real report data.
-- **Done means:** a per-review cap on distinct reporters or a booking-at-this-space requirement for
-  drivers, chosen from task 18's moderation data, with an HTTP test.
-
-### S-130 — No push asks a driver to review; drivers rate nothing they are not reminded of
-
-- **Status:** `fixed in task 19a` — `booking.completed` maps to a `review.request` notification through the relay (EVENT_NOTIFICATIONS), once per booking by the outbox singleton key
-- **Found in:** task 17a scoping (user-approved cut), 2026-10-05
-- **Surface:** worker · notifications
-
-`booking.completed` has no subscriber, so the spec's `review.prompt` job was not built. The in-app
-prompt reads `GET /driver/reviews/pending`.
-
-- **Why deferred:** push delivery is task 19.
-- **Done means:** task 19 subscribes to `booking.completed` and sends a `review_request` notification
-  once per booking, idempotently.
 
 ### S-131 — Owners' reviews of drivers are stored but never aggregated
 
@@ -2374,61 +1369,6 @@ linkedin ×14, hyperframes ×9, brag, media-use and others) — never routed, an
 - **Done means:** each of the 54 is either routed in `reference/skill-index.md` or listed under
   "not routed for ParkEase", and the three documents state the count the generator prints.
 
-### S-138 — The ledger has no index on (occurred_at, id): the explorer and the export sort the range
-
-- **Status:** `open`
-- **Found in:** task 18a Task 8 (admin finance), 2026-10-06
-- **Surface:** api/db — `ledger_entries`, `domains/ledger/queries/ledger-explorer.ts`, `ledger-export.ts`
-
-Both read `ORDER BY occurred_at [DESC], id [DESC]`. The only time-ordered index is `(account, occurred_at)`, so an
-unfiltered explorer page or a whole-range export sorts every row in range before the first one is returned (measured:
-~0.5 s to the first row on 250 000 rows; it grows with the table). A filter by account is already served.
-
-- **Why deferred:** a migration (reviewed with `postgres-migration-reviewer`) is outside the finance read task, and the
-  range is capped at 366 days.
-- **Done means:** `CREATE INDEX CONCURRENTLY ledger_entries_occurred_at_id_idx ON ledger_entries (occurred_at, id)` in a
-  migration, and the 250 000-row streaming test shows the first row arriving before the sort.
-
-### S-139 — JSON endpoints accept form-encoded and text/plain bodies
-
-- **Status:** `fixed` — task 18 completion: `JsonOnlyGuard` answers 415 to any non-JSON write; the pentest case runs
-- **Found in:** task 18a pentest (F3), 2026-10-06
-- **Surface:** api · platform/http
-
-A role grant executed from an `application/x-www-form-urlencoded` body. Not a CSRF today — every admin mutation needs a Bearer header a cross-site form cannot send — so it is defence in depth.
-
-- **Done means:** non-GET requests whose content-type is not `application/json` answer 415 (webhooks excepted), implemented once in platform/http, and the skipped case in `admin-pentest.spec.ts` runs.
-
-### S-140 — Admin dashboard p95 is 9.76 s at 200 concurrent over a 250k-row ledger
-
-- **Status:** `fixed` — task 18 completion: counts in one statement, identical concurrent reads coalesced; 200 concurrent dashboards p95 213 ms (was 9.76 s); the stress case runs
-- **Found in:** task 18a stress run, 2026-10-06
-- **Surface:** api · `domains/ledger/queries/dashboard.ts`
-
-A single dashboard is ~152 ms; `imbalancedTxnIds` is ~80% of it (full txn_id index scan, ~128k buffers), and the dashboard fires 8 queries at once against a pool of 10. Plans are in the 18a stress report.
-
-- **Done means:** counts collapsed into one statement, the imbalance check memoised or index-backed, S-138's index in place, and the skipped case in `admin-stress.spec.ts` passes (or its target is restated with the measured number and the pool-size reason).
-
-### S-141 — Ledger export can hold pooled connections while a client stalls, and is not audited
-
-- **Status:** `fixed` — task 18 completion: at most 2 concurrent exports (429 EXPORT_BUSY), a 5-minute deadline destroys a stalled stream, one `ledger.export` audit row each
-- **Found in:** task 18a review (security M1, database H1, silent-failure 5), 2026-10-06
-- **Surface:** api · `ledger-export.ts`, `finance.controller.ts`
-
-Each export pins one of the pool's 10 connections for as long as the client reads; 5/min/user caps starts, not concurrency. No `ledger.export` audit row is written.
-
-- **Done means:** at most 2 concurrent exports (429 otherwise), an overall deadline that destroys the stream, abort on client close, statement_timeout on the cursor, and a `ledger.export` audit row — each with a test.
-
-### S-142 — Remaining 18a review findings (data integrity and hardening)
-
-- **Status:** `open`
-- **Found in:** task 18a review lenses, 2026-10-06 (lens files in the 18a SDD workspace)
-- **Surface:** api · db · contracts
-
-Deferred, each small: DB-row `.parse()` answers 400 on drift instead of 500 (add `parseRow`); refunds have no DB trigger capping their sum at the capture (rule 5); migration 0042 should follow 0040/0041 (`SET LOCAL`, FK NOT VALID + VALIDATE file); cancel should re-assert "no orphan refund" after taking the payment lock; booking detail and the lock query order payments differently (`NULLS LAST, id`); `page` has no upper bound (OFFSET 1e300 → 500); dashboard reported-review count omits `deleted_at IS NULL`; partner detail should flag `documentsIncomplete`; verify announces `partner.verified` when the role stayed suspended; space decisions need a response contract; `presetAmount`/`lockProfile` need exhaustive switches; `'orphan_capture'` belongs in contracts; space approval has no version precondition (admin may approve content changed since viewing); mobile switch-role can enter `admin` (needs an ADR); block can race an in-flight rotate (bounded by one access token); booking list `to` is inclusive while every other admin range is exclusive; no last-admin guard; ParkEase Fee card is gross credits, not net of refunds (product decision).
-
-- **Done means:** each item fixed with a test or ruled out in this row.
-
 ### S-143 — Admin panel (18b) client contract notes from 18a
 
 - **Status:** `open`
@@ -2441,7 +1381,7 @@ POST `/auth/admin/refresh` and `/logout` with `{}` (Fastify answers 400 to an em
 
 ### S-144 — Admin panel (18b/18c) follow-ups deferred to keep the task small
 
-- **Status:** `fixed` except the user detail page (the list already shows every field it would) — task 18 completion: heat map (`GET /admin/surge/heatmap` + MapLibre), override ladder editor, dashboard chart (`series`), 10 Playwright flows on fixtures, route-level code splitting
+- **Status:** `fixed` except the user detail page (the list already shows every field it would).
 - **Found in:** task 18b/18c build, 2026-10-07
 - **Surface:** admin · api
 
@@ -2460,17 +1400,6 @@ The spec's matrix has rows nothing emits: `booking.new` (the owner is never told
 - **Why deferred:** each needs a producer change or a read in the worker, and 19a is the delivery path and the feed.
 - **Done means:** each row either emits and maps (with a test through the relay) or is struck from the matrix here with the reason.
 
-### S-146 — `booking-concurrency` flakes on a Postgres deadlock (40P01)
-
-- **Status:** `open`
-- **Found in:** task 19a pre-PR run, 2026-10-07 (unrelated to 19a; booking insert path untouched)
-- **Surface:** api · booking · mandatory test
-
-Three runs of `test/integration/booking-concurrency.spec.ts` on one machine: one failed "fails one of two concurrent callers even when another index was free", one failed "never oversells three slots" with the loser rejected by `SQLSTATE 40P01` (deadlock detected) where the test expects `SlotUnavailableError`, one passed 9/9. Two concurrent inserts into `booking_slots` can deadlock on the exclusion constraint instead of one losing cleanly.
-
-- **Why deferred:** outside task 19; the invariant (no oversell) held in every run, only the error mapping differs.
-- **Done means:** the command maps 40P01 to `SlotUnavailableError` (or retries once), with the test run 20 times green.
-
 ### S-147 — Task 19b gaps: no real-device push check, no EAS project id, no in-app permission prompt flow
 
 - **Status:** `open`
@@ -2482,7 +1411,47 @@ Push registration and the tap-to-open path are unit-tested with mocked Expo modu
 - **Why deferred:** needs an Expo account and a device; the rest is polish on a working path.
 - **Done means:** `eas init` committed, one push received and tapped on a physical Android device for each of driver, owner and valet (cold start and foreground), a pre-prompt before the permission request, and a Settings link when permission is denied.
 
-### S-148 — Task 20 web: optional cleanup from the simplify review
+### S-151 — Task 21's Maestro journeys, cold-start and install-size checks do not exist
+
+- **Status:** `blocked` — needs an Android device or emulator and an EAS build (S-148 and S-149 are now done, so the journeys can be written).
+- **Found in:** task 21 gap review, 2026-10-07
+- **Surface:** mobile · E2E · release
+
+`apps/mobile/.maestro/` holds the two washer flows from task 14, still never executed. The valet flows S-04 names are not in the repo. There is no `driver-full-journey.yaml`, `owner-full-journey.yaml` or `valet-full-journey.yaml`. Nothing measures cold start (< 3s) or install size (< 20MB, ADR-023): there is no `android/` directory and no EAS profile to build from.
+
+- **Done means:** the three journeys exist and run green on a Redmi 9A-class device against a seeded API, with output in the PR. Cold start is measured by Maestro. The release AAB size is recorded and checked in CI.
+
+### S-154 — Two admin integration tests fail under CPU contention
+
+- **Status:** `open`, narrowed — the refund-retry half is fixed (the idempotency interceptor now answers only after its store settles, so an immediate retry replays; 4/4 runs green). The export-cap case can still see its first two exports finish before the third arrives on a fast runner.
+- **Found in:** task 21, first full-suite run beside other work, 2026-10-07
+- **Surface:** api · test
+
+`admin-bookings-http.spec.ts` "a failed re-read after the refund commits is not a 500, and a retry does not refund again": the retry got `409` (expected `200`). `admin-completion-http.spec.ts` "caps concurrent exports, answers 429…": the third export got `200` (expected `429`), because the first two finished before it arrived. Both passed 3 of 3 times in isolation. CI now runs the integration suite on every change (task 21), so a slow runner will show these.
+
+- **Done means:** the refund retry waits for the stored response, the way `booking-http.spec.ts` does with `vi.waitFor`. The export test holds the first two streams open deterministically instead of racing them. Both pass 20 runs under full-suite load.
+
+### S-156 — Ledger imbalance and outbox lag are log lines; nothing pages, and nothing watches a dead worker
+
+- **Status:** `open` (feeds task 22), narrowed — `GET /health/pipeline` now reports outbox lag from the API with the worker's own query and answers 503 past the 30 s budget, so an uptime probe notices a dead worker. Left for task 22: routing `LEDGER_IMBALANCE`, `OUTBOX_LAG`, `QUEUE_SLO` and `DEAD_LETTER` to a pager.
+- **Found in:** task 21, 2026-10-07
+- **Surface:** worker · ops
+
+Task 21 fixed `ledger.assert-balance` so a one-sided posting is found, and the outbox relay now logs `OUTBOX_LAG` past 30s. Both are `logger.fatal` / `logger.error` only. §21.3 #16 says the job "pages immediately", and the finance dashboard does show IMBALANCED (`imbalancedTxnIds`). If the worker itself is down, nothing reports lag at all, because the check runs inside the relay.
+
+- **Done means:** task 22's alerting routes `LEDGER_IMBALANCE` and `OUTBOX_LAG` to a pager, and an external probe (or the API's health endpoint) reports outbox lag from the same query, so a dead worker is noticed.
+
+### S-157 — No table-driven screen-states test (§21.8) and no automated accessibility checks
+
+- **Status:** `open`, narrowed — done: a mobile screen-states table (`src/__tests__/screen-states.test.tsx`) over the data screens, a test failing any unlabelled Pressable, an admin Playwright table of every page's loading/error/empty states, and axe on every admin page. Left: the manual TalkBack pass of search → book → confirm (needs a device).
+- **Found in:** task 21 gap review, 2026-10-07
+- **Surface:** mobile · admin
+
+Skeleton, error and empty states exist per screen and are unit-tested one component at a time. No test enumerates every screen and asserts all three. Nothing enforces `accessibilityLabel` and `accessibilityRole` on every `Pressable` (R-FE-12): no lint rule, no test. Admin has no axe-core check. TalkBack and VoiceOver passes of the booking flow have not been done.
+
+- **Done means:** a `*.states.spec.tsx` table covers every mobile route, and an admin Playwright spec covers every page, each asserting skeleton, error and empty states. A lint rule or test fails a `Pressable` without a label. `@axe-core/playwright` runs on the admin flows. A manual TalkBack pass of search → book → confirm is recorded.
+
+### S-159 — Task 20 web: optional cleanup from the simplify review
 
 - **Status:** `open`
 - **Found in:** task 20 (marketing site), `/simplify` review, 2026-10-12
@@ -2498,7 +1467,7 @@ Four tidiness items the review found and the task deliberately skipped. None cha
 - **Why deferred:** pure maintainability; the project owner chose to ship tests, security review and docs first.
 - **Done means:** all four applied; `pnpm turbo run lint typecheck test --filter=@parkease/web...`, `pnpm --filter @parkease/web test:e2e` and Lighthouse CI green; the home page chunk is smaller in `next build` output.
 
-### S-149 — Task 20 web: review findings consciously not taken
+### S-160 — Task 20 web: review findings consciously not taken
 
 - **Status:** `open`
 - **Found in:** task 20, `/code-review` and `/simplify`, 2026-10-12
@@ -2515,3 +1484,16 @@ Four tidiness items the review found and the task deliberately skipped. None cha
 - **Done means:** each item either applied with tests green, or closed with a one-line reason in `learnings.md`.
 
 | task-22 | `apps/*/Dockerfile` | Image runs under tsx with devDeps because packages export raw `.ts`. Slim image + `pnpm deploy --prod` needs packages to emit `dist`. Also unverified: healthcheck against live DB, worker-host ADR-010 amendment, CI docker push, everything in 22.8 that needs real accounts. |
+
+## Product decisions recorded
+
+- **S-149, 2026-10-12: self-serve roles, gated.** A person takes on owner, valet or washer from the
+  app (`POST /me/roles`, audited as `user.role.self-grant`). The role is not the gate: a listing
+  goes live only after admin approval, and a partner profile starts unverified, which every way to
+  work checks. A suspended role stays closed; `admin` is never self-serve.
+- **S-100, 2026-10-12:** changing bank details needs a fresh OTP (re-auth within 5 minutes), and
+  payouts to the new account are held 48 hours.
+- **S-123, 2026-10-12:** the commission-free slot is granted at a person's first approved space,
+  with Route activated.
+- **S-124, 2026-10-12:** drivers are not shown the owner's share; the breakdown says "Most of this
+  goes to the space owner" without an amount.

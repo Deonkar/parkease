@@ -5,8 +5,8 @@ import {
   COMMISSION_WAIVER_SLOTS,
   istDateOf,
 } from '@parkease/contracts/money';
-import { commissionWaivers, userRoles } from '@parkease/db/schema';
-import { and, eq, gt, lte, sql } from 'drizzle-orm';
+import { commissionWaivers, linkedAccounts, spaces, userRoles } from '@parkease/db/schema';
+import { and, eq, gt, isNull, lte, sql } from 'drizzle-orm';
 
 import { DB, type Database } from '../../platform/db/db.module.js';
 import type { TxHandle } from '../../platform/db/transaction.js';
@@ -39,8 +39,12 @@ export class CommissionWaiverService {
   }
 
   /**
-   * Called inside the Route-activation write (spec §2): active owners only, once ever, while slots
-   * remain, from now for 3 IST calendar months. Never throws into its caller: the grant runs in a
+   * Called inside both writes that can complete eligibility (S-123): the Route activation, and an
+   * admin approving a space. An owner qualifies once they hold an active owner role, an activated
+   * Route account (they can be paid) AND an approved space (there is something to book), whichever
+   * comes last. Before S-123 activation alone granted a slot, so one person could hold several
+   * through several accounts with nothing listed. Once ever, while slots remain, from now for 3 IST
+   * calendar months. Never throws into its caller: the grant runs in a
    * savepoint, so a failure is logged at error and rolled back alone, and the payout activation it
    * rides on still commits — a promotion must never block a payee from being paid.
    */
@@ -68,6 +72,9 @@ export class CommissionWaiverService {
       );
     if (owner === undefined) return null;
     if (await this.hasGrant(tx, userId)) return null;
+    if (!(await this.canBePaid(tx, userId)) || !(await this.hasApprovedSpace(tx, userId))) {
+      return null;
+    }
 
     // Serialises slot assignment: two activations at once cannot both take the last free slot.
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext('commission_waivers'))`);
@@ -109,6 +116,29 @@ export class CommissionWaiverService {
       },
     });
     return grant;
+  }
+
+  private async canBePaid(tx: TxHandle, userId: string): Promise<boolean> {
+    const [row] = await tx
+      .select({ id: linkedAccounts.id })
+      .from(linkedAccounts)
+      .where(and(eq(linkedAccounts.userId, userId), eq(linkedAccounts.kycStatus, 'activated')));
+    return row !== undefined;
+  }
+
+  private async hasApprovedSpace(tx: TxHandle, userId: string): Promise<boolean> {
+    const [row] = await tx
+      .select({ id: spaces.id })
+      .from(spaces)
+      .where(
+        and(
+          eq(spaces.ownerId, userId),
+          eq(spaces.approvalStatus, 'active'),
+          isNull(spaces.deletedAt),
+        ),
+      )
+      .limit(1);
+    return row !== undefined;
   }
 
   private async hasGrant(tx: TxHandle, userId: string): Promise<boolean> {

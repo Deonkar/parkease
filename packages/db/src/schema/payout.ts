@@ -36,6 +36,8 @@ export const payouts = pgTable(
     txnId: uuid('txn_id').notNull(),
     /** The account this payout was made for; `payout.send` pays exactly this. */
     razorpayxFundAccountId: text('razorpayx_fund_account_id').notNull(),
+    /** The account's last 4 when this payout was made (S-113); null on older rows. */
+    destinationLast4: text('destination_last4'),
     status: text('status').notNull().default('pending'),
     razorpayPayoutId: text('razorpay_payout_id'),
     razorpayContactId: text('razorpay_contact_id'),
@@ -81,6 +83,11 @@ export const bankDetails = pgTable(
     razorpayxContactId: text('razorpayx_contact_id'),
     /** Replaced in the same UPDATE as the bank details it was created from. */
     razorpayxFundAccountId: text('razorpayx_fund_account_id'),
+    /**
+     * After a change of details, no payout is sent before this (S-100, 48h): the window in which
+     * the account holder, told of every change, can report one they did not make.
+     */
+    payoutsHeldUntil: timestamp('payouts_held_until', { withTimezone: true }),
     ...timestamps,
   },
   (t) => [uniqueIndex('bank_details_user_id_key').on(t.userId)],
@@ -133,6 +140,7 @@ export const reconciliationMismatches = pgTable(
     detail: text('detail').notNull(),
     resolvedAt: timestamp('resolved_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     uniqueIndex('reconciliation_mismatches_kind_reference_key')
@@ -146,4 +154,21 @@ export const reconciliationMismatches = pgTable(
       sql`${t.kind} IN ('amount_mismatch','missing_transfer','payout_failed','missing_ledger_entry')`,
     ),
   ],
+);
+
+/**
+ * One Route onboarding submit per user at a time (S-112): taken before the first Razorpay call
+ * and released after, so two submits cannot each create a Linked Account.
+ */
+export const routeOnboardingClaims = pgTable(
+  'route_onboarding_claims',
+  {
+    id: primaryId(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    claimedAt: timestamp('claimed_at', { withTimezone: true }).notNull().defaultNow(),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex('route_onboarding_claims_user_id_key').on(t.userId)],
 );

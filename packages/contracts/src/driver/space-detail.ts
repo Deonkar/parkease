@@ -52,7 +52,6 @@ export const defaultBookingSchema = z.object({
     surgePremiumPaise: paiseSchema,
     gstPaise: paiseSchema,
     totalPaise: paiseSchema,
-    ownerEarningsPaise: paiseSchema,
     surgeMultiplierBp: z.number().int(),
   }),
 });

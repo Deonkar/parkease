@@ -7,7 +7,7 @@ import {
   stopPgContainer,
 } from '@parkease/testing';
 import { drizzle } from 'drizzle-orm/postgres-js';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { JobDeps } from '../../src/deps.js';
 import { acceptTimeout } from '../../src/jobs/valet/accept-timeout.job.js';
@@ -281,6 +281,73 @@ describe('valet.accept-timeout — widening the search', () => {
       /Malformed valet job payload/,
     );
     await expect(acceptTimeout(deps, {})).rejects.toThrow(/Malformed valet job payload/);
+  });
+});
+
+/**
+ * S-18, the race the pinned WHERE exists for: a valet accepting while the timeout is searching
+ * must win. The accept is staged after the handler's guards and before its write, at the seam the
+ * slow step uses (the candidate query for a widening, the transaction for a give-up); staged any
+ * earlier, the guards would catch it and the test would pass with the fix reverted.
+ */
+describe('valet.accept-timeout — an accept landing mid-search wins (S-18)', () => {
+  const accepted = async (jobId: string, valetId: string) => {
+    await pg.sql`
+      UPDATE valet_jobs SET status = 'accepted', assigned_user_id = ${valetId},
+             fee_paise = 9000, distance_m = 3200, txn_id = uuidv7(), accepted_at = now()
+      WHERE id = ${jobId}`;
+  };
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('does not put a job accepted during the search back to offered', async () => {
+    const valetId = await seedValet(6500);
+    const jobId = await seedJob({ status: 'offered', offerRound: 0 });
+    const realExecute = deps.db.execute.bind(deps.db) as (query: unknown) => Promise<unknown>;
+    let moved = false;
+    (
+      vi.spyOn(deps.db, 'execute') as unknown as {
+        mockImplementation: (fn: (query: unknown) => Promise<unknown>) => void;
+      }
+    ).mockImplementation(async (query: unknown) => {
+      if (!moved) {
+        moved = true;
+        await accepted(jobId, valetId);
+      }
+      return realExecute(query);
+    });
+
+    await acceptTimeout(deps, { jobId, round: 0 });
+
+    const job = await statusOf(jobId);
+    expect(job.status).toBe('accepted');
+    expect(job.offer_round).toBe(0);
+    expect(await outboxOf('valet.accept-timeout')).toBe(0);
+    expect(await outboxOf('notification.dispatch')).toBe(0);
+  });
+
+  it('does not bury a job accepted while giving up under no_valet_available', async () => {
+    const valetId = await seedValet(1000);
+    const jobId = await seedJob({ status: 'offered', offerRound: 2 });
+    const realTransaction = deps.db.transaction.bind(deps.db) as (fn: unknown) => Promise<unknown>;
+    (
+      vi.spyOn(deps.db, 'transaction') as unknown as {
+        mockImplementation: (fn: (body: unknown) => Promise<unknown>) => void;
+      }
+    ).mockImplementation(async (body: unknown) => {
+      await accepted(jobId, valetId);
+      return realTransaction(body);
+    });
+
+    await acceptTimeout(deps, { jobId, round: 2 });
+
+    const job = await statusOf(jobId);
+    expect(job.status).toBe('accepted');
+    expect(job.cancellation_reason).toBeNull();
+    // The driver is never told "no valet available" about a job a valet has.
+    expect(await outboxOf('notification.dispatch')).toBe(0);
   });
 });
 

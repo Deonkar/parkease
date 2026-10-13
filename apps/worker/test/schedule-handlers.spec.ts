@@ -69,6 +69,10 @@ describe('worker schedule and handler coverage', () => {
       CARWASH_COMPLETE_REMINDER_JOB,
       // Task 16a: committed by the weekly run with each payout row.
       'payout.send',
+      // S-98: committed by issue-refund with the gateway refund id, when Route paid a share.
+      'payment.reverse-transfer',
+      // S-102: committed by the RazorpayX payout webhook.
+      'payout.apply-status',
     ]);
     const scheduledSet = new Set(scheduleNames);
 
@@ -123,7 +127,8 @@ describe('worker schedule and handler coverage', () => {
     } as never);
 
     // A handler on a queue nobody creates never receives a job; a queue nobody works fills up.
-    expect([...worked].sort()).toEqual([...QUEUES].sort());
+    // Several loops may work one queue (its tier's concurrency); the set of queues is what counts.
+    expect([...new Set(worked)].sort()).toEqual([...QUEUES].sort());
     for (const name of scheduled) expect(QUEUES).toContain(name);
   });
 });

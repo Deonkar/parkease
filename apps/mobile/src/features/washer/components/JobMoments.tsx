@@ -6,6 +6,7 @@ import {
   easing,
   fontSize,
   fontWeight,
+  iconSize,
   lineHeight,
   radius,
   spacing,
@@ -38,7 +39,7 @@ export function JobWonNotice() {
       <View style={styles.won} testID="job-won-notice">
         <MaterialCommunityIcons
           name="check-decagram-outline"
-          size={20}
+          size={iconSize.base}
           color={colors.primaryDark}
         />
         <Text style={styles.wonText}>{WON}</Text>
@@ -72,7 +73,7 @@ export function JobEndFooter({ end, earningsPaise, onEarnings, onOffers }: JobEn
           <View style={styles.endHead}>
             <MaterialCommunityIcons
               name="check-circle-outline"
-              size={20}
+              size={iconSize.base}
               color={colors.primaryDark}
             />
             <Text style={styles.endTitle}>Job complete. Nice work.</Text>

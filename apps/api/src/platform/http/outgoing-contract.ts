@@ -18,13 +18,15 @@ import { logger } from '../observability/logger.js';
  * `what` names the response for the log line — "washer earnings view", not a
  * schema variable name nobody searches for.
  */
-export function parseOutgoing<T>(
-  schema: z.ZodType<T, z.ZodTypeDef, unknown>,
+export function parseOutgoing<S extends z.ZodTypeAny>(
+  schema: S,
   value: unknown,
   what: string,
-): T {
+): z.output<S> {
   const parsed = schema.safeParse(value);
-  if (parsed.success) return parsed.data;
+  // SafeParseReturnType of a ZodTypeAny types data as any; the schema S is what makes it output<S>.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+  if (parsed.success) return parsed.data as z.output<S>;
 
   const traceId = trace.getActiveSpan()?.spanContext().traceId ?? 'untraced';
   logger.error(

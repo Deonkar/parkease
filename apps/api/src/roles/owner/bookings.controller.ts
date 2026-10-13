@@ -14,6 +14,7 @@ import {
   type OwnerCheckInResult,
   ownerBookingsQuerySchema,
   ownerBookingSchema,
+  ownerCheckInResultSchema,
   ownerCheckInSchema,
 } from '@parkease/contracts/owner';
 import { cursorPageOf } from '@parkease/contracts/primitives';
@@ -25,6 +26,7 @@ import { type AuthUser, CurrentUser } from '../../platform/auth/current-user.dec
 import { parseOutgoing } from '../../platform/http/outgoing-contract.js';
 import { Roles } from '../../platform/rbac/roles.decorator.js';
 
+import { shortName } from './views/earnings.view.js';
 import { toOwnerBookingView, toOwnerCheckInView } from './views/owner-booking.view.js';
 
 const ownerBookingsPageSchema = cursorPageOf(ownerBookingSchema);
@@ -65,7 +67,12 @@ export class OwnerBookingsController {
     // breakdown is none of the owner's business beyond their own earnings.
     const driver = await this.bookings.findDriver(booking.driverId);
 
-    return toOwnerCheckInView(booking, driver?.name ?? 'Driver');
+    // "Ravi K.", never the full name (S-85): the owner learns who arrived and nothing more.
+    return parseOutgoing(
+      ownerCheckInResultSchema,
+      toOwnerCheckInView(booking, shortName(driver?.name ?? null)),
+      'owner check-in',
+    );
   }
 
   @Get('bookings')

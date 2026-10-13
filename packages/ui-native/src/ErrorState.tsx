@@ -1,4 +1,4 @@
-import { colors, fontSize, fontWeight, lineHeight, spacing } from '@parkease/tokens';
+import { colors, fontSize, fontWeight, layout, lineHeight, spacing } from '@parkease/tokens';
 import { ScrollView, StyleSheet, Text } from 'react-native';
 
 import { Button } from './Button.js';
@@ -54,12 +54,13 @@ const styles = StyleSheet.create({
     fontSize: fontSize['3xl'],
     fontWeight: fontWeight.bold,
     color: colors.error,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: layout.state.badge,
+    height: layout.state.badge,
+    borderRadius: layout.state.badge / 2,
     backgroundColor: colors.errorLight,
     textAlign: 'center',
-    lineHeight: 56,
+    // One line exactly the badge's height centres the "!" vertically.
+    lineHeight: layout.state.badge,
     marginBottom: spacing.base,
     overflow: 'hidden',
   },

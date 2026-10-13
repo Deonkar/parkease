@@ -43,7 +43,7 @@ describe('commission-free owners — pricing and bookings (task 16c)', () => {
   const created = z.object({ data: z.object({ id: z.string().uuid() }) });
   const quoted = z.object({
     data: z.object({
-      quote: z.object({ basePaise: z.number(), ownerEarningsPaise: z.number() }),
+      quote: z.object({ basePaise: z.number() }).passthrough(),
     }),
   });
   const key = () => crypto.randomUUID();
@@ -158,7 +158,7 @@ describe('commission-free owners — pricing and bookings (task 16c)', () => {
     expect(await waivers.activeFor(h.ownerId, endsAt)).toBeNull();
   });
 
-  it('tells the driver the true owner earnings on the quote: the full base', async () => {
+  it("never tells the driver the owner's share, which would reveal the waiver (S-124)", async () => {
     await inWindow();
     const body = createBody();
     const res = await http.request({
@@ -168,6 +168,7 @@ describe('commission-free owners — pricing and bookings (task 16c)', () => {
 
     expect(res.status).toBe(200);
     const { quote } = quoted.parse(res.body).data;
-    expect(quote.ownerEarningsPaise).toBe(quote.basePaise);
+    expect(quote).not.toHaveProperty('ownerEarningsPaise');
+    expect(JSON.stringify(res.body)).not.toMatch(/ownerEarnings/);
   });
 });

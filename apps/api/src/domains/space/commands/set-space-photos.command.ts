@@ -7,6 +7,7 @@ import { eq } from 'drizzle-orm';
 import { DB, type Database } from '../../../platform/db/db.module.js';
 import { withTransaction } from '../../../platform/db/transaction.js';
 import { OutboxService } from '../../../platform/outbox/outbox.service.js';
+import { UploadRegistry } from '../../../platform/storage/upload-registry.js';
 import { SpaceService } from '../space.service.js';
 
 export interface SetSpacePhotosInput {
@@ -21,6 +22,7 @@ export class SetSpacePhotosCommand {
     private readonly spaceService: SpaceService,
     private readonly outbox: OutboxService,
     @Inject(DB) private readonly db: Database,
+    private readonly uploads: UploadRegistry,
   ) {}
 
   async execute(input: SetSpacePhotosInput) {
@@ -33,6 +35,14 @@ export class SetSpacePhotosCommand {
 
     const existing = await this.spaceService.listPhotos(input.spaceId);
     const existingByPublicId = new Map(existing.map((p) => [p.cloudinaryPublicId, p]));
+    // A new photo must be this owner's own upload into `spaces` (S-50). The space's current photos
+    // are re-sent on every save and some predate the registry, so only additions are checked.
+    await this.uploads.assertOwned(
+      input.ownerId,
+      'spaces',
+      input.body.photos.map((photo) => photo.publicId),
+      { alreadyAttached: existingByPublicId.keys() },
+    );
 
     const hasPrimary = input.body.photos.some((p) => p.isPrimary);
     const rows = input.body.photos.map((photo, idx) => {

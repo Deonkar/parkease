@@ -121,6 +121,13 @@ export const refunds = pgTable(
       .references(() => payments.id),
     razorpayRefundId: text('razorpay_refund_id'),
     amountPaise: paise('amount_paise').notNull(),
+    /**
+     * The partner's share of this refund, to take back from their Route transfer before the
+     * driver is refunded (S-98). NULL when the payment carried no transfer.
+     */
+    routeReversalPaise: paise('route_reversal_paise'),
+    /** Razorpay's `rvrsl_…` once the reversal is made: a retry never reverses twice. */
+    routeReversalId: text('route_reversal_id'),
     reason: text('reason'),
     status: text('status').notNull().default('pending'),
     processedAt: timestamp('processed_at', { withTimezone: true }),
@@ -159,6 +166,12 @@ export const idempotencyKeys = pgTable(
     responseStatus: integer('response_status'),
     responseBody: jsonb('response_body'),
     lockedAt: timestamp('locked_at', { withTimezone: true }),
+    /**
+     * Set inside the request's own domain transaction, while its claim still holds the key
+     * (S-64). A claim with this set and no stored response is never taken over: its write
+     * happened, and running the handler again would do it twice.
+     */
+    committedAt: timestamp('committed_at', { withTimezone: true }),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

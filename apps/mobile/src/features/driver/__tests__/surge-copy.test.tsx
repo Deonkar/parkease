@@ -27,7 +27,6 @@ const quote = (overrides: Record<string, unknown> = {}): QuoteBreakdown =>
     surgePremiumPaise: 3000,
     gstPaise: 702,
     totalPaise: 9702,
-    ownerEarningsPaise: 5100,
     surgeMultiplierBp: 15_000,
     surgeBadge: 'high_demand' as const,
     ...overrides,
@@ -101,5 +100,14 @@ describe('PriceBreakdown surge line', () => {
         ),
       ),
     ).not.toContain('Surge');
+  });
+});
+
+describe('PriceBreakdown owner line (S-124)', () => {
+  it('says where the money goes without a figure that would reveal a commission-free owner', () => {
+    const rendered = text(render(<PriceBreakdown quote={quote()} surgeBadge="moderate_demand" />));
+
+    expect(rendered).toContain('Most of this goes to the space owner.');
+    expect(rendered).not.toMatch(/Owner earns/);
   });
 });

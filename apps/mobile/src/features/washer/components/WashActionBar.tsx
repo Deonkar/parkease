@@ -1,5 +1,13 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { colors, fontSize, fontWeight, radius, spacing } from '@parkease/tokens';
+import {
+  colors,
+  fontSize,
+  fontWeight,
+  iconSize,
+  radius,
+  spacing,
+  touchTarget,
+} from '@parkease/tokens';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { PrimaryAction } from '../photo-gate';
@@ -40,7 +48,11 @@ export function WashActionBar({ action, lockReason, pending, onPress }: WashActi
           style={[styles.button, locked && styles.buttonLocked]}
         >
           {locked ? (
-            <MaterialCommunityIcons name="lock-outline" size={18} color={colors.textSecondary} />
+            <MaterialCommunityIcons
+              name="lock-outline"
+              size={iconSize.md}
+              color={colors.textSecondary}
+            />
           ) : null}
           <Text style={[styles.label, locked && styles.labelLocked]}>
             {pending ? 'Updating…' : action.label}
@@ -57,7 +69,8 @@ const styles = StyleSheet.create({
   // The ripple is clipped by its parent on Android, not by its own radius.
   clip: { borderRadius: radius.md, overflow: 'hidden' },
   button: {
-    minHeight: 52,
+    // The screen's one primary action: a touch target plus a step, so it reads as primary.
+    minHeight: touchTarget + spacing.xs,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

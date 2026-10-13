@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import type { CallHandler, ExecutionContext } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
 import { TraceFlags, trace } from '@opentelemetry/api';
 import { firstValueFrom, of, throwError } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -151,7 +152,21 @@ describe('IdempotencyInterceptor — the store and release writes are observed',
 
     const claimedAt = claimedAtOf(service);
     expect(claimedAt).toBeInstanceOf(Date);
-    expect(service.release).toHaveBeenCalledWith(KEY, claimedAt);
+    // An unexpected failure: a committed write must be kept, not re-run (S-64).
+    expect(service.release).toHaveBeenCalledWith(KEY, claimedAt, { rerunnable: false });
+  });
+
+  it('lets a domain refusal be retried on the same key, even after a saved step', async () => {
+    const { service, typed } = serviceWith({});
+
+    await expect(
+      run(new IdempotencyInterceptor(typed), {
+        handle: () => throwError(() => new BadRequestException('check your PAN')),
+      }),
+    ).rejects.toThrow('check your PAN');
+    await settle();
+
+    expect(service.release).toHaveBeenCalledWith(KEY, claimedAtOf(service), { rerunnable: true });
   });
 
   it('logs at warn when the store finds its claim taken over by a newer retry', async () => {

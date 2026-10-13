@@ -1,4 +1,12 @@
-import { colors, fontSize, fontWeight, lineHeight, radius, spacing } from '@parkease/tokens';
+import {
+  colors,
+  fontSize,
+  fontWeight,
+  layout,
+  lineHeight,
+  radius,
+  spacing,
+} from '@parkease/tokens';
 import { type ReactNode } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -79,8 +87,8 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   illustrationPlaceholder: {
-    width: 120,
-    height: 120,
+    width: layout.state.illustration,
+    height: layout.state.illustration,
     borderRadius: radius.full,
     backgroundColor: colors.surfaceTertiary,
     justifyContent: 'center',

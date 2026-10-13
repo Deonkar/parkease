@@ -5,14 +5,6 @@ export function toIST(date: Date): Date {
   return new Date(utc + IST_OFFSET_MS);
 }
 
-export function formatDateIST(date: Date): string {
-  const ist = toIST(date);
-  const day = ist.getDate();
-  const month = ist.toLocaleString('en-IN', { month: 'short' });
-  const year = ist.getFullYear();
-  return `${String(day)} ${month} ${String(year)}`;
-}
-
 const MONTH_ABBR = [
   'Jan',
   'Feb',
@@ -45,6 +37,15 @@ export function formatDayMonthIST(date: Date, options?: { weekday?: boolean }): 
   if (options?.weekday !== true) return base;
   const weekday = WEEKDAY_ABBR[ist.getDay()] ?? '';
   return `${weekday} ${base}`;
+}
+
+/**
+ * "12 Sep 2026" / "Sat 12 Sep 2026". The same fixed month table as
+ * `formatDayMonthIST`, so Node, Hermes and every ICU build print "Sep", never
+ * "Sept" (S-41). The weekday variant is for list rows.
+ */
+export function formatDateIST(date: Date, options?: { weekday?: boolean }): string {
+  return `${formatDayMonthIST(date, options)} ${String(toIST(date).getFullYear())}`;
 }
 
 export function formatTimeIST(date: Date): string {

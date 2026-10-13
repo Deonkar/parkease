@@ -34,6 +34,7 @@ export function PeriodTabs<P extends string>({
         const selected = period === value;
         return (
           <Pressable
+            accessibilityLabel={label(period)}
             key={period}
             accessibilityRole="tab"
             accessibilityState={{ selected }}

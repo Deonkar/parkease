@@ -62,3 +62,28 @@ export class IllegalUserStatusTransitionError extends IdentityDomainError {
     );
   }
 }
+
+/**
+ * A revoke or block that would leave nobody able to administer the platform, or one made by an
+ * admin who lost their own access a moment ago (S-142: two admins removing each other at once).
+ */
+export class LastAdminError extends IdentityDomainError {
+  constructor() {
+    super(
+      'LAST_ADMIN',
+      'That would leave no admin with access. Make someone else an admin first.',
+      HttpStatus.CONFLICT,
+    );
+  }
+}
+
+/** A self-serve role the platform took away (S-149): only an admin may give it back. */
+export class RoleSuspendedError extends IdentityDomainError {
+  constructor() {
+    super(
+      'ROLE_SUSPENDED',
+      'That role was suspended on your account. Contact support to have it reviewed.',
+      HttpStatus.FORBIDDEN,
+    );
+  }
+}

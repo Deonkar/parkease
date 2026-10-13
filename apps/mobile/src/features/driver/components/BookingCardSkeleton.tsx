@@ -15,7 +15,7 @@ export function BookingCardSkeleton() {
     <View style={styles.card}>
       <View style={styles.headRow}>
         <Skeleton width="55%" height={18} />
-        <Skeleton width={84} height={22} borderRadius={radius.sm} />
+        <Skeleton width={84} height={22} borderRadius={radius.chip} />
       </View>
       <Skeleton width="75%" height={14} />
       <Skeleton width="60%" height={14} />

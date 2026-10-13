@@ -7,6 +7,7 @@ import {
   RefundTier,
   resolveRefund,
   reverseEntries,
+  partnerShareOf,
 } from '@parkease/contracts/money';
 
 import type { TxHandle } from '../../platform/db/transaction.js';
@@ -31,6 +32,8 @@ export interface RefundablePayment {
   readonly id: string;
   readonly status: string;
   readonly razorpayPaymentId: string | null;
+  /** The Route transfer the order carried; a refund takes the partner's share back (S-98). */
+  readonly routeTransferPaise: number | null;
 }
 
 /**
@@ -137,6 +140,8 @@ export class RefundService {
       paymentId: payment.id,
       amountPaise: outcome.refundPaise,
       reason: outcome.tier,
+      routeTransferPaise: payment.routeTransferPaise,
+      partnerSharePaise: partnerShareOf(entries),
     });
 
     if (refund === undefined) {

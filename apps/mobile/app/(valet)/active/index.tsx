@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { RefreshNotice } from '@/features/shared/components/RefreshNotice';
 import { resolveScreenState } from '@/features/shared/screen-state';
 import { OnlineStatusBar } from '@/features/valet/components/OnlineStatusBar';
 import { ProofCapture } from '@/features/valet/components/ProofCapture';
@@ -178,6 +179,15 @@ export default function ValetActiveScreen() {
         }}
         onFix={() => void Linking.openSettings()}
       />
+
+      {/* A failed refresh keeps the last job on screen, and says it is the last one (S-48). */}
+      {job.isError ? (
+        <RefreshNotice
+          testID="active-refresh-notice"
+          retryLabel="Refresh the job"
+          onRetry={() => void job.refetch()}
+        />
+      ) : null}
 
       <ScrollView contentContainerStyle={styles.scroll}>
         <StageFocus

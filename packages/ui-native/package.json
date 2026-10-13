@@ -10,7 +10,8 @@
   "scripts": {
     "build": "tsc --build",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src/"
+    "lint": "eslint src/ test/",
+    "test": "vitest run"
   },
   "dependencies": {
     "@parkease/tokens": "workspace:*"

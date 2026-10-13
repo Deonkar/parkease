@@ -4,7 +4,7 @@ import {
   type WasherEarningsLine,
   type WasherEarningsPeriod,
 } from '@parkease/contracts/washer';
-import { colors, fontSize, fontWeight, layout, radius, spacing } from '@parkease/tokens';
+import { colors, fontSize, fontWeight, iconSize, layout, radius, spacing } from '@parkease/tokens';
 import { ErrorState, Skeleton } from '@parkease/ui-native';
 import { FlashList } from '@shopify/flash-list';
 import { useState, type ReactNode } from 'react';
@@ -38,7 +38,7 @@ function EarningsSkeleton() {
 function PeriodEmpty({ period }: { readonly period: WasherEarningsPeriod }) {
   return (
     <View style={styles.empty} testID="earnings-empty">
-      <MaterialCommunityIcons name="car-wash" size={40} color={colors.textTertiary} />
+      <MaterialCommunityIcons name="car-wash" size={iconSize.hero} color={colors.textTertiary} />
       <Text style={styles.emptyTitle}>{PERIOD_LABELS[period].empty}</Text>
       <Text style={styles.emptyBody}>
         Each wash you finish appears here with what you earned on it.

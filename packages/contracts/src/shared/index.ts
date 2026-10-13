@@ -4,7 +4,15 @@ export {
   updateProfileSchema,
   type UpdateProfile,
 } from './me.js';
-export { switchActiveRoleSchema, type SwitchActiveRole } from './switch-active-role.js';
+export {
+  roleSessionSchema,
+  type RoleSession,
+  SELF_SERVE_ROLE_VALUES,
+  selfServeRoleSchema,
+  type SelfServeRole,
+  switchActiveRoleSchema,
+  type SwitchActiveRole,
+} from './switch-active-role.js';
 export {
   notificationFeedQuerySchema,
   type NotificationFeedQuery,

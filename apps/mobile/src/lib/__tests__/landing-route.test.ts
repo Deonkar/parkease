@@ -47,25 +47,68 @@ function sourceFiles(dir: string): string[] {
   });
 }
 
+/** Route groups that can be reached bare, because they have an index.tsx. */
+const GROUPS_WITH_INDEX = new Set(
+  readdirSync(APP_DIR)
+    .filter((name) => /^\(.+\)$/.test(name) && existsSync(join(APP_DIR, name, 'index.tsx')))
+    .map((name) => name.slice(1, -1)),
+);
+
+/**
+ * Every bare role-group href in a source file that cannot resolve (S-68):
+ *
+ * - a template literal, `` `/(${role})` ``: which group it names is unknown, so always;
+ * - a string literal, `'/(washer)'` or `"/(washer)/"`, for a group with no index.tsx;
+ * - a concatenation, `'/(' + role + ')'`: unknown again, so always.
+ */
+function bareGroupHrefs(source: string): string[] {
+  const found: string[] = [];
+  for (const match of source.matchAll(/`\/\(\$\{[^`]*`/g)) found.push(match[0]);
+  for (const match of source.matchAll(/(['"])\/\(([a-z-]+)\)\/?\1/g)) {
+    if (!GROUPS_WITH_INDEX.has(match[2] ?? '')) found.push(match[0]);
+  }
+  for (const match of source.matchAll(/(['"])\/\(\1\s*\+/g)) found.push(match[0]);
+  return found;
+}
+
+describe('the bare-group guard', () => {
+  it('knows which groups have an index', () => {
+    expect([...GROUPS_WITH_INDEX].sort()).toEqual(['driver', 'owner']);
+  });
+
+  it.each([
+    ['a template literal', 'router.replace(`/(${role})`);'],
+    ['a single-quoted literal', "router.replace('/(washer)');"],
+    ['a double-quoted literal with a slash', 'router.replace("/(valet)/");'],
+    ['a concatenation', "router.replace('/(' + role + ')');"],
+  ])('catches %s', (_form, source) => {
+    expect(bareGroupHrefs(source)).toHaveLength(1);
+  });
+
+  it('lets a group with an index, and a full route, through', () => {
+    expect(bareGroupHrefs("router.replace('/(driver)');")).toEqual([]);
+    expect(bareGroupHrefs("router.replace('/(washer)/offers');")).toEqual([]);
+    expect(bareGroupHrefs('href="/(owner)/earnings/payouts"')).toEqual([]);
+  });
+});
+
 describe('role-group redirects', () => {
   // A bare `/(${role})` href only resolves for a group with an index.tsx; every
   // landing goes through landingRouteFor so a new role cannot reintroduce it.
-  const BARE_GROUP_HREF = /`\/\(\$\{/;
-
   it('app/index.tsx and AuthContext go through landingRouteFor', () => {
     for (const file of [
       join(APP_DIR, 'index.tsx'),
       join(process.cwd(), 'src', 'contexts', 'AuthContext.tsx'),
     ]) {
       const source = readFileSync(file, 'utf8');
-      expect(source, file).not.toMatch(BARE_GROUP_HREF);
-      expect(source, file).toMatch(/landingRouteFor\(/);
+      expect(bareGroupHrefs(source), file).toEqual([]);
+      expect(source, file).toMatch(/landingRouteFor(Session)?\(/);
     }
   });
 
-  it('no file under app/ or src/ builds a bare /(${...}) href', () => {
+  it('no file under app/ or src/ builds a bare group href that cannot resolve', () => {
     const offenders = [...sourceFiles(APP_DIR), ...sourceFiles(join(process.cwd(), 'src'))].filter(
-      (file) => BARE_GROUP_HREF.test(readFileSync(file, 'utf8')),
+      (file) => bareGroupHrefs(readFileSync(file, 'utf8')).length > 0,
     );
     expect(offenders).toEqual([]);
   });

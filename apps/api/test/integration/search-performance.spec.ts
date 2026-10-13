@@ -1,5 +1,6 @@
 import { NO_SURGE_BP, type SurgeSnapshot } from '@parkease/contracts/admin';
 import { searchSpacesQuerySchema } from '@parkease/contracts/driver';
+import { seedPerfSpaces } from '@parkease/db/seed/perf';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -13,30 +14,14 @@ import {
 import { startHarness, stopHarness, type Harness } from './harness.js';
 
 /**
- * R-TEST-03's mandated performance test.
+ * R-TEST-03's mandated performance test, against the 10,000-space fixture in
+ * `packages/db/src/seed/perf`.
  *
- * The 10,000-space fixture is owned by another task and lives in
- * `packages/db/src/seed/perf`. Until it exists this whole suite skips rather
- * than inventing a second seeder that would drift from the real one — a
- * performance number measured against different data is worse than no number.
+ * Imported statically on purpose. This used to load the seeder dynamically and
+ * `describe.skip` when the import failed, from before the fixture existed. A
+ * mandatory test that turns into a skip when a path moves reports green while
+ * measuring nothing, so a missing fixture is now an import error.
  */
-interface PerfSeeder {
-  seedPerfSpaces: (db: unknown, opts: { count: number }) => Promise<unknown>;
-}
-
-async function loadPerfSeeder(): Promise<PerfSeeder | undefined> {
-  try {
-    return (await import('@parkease/db/seed/perf')) as unknown as PerfSeeder;
-  } catch {
-    // Not built yet — a typed absence, not a swallowed error. The suite skips
-    // and says so.
-    return undefined;
-  }
-}
-
-const seeder = await loadPerfSeeder();
-const describeWithFixture = seeder === undefined ? describe.skip : describe;
-
 const SPACE_COUNT = 10_000;
 const REQUESTS = 200;
 
@@ -54,19 +39,18 @@ function percentile(sorted: readonly number[], p: number): number {
 let h: Harness;
 
 beforeAll(async () => {
-  if (seeder === undefined) return;
   h = await startHarness();
-  await seeder.seedPerfSpaces(h.db, { count: SPACE_COUNT });
+  await seedPerfSpaces(h.db, { count: SPACE_COUNT });
   await h.sql`ANALYZE spaces`;
   await h.sql`ANALYZE space_slots`;
   await h.sql`ANALYZE booking_slots`;
 }, 600_000);
 
 afterAll(async () => {
-  if (h !== undefined) await stopHarness(h);
+  await stopHarness(h);
 });
 
-describeWithFixture('search performance against 10,000 spaces', () => {
+describe('search performance against 10,000 spaces', () => {
   it('holds p95 under 200ms and p99 under 400ms across 200 requests', async () => {
     const durations: number[] = [];
 

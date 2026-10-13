@@ -23,8 +23,9 @@ const STATUS: Record<PayoutStatus, { label: string; fg: string; bg: string }> = 
 const UNDONE = new Set<PayoutStatus>(['failed', 'reversed', 'cancelled']);
 
 /**
- * No account number on the row: a payout keeps the fund account it was made for, not its last 4,
- * and stamping today's bank on last month's payout names the wrong account after a change.
+ * The account is the one the payout was made to, stamped on the payout when it was created
+ * (S-113), never today's bank: after a change, last month's payout still names last month's
+ * account. Older payouts carry none and say "To your bank".
  */
 export function PayoutRow({ payout }: { readonly payout: PayoutView }) {
   const status = STATUS[payout.status];
@@ -40,7 +41,11 @@ export function PayoutRow({ payout }: { readonly payout: PayoutView }) {
       <View style={styles.left}>
         <Text style={styles.when}>{when}</Text>
         <Text style={[styles.detail, undone && styles.detailUndone]}>
-          {undone ? "Didn't go through — added back to your balance" : 'To your bank'}
+          {undone
+            ? "Didn't go through — added back to your balance"
+            : payout.destinationLast4 === null
+              ? 'To your bank'
+              : `To bank ····${payout.destinationLast4}`}
         </Text>
         {payout.tcsPaise > 0 || payout.tdsPaise > 0 ? (
           // Each withholding as the server sent it: the client never adds money up (R-FE-06).
@@ -89,7 +94,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     fontSize: fontSize.xs,
     fontWeight: fontWeight.semibold,
-    borderRadius: radius.sm,
+    borderRadius: radius.chip,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs / 2,
   },

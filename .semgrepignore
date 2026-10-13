@@ -1,0 +1,14 @@
+# Tests, fixtures and generated output: findings there are not shipped code.
+node_modules/
+**/dist/
+**/.next/
+.claude/
+**/test/
+**/__tests__/
+**/e2e/
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.e2e.ts
+**/dev-fixtures.ts
+apps/admin/src/lib/fixtures.ts

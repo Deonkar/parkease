@@ -1,4 +1,4 @@
-import { BadRequestException, Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import type { BookingFilter, ListBookingsQuery } from '@parkease/contracts/driver';
 import type {
   BookingStatus,
@@ -8,12 +8,17 @@ import type {
 } from '@parkease/contracts/enums';
 import type { Quote } from '@parkease/contracts/money';
 import type { OwnerBookingGroup } from '@parkease/contracts/owner';
-import { bookings, bookingSlots, spaces, users } from '@parkease/db/schema';
+import { bookings, bookingSlots, spaces, users, valetJobs, washJobs } from '@parkease/db/schema';
 import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
 import { DB, type Database } from '../../platform/db/db.module.js';
 import type { TxHandle } from '../../platform/db/transaction.js';
+import {
+  decodeJsonCursor,
+  encodeJsonCursor,
+  InvalidCursorError,
+} from '../../platform/http/json-cursor.js';
 
 export interface InsertBookingInput {
   readonly driverId: string;
@@ -52,29 +57,45 @@ interface BookingCursor {
 type CursorFilter = BookingFilter | `owner-${OwnerBookingGroup}`;
 
 const encodeCursor = (filter: CursorFilter, row: { startsAt: Date; id: string }): string =>
-  Buffer.from(
-    JSON.stringify({ f: filter, t: row.startsAt.toISOString(), i: row.id }),
-    'utf8',
-  ).toString('base64url');
+  encodeJsonCursor({ f: filter, t: row.startsAt.toISOString(), i: row.id });
 
 function decodeCursor(raw: string, filter: CursorFilter): BookingCursor | undefined {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'));
-  } catch {
-    // Malformed base64url or JSON. A typed failure, not a swallowed error.
-    return undefined;
-  }
-
-  const payload = cursorPayloadSchema.safeParse(parsed);
-  if (!payload.success || payload.data.f !== filter) return undefined;
-
-  return { startsAt: new Date(payload.data.t), id: payload.data.i };
+  const payload = decodeJsonCursor(raw, cursorPayloadSchema);
+  if (payload === undefined || payload.f !== filter) return undefined;
+  return { startsAt: new Date(payload.t), id: payload.i };
 }
 
 @Injectable()
 export class BookingService {
   constructor(@Inject(DB) private readonly db: Database) {}
+
+  /**
+   * The valet and wash jobs on one booking (S-148). The caller has already checked the booking is
+   * the driver's own. Ids are UUIDv7, so id order is request order.
+   */
+  async addonsOf(bookingId: string): Promise<{
+    valetJobId: string | null;
+    washJobs: { id: string; paid: boolean }[];
+  }> {
+    const [valet] = await this.db
+      .select({ id: valetJobs.id })
+      .from(valetJobs)
+      .where(eq(valetJobs.bookingId, bookingId))
+      .orderBy(desc(valetJobs.id))
+      .limit(1);
+    const washes = await this.db
+      .select({
+        id: washJobs.id,
+        // Spelled out: inside a select list Drizzle renders a column unqualified, and a bare `id`
+        // in this subquery would resolve to the payment's own.
+        paid: sql<boolean>`exists (select 1 from payments p
+          where p.wash_job_id = wash_jobs.id and p.status = 'captured')`,
+      })
+      .from(washJobs)
+      .where(eq(washJobs.bookingId, bookingId))
+      .orderBy(asc(washJobs.id));
+    return { valetJobId: valet?.id ?? null, washJobs: washes };
+  }
 
   /**
    * The quote is written whole: base, surge premium, fee, GST, total and the
@@ -189,10 +210,7 @@ export class BookingService {
     if (query.cursor !== undefined) {
       const cursor = decodeCursor(query.cursor, query.filter);
       if (cursor === undefined) {
-        throw new BadRequestException({
-          error: 'INVALID_CURSOR',
-          message: 'That page link is no longer valid. Pull to refresh.',
-        });
+        throw new InvalidCursorError();
       }
       // Compare on the whole tuple, so rows sharing a start time still page
       // deterministically instead of repeating or vanishing at the boundary.
@@ -349,7 +367,9 @@ export class BookingService {
     if (query.spaceId !== undefined) conditions.push(eq(bookings.spaceId, query.spaceId));
     if (query.group === 'active') conditions.push(eq(bookings.status, 'active'));
     if (query.group === 'upcoming') {
-      conditions.push(eq(bookings.status, 'confirmed'), sql`${bookings.startsAt} > now()`);
+      // Not yet over, rather than not yet started (S-93): a confirmed driver who is late (the
+      // window has begun, no check-in yet) is exactly who the owner is waiting for at the gate.
+      conditions.push(eq(bookings.status, 'confirmed'), sql`${bookings.endsAt} > now()`);
     }
     if (query.group === 'past') {
       conditions.push(inArray(bookings.status, ['completed', 'cancelled', 'no_show']));
@@ -358,10 +378,7 @@ export class BookingService {
     if (query.cursor !== undefined) {
       const cursor = decodeCursor(query.cursor, `owner-${query.group}`);
       if (cursor === undefined) {
-        throw new BadRequestException({
-          error: 'INVALID_CURSOR',
-          message: 'That page link is no longer valid. Pull to refresh.',
-        });
+        throw new InvalidCursorError();
       }
       // Same explicit cast as `listForDriver` — see the comment there.
       conditions.push(

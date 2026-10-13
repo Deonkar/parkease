@@ -8,6 +8,7 @@ import {
   seedBooking,
   seedSpace,
   seedUser,
+  registerUploads,
   startHarness,
   stopHarness,
 } from './harness.js';
@@ -87,8 +88,11 @@ const accept = (jobId: string, valetId: string) => {
   });
 };
 
-const advance = (jobId: string, valetId: string, event: string, proofPhotoId?: string) => {
+const advance = async (jobId: string, valetId: string, event: string, proofPhotoId?: string) => {
   asUser(valetId, ['valet']);
+  if (proofPhotoId?.startsWith('parkease/proofs/') === true) {
+    await registerUploads(h, valetId, proofPhotoId);
+  }
   return http.request({
     method: 'POST',
     url: `/api/v1/valet/jobs/${jobId}/status`,
@@ -105,7 +109,7 @@ beforeAll(async () => {
     lng: 77.6245,
     pricing: HOURLY_ONLY,
     schedule: OPEN_ALWAYS,
-    slots: { car: 4 },
+    carSlots: 4,
   });
 }, 180_000);
 
@@ -1097,6 +1101,7 @@ describe('the valet-side reads, positively', () => {
     await accept(jobId, valetId);
 
     asUser(valetId, ['valet']);
+    await registerUploads(h, valetId, 'parkease/proofs/photo_xyz');
     const res = await http.request({
       method: 'POST',
       url: `/api/v1/valet/jobs/${jobId}/proof`,
@@ -1144,6 +1149,31 @@ describe('the valet-side reads, positively', () => {
     expect(refused.status).toBe(400);
   });
 
+  it("refuses a proof that is another valet's upload, on the valet's own job (S-50)", async () => {
+    const valetId = await seedValet();
+    const other = await seedValet();
+    const bookingId = await seedBooking(h, {
+      spaceId,
+      vehicleType: 'car',
+      slotIndex: 1,
+      slotStatus: 'confirmed',
+    });
+    const jobId = await requestValet(bookingId);
+    await accept(jobId, valetId);
+    await registerUploads(h, other, 'parkease/proofs/0190not-yours');
+
+    asUser(valetId, ['valet']);
+    const res = await http.request({
+      method: 'POST',
+      url: `/api/v1/valet/jobs/${jobId}/proof`,
+      headers: key(),
+      payload: { proofPhotoId: 'parkease/proofs/0190not-yours' },
+    });
+
+    expect(res.status).toBe(422);
+    expect((res.body as { error: { code: string } }).error.code).toBe('UPLOAD_NOT_RECOGNISED');
+  });
+
   it('answers 404 when attaching proof to a job assigned to somebody else', async () => {
     const valetId = await seedValet();
     const stranger = await seedValet();
@@ -1165,5 +1195,7 @@ describe('the valet-side reads, positively', () => {
     });
 
     expect(res.status).toBe(404);
+    // A bare NotFoundException answers a code a client can match on (S-35).
+    expect((res.body as { error: { code: string } }).error.code).toBe('NOT_FOUND');
   });
 });

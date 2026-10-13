@@ -1,6 +1,14 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { CARWASH_SERVICE_NAME_VALUES, type CarwashServiceName } from '@parkease/contracts/enums';
-import { colors, fontSize, fontWeight, radius, spacing, touchTarget } from '@parkease/tokens';
+import {
+  colors,
+  fontSize,
+  fontWeight,
+  iconSize,
+  radius,
+  spacing,
+  touchTarget,
+} from '@parkease/tokens';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { FieldError } from '@/features/shared/components/FieldError';
@@ -53,7 +61,7 @@ export function ServiceChecklist({ label, selected, onToggle, error }: ServiceCh
             >
               <MaterialCommunityIcons
                 name={checked ? 'checkbox-marked' : 'checkbox-blank-outline'}
-                size={24}
+                size={iconSize.lg}
                 color={checked ? colors.primary : colors.textTertiary}
               />
               <Text style={[styles.checkLabel, checked && styles.checkLabelOn]}>

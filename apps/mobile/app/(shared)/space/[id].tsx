@@ -370,7 +370,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
-    borderRadius: radius.sm,
+    borderRadius: radius.chip,
     backgroundColor: colors.primarySoft,
   },
   amenityText: {

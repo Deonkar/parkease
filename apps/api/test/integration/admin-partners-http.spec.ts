@@ -484,8 +484,9 @@ describe('admin partners HTTP', () => {
       const { id } = await seedValet();
       await h.sql`INSERT INTO user_roles (user_id, role, status) VALUES (${id}, 'washer', 'pending')`;
       await h.sql`
-        INSERT INTO washer_profiles (user_id, partner_type, business_name, verification_status)
-        VALUES (${id}, 'business', 'Both Hats', 'pending')`;
+        INSERT INTO washer_profiles (user_id, partner_type, business_name, verification_status,
+                                     business_photo_ids)
+        VALUES (${id}, 'business', 'Both Hats', 'pending', ARRAY['parkease/spaces/0190both-front'])`;
 
       expect((await verify(id, 'valet')).status).toBe(200);
 

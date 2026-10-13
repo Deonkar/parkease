@@ -185,6 +185,14 @@ function PartnerReview({ partner, onClose }: { partner: AdminPartner; onClose: (
                 )
               }
             >
+              {d.documentsIncomplete && d.documents.length > 0 ? (
+                <Alert
+                  type="warning"
+                  showIcon
+                  style={{ marginBottom: 12 }}
+                  message="A required document is missing or could not be loaded. Don't verify until you've seen it."
+                />
+              ) : null}
               {d.documents.length === 0 ? (
                 <Alert type="warning" showIcon message="No documents on file." />
               ) : (

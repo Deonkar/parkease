@@ -49,6 +49,17 @@ export class RouteOnboardingLockedError extends PayoutDomainError {
   }
 }
 
+/** Another submit for this user is already talking to Razorpay (S-112). */
+export class RouteOnboardingInProgressError extends PayoutDomainError {
+  constructor() {
+    super(
+      'ROUTE_ONBOARDING_IN_PROGRESS',
+      'Your details are already being sent. Give it a moment, then check again.',
+      HttpStatus.CONFLICT,
+    );
+  }
+}
+
 export class RouteDetailsRejectedError extends PayoutDomainError {
   constructor() {
     super(

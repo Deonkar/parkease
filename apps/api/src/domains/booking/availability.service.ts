@@ -3,7 +3,13 @@ import type { SlotStatus, VehicleType } from '@parkease/contracts/enums';
 import { bookingSlots } from '@parkease/db/schema';
 import { eq, sql } from 'drizzle-orm';
 
-import { PG_EXCLUSION_VIOLATION, isPgError, pgConstraintName } from '../../platform/db/errors.js';
+import {
+  PG_DEADLOCK_DETECTED,
+  PG_EXCLUSION_VIOLATION,
+  PG_SERIALIZATION_FAILURE,
+  isPgError,
+  pgConstraintName,
+} from '../../platform/db/errors.js';
 import type { TxHandle } from '../../platform/db/transaction.js';
 import { logger } from '../../platform/observability/logger.js';
 
@@ -25,18 +31,26 @@ export class AvailabilityService {
   /**
    * Allocates the lowest free `slot_index` for the window and records occupancy.
    *
-   * The SELECT chooses *which* index to try. It does not make the write safe —
-   * `booking_slots_no_overlap` does. Two racers can both pick index 0; the loser
-   * gets 23P01 and a 409. There is no advisory lock, no SELECT FOR UPDATE and no
-   * retry loop, by decision (ADR-007).
+   * Allocations for one space and vehicle type take turns: a transaction-scoped advisory lock is
+   * held from here to COMMIT, so each caller's SELECT sees every earlier winner and picks the next
+   * free index. Without it (ADR-007 as first written) racers all picked index 0, waited on each
+   * other's uncommitted rows inside the exclusion check and deadlocked in pairs; each deadlock
+   * costs `deadlock_timeout` (1 s) to break, so 100 drivers on one space saw p95 latency of 56 s
+   * on CI and a 409 while other slots were free (task 21 stress test). Bookings on different
+   * spaces never share a lock. Each holder only finishes its own short transaction, so the wait
+   * is bounded by how many people book that same space at that moment.
    *
-   * The honest cost: with three slots, a driver who loses the race on index 0
-   * gets a 409 even though index 1 was free. That is accepted — a lost race is
-   * rare, the failure is instant and clearly worded, and "try again" is a new
-   * intent with a fresh Idempotency-Key that allocates the next free index.
+   * `booking_slots_no_overlap` still makes the write safe. The lock decides who goes first; the
+   * constraint is what refuses a double sale from any path, including writers that never call
+   * this.
    */
   async allocate(tx: TxHandle, input: AllocateSlotInput): Promise<number> {
     const period = sql`tstzrange(${input.startsAt.toISOString()}::timestamptz, ${input.endsAt.toISOString()}::timestamptz, '[)')`;
+
+    // A hash collision between two spaces only makes them take turns; it never lets two in.
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtextextended(${`booking_slots:${input.spaceId}:${input.vehicleType}`}, 0))`,
+    );
 
     const candidates = await tx.execute<{ slot_index: number }>(sql`
       SELECT ss.slot_index
@@ -72,10 +86,18 @@ export class AvailabilityService {
       // The constraint fired: someone took this exact slot-instance for an
       // overlapping window between our SELECT and our INSERT. The log line
       // carries the SQLSTATE and the constraint; the driver sees neither.
-      if (isPgError(error, PG_EXCLUSION_VIOLATION)) {
+      // A deadlock between two racers' exclusion checks (40P01) is the same lost race reached by
+      // another road (S-105, S-146): the database chose one transaction to abort, and that one
+      // lost. A serialization failure (40001) likewise. All three are one clean 409.
+      const lostRace = [
+        PG_EXCLUSION_VIOLATION,
+        PG_DEADLOCK_DETECTED,
+        PG_SERIALIZATION_FAILURE,
+      ].find((code) => isPgError(error, code));
+      if (lostRace !== undefined) {
         logger.info(
           {
-            pgCode: PG_EXCLUSION_VIOLATION,
+            pgCode: lostRace,
             constraint: pgConstraintName(error),
             spaceId: input.spaceId,
             slotIndex: candidate.slot_index,

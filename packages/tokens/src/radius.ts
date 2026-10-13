@@ -1,6 +1,11 @@
 export const radius = {
   none: 0,
   sm: 6,
+  /**
+   * Status chips, filter chips and small badges. The Wayfinder direction fixes
+   * chips at 8px (S-118): softer than an input's `sm`, tighter than a card's `md`.
+   */
+  chip: 8,
   md: 10,
   lg: 14,
   xl: 20,

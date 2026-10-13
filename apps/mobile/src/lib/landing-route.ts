@@ -25,3 +25,21 @@ const NO_ACTIVE_ROLE = '/(auth)/choose-role' satisfies Href;
 export function landingRouteFor(role: Role | null): Href {
   return role === null ? NO_ACTIVE_ROLE : LANDING[role];
 }
+
+/** Where an account that holds only `admin` lands: a screen that sends it to the web (S-54). */
+export const ADMIN_ONLY_ROUTE = '/(auth)/admin-only' satisfies Href;
+
+/**
+ * An account whose every role is `admin` has nothing to do in this app: every
+ * choice on choose-role is a role it does not hold, and `POST /me/roles/active`
+ * answers 403 to each (S-54). An account with no roles yet is a new user, not
+ * an admin, so it still chooses.
+ */
+export function isAdminOnly(roles: readonly Role[]): boolean {
+  return roles.length > 0 && roles.every((role) => role === 'admin');
+}
+
+/** The landing for a whole session: the admin-only screen first, then the active role's. */
+export function landingRouteForSession(roles: readonly Role[], activeRole: Role | null): Href {
+  return isAdminOnly(roles) ? ADMIN_ONLY_ROUTE : landingRouteFor(activeRole);
+}

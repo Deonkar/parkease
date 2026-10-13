@@ -42,6 +42,7 @@ export const RATE_LIMIT_POLICIES: Readonly<Record<string, RateLimitPolicy>> = {
   'POST /api/v1/driver/bookings': { limit: 10, windowSeconds: 60, keyBy: 'user' },
   'GET /api/v1/driver/bookings': { limit: 60, windowSeconds: 60, keyBy: 'user' },
   'GET /api/v1/driver/bookings/:id': { limit: 60, windowSeconds: 60, keyBy: 'user' },
+  'GET /api/v1/driver/bookings/:id/addons': { limit: 60, windowSeconds: 60, keyBy: 'user' },
   'POST /api/v1/driver/bookings/:id/cancel': { limit: 10, windowSeconds: 60, keyBy: 'user' },
   'POST /api/v1/driver/bookings/:id/extend': { limit: 10, windowSeconds: 60, keyBy: 'user' },
   'POST /api/v1/driver/bookings/:id/check-in': { limit: 10, windowSeconds: 60, keyBy: 'user' },
@@ -75,10 +76,13 @@ export const RATE_LIMIT_POLICIES: Readonly<Record<string, RateLimitPolicy>> = {
   'DELETE /api/v1/me/push-tokens': { limit: 10, windowSeconds: 60, keyBy: 'user' },
   'POST /api/v1/driver/payments/orders': { limit: 10, windowSeconds: 60, keyBy: 'user' },
   'POST /api/v1/driver/payments/verify': { limit: 10, windowSeconds: 60, keyBy: 'user' },
+  // An uptime probe's route (S-156): one monitor, every minute or so, from a fixed IP.
+  'GET /api/v1/health/pipeline': { limit: 60, windowSeconds: 60, keyBy: 'ip' },
   // Razorpay's own range, per security.md §4.3. Keyed by IP because there is no
   // user to key by, and `failClosed` is deliberately absent: dropping a capture
   // event because Redis blinked is worse than serving it.
   'POST /api/v1/webhooks/razorpay': { limit: 300, windowSeconds: 60, keyBy: 'ip' },
+  'POST /api/v1/webhooks/razorpayx': { limit: 300, windowSeconds: 60, keyBy: 'ip' },
   // Valet (task 11 §11.10).
   //
   // The accept budget is the loose one on purpose: losing a race is a 409, and a
@@ -151,6 +155,8 @@ export const RATE_LIMIT_POLICIES: Readonly<Record<string, RateLimitPolicy>> = {
   'GET /api/v1/owner/spaces': { limit: 60, windowSeconds: 60, keyBy: 'user' },
   'POST /api/v1/uploads': { limit: 20, windowSeconds: 60, keyBy: 'user' },
   'POST /api/v1/me/roles/active': { limit: 10, windowSeconds: 60, keyBy: 'user' },
+  // S-149: taking on a role is rare; a burst is a script, not a person.
+  'POST /api/v1/me/roles': { limit: 5, windowSeconds: 60, keyBy: 'user' },
 
   // Surge admin (task 10 §10.4). Tighter than `ADMIN:*` in both directions, and
   // for different reasons.

@@ -17,6 +17,7 @@ import {
   seedBooking,
   seedSpace,
   seedUser,
+  registerUploads,
   startHarness,
   stopHarness,
 } from './harness.js';
@@ -153,13 +154,23 @@ const advance = (jobId: string, washerId: string, event: string) => {
   });
 };
 
-const attachPhoto = (
+/** Registers every upload id in a payload for `userId` (S-50), then hands the payload back. */
+const withUploads = async <T extends Record<string, unknown>>(userId: string, payload: T) => {
+  const ids = Object.values(payload)
+    .flatMap((value) => (Array.isArray(value) ? value : [value]))
+    .filter((value): value is string => typeof value === 'string' && value.startsWith('parkease/'));
+  await registerUploads(h, userId, ...ids);
+  return payload;
+};
+
+const attachPhoto = async (
   jobId: string,
   washerId: string,
   slot: 'before' | 'after',
   photoId = `parkease/proofs/${slot}-abc123`,
 ) => {
   asUser(washerId, ['washer']);
+  await registerUploads(h, washerId, photoId);
   return http.request({
     method: 'POST',
     url: `/api/v1/washer/jobs/${jobId}/${slot}-photo`,
@@ -176,7 +187,7 @@ beforeAll(async () => {
     lng: SPACE.lng,
     pricing: HOURLY_ONLY,
     schedule: OPEN_ALWAYS,
-    slots: { car: 4 },
+    carSlots: 4,
   });
 }, 180_000);
 
@@ -292,6 +303,43 @@ describe('POST /driver/carwash/requests — the precondition', () => {
     const res = await requestWash(bookingId, 'ceramic_coating');
 
     expect(res.status).toBe(400);
+  });
+});
+
+/** S-148: the app finds a booking's jobs from the server, not from what one phone remembered. */
+describe('GET /driver/bookings/:id/addons', () => {
+  const addons = (bookingId: string) =>
+    http.request({ method: 'GET', url: `/api/v1/driver/bookings/${bookingId}/addons` });
+
+  it('lists the washes on the booking in request order, paid once a payment is captured', async () => {
+    await seedWasher();
+    const bookingId = await seedBookingWithStatus('active');
+    const first = dataOf<{ id: string }>((await requestWash(bookingId)).body).id;
+    const second = dataOf<{ id: string }>((await requestWash(bookingId, 'interior_only')).body).id;
+    await h.sql`
+      INSERT INTO payments (booking_id, user_id, razorpay_order_id, expected_total_paise,
+                            captured_paise, status, captured_at, purpose, wash_job_id)
+      VALUES (${bookingId}, ${h.driverId}, ${`order_${first.slice(-12)}`}, 59900, 59900,
+              'captured', now(), 'carwash', ${first})`;
+
+    asUser(h.driverId, ['driver']);
+    const res = await addons(bookingId);
+
+    expect(res.status).toBe(200);
+    expect(dataOf(res.body)).toEqual({
+      valetJobId: null,
+      washJobs: [
+        { id: first, paid: true },
+        { id: second, paid: false },
+      ],
+    });
+  });
+
+  it("answers 404 for somebody else's booking, never its jobs (R-SEC-04)", async () => {
+    const bookingId = await seedBookingWithStatus('active');
+    asUser(await seedUser(h, 'driver'), ['driver']);
+
+    expect((await addons(bookingId)).status).toBe(404);
   });
 });
 
@@ -1261,8 +1309,13 @@ describe('the service menu', () => {
  * complete until their ID image arrives, which is what moves them.
  */
 describe('POST /washer/profile — where verification starts', () => {
-  const register = (payload: Record<string, unknown>) =>
-    http.request({ method: 'POST', url: '/api/v1/washer/profile', headers: key(), payload });
+  const register = async (payload: Record<string, unknown>) =>
+    http.request({
+      method: 'POST',
+      url: '/api/v1/washer/profile',
+      headers: key(),
+      payload: await withUploads(actingAs.user?.id ?? '', payload),
+    });
 
   const statusOf = async () => {
     const res = await http.request({ method: 'GET', url: '/api/v1/washer/profile' });
@@ -1314,7 +1367,7 @@ describe('POST /washer/profile — where verification starts', () => {
       method: 'POST',
       url: '/api/v1/washer/profile/documents',
       headers: key(),
-      payload: { idDocumentId: 'parkease/documents/id-front' },
+      payload: await withUploads(washerId, { idDocumentId: 'parkease/documents/id-front' }),
     });
     expect(sent.status).toBe(201);
     expect(await statusOf()).toBe('pending');

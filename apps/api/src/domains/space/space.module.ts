@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 
+import { PricingModule } from '../pricing/pricing.module.js';
 import { SurgeModule } from '../surge/surge.module.js';
 
 import { AdminSpaceQueries } from './admin-space.queries.js';
@@ -16,7 +17,7 @@ import { SearchService } from './search.service.js';
 import { SpaceService } from './space.service.js';
 
 @Module({
-  imports: [SurgeModule],
+  imports: [SurgeModule, PricingModule],
   providers: [
     SpaceService,
     ApprovalService,

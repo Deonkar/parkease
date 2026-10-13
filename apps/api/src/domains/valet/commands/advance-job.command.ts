@@ -6,6 +6,7 @@ import { valetJobs } from '@parkease/db/schema';
 import { DB, type Database } from '../../../platform/db/db.module.js';
 import { withTransaction } from '../../../platform/db/transaction.js';
 import { OutboxService } from '../../../platform/outbox/outbox.service.js';
+import { UploadRegistry } from '../../../platform/storage/upload-registry.js';
 import { ProofPhotoRequiredError } from '../errors.js';
 import { LocationService } from '../location.service.js';
 import { type ValetJobRow, ValetService } from '../valet.service.js';
@@ -34,6 +35,7 @@ export class AdvanceJobCommand {
     private readonly valet: ValetService,
     private readonly location: LocationService,
     private readonly outbox: OutboxService,
+    private readonly uploads: UploadRegistry,
   ) {}
 
   async execute(input: AdvanceJobInput): Promise<ValetJobRow> {
@@ -49,6 +51,12 @@ export class AdvanceJobCommand {
     const proofPhotoId = input.proofPhotoId ?? job.proofPhotoId;
     if (input.event === 'confirm_parked' && (proofPhotoId ?? '') === '') {
       throw new ProofPhotoRequiredError();
+    }
+    if (input.proofPhotoId !== undefined) {
+      // A proof already on the job was checked when it was attached (S-50).
+      await this.uploads.assertOwned(input.valetUserId, 'proofs', [input.proofPhotoId], {
+        alreadyAttached: job.proofPhotoId === null ? [] : [job.proofPhotoId],
+      });
     }
 
     const now = new Date();

@@ -40,3 +40,26 @@ export class RazorpayWebhookController {
     return { received: true };
   }
 }
+
+/**
+ * RazorpayX's payout events (S-102), on their own path because RazorpayX signs with the secret set
+ * in its own dashboard. Same rules as above: public, HMAC over the raw bytes, deduped on the
+ * delivery id, and a throw is a retry.
+ */
+@Controller('webhooks/razorpayx')
+export class RazorpayxWebhookController {
+  constructor(private readonly webhooks: WebhookService) {}
+
+  @Post()
+  @Public()
+  @HttpCode(200)
+  async handle(@Req() request: RawBodyRequest): Promise<{ readonly received: true }> {
+    await this.webhooks.handlePayout({
+      rawBody: request.rawBody,
+      signature: request.headers['x-razorpay-signature'],
+      eventId: request.headers['x-razorpay-event-id'],
+    });
+
+    return { received: true };
+  }
+}

@@ -1,7 +1,7 @@
 import { MINIMUM_PAYOUT_PAISE, payoutEntries } from '@parkease/contracts/money';
 import { toPaise } from '@parkease/contracts/primitives';
 import { uuidv7 } from '@parkease/db/id';
-import { PAYABLE_BALANCE, partnerPayable } from '@parkease/db/queries';
+import { PAYABLE_BALANCE, partnerPayable, sumPaise } from '@parkease/db/queries';
 import { bankDetails, bookings, ledgerEntries, outboxMessages, payouts } from '@parkease/db/schema';
 import { eq, sql } from 'drizzle-orm';
 
@@ -67,11 +67,14 @@ export async function runWeeklyPayouts(
 async function payOne(deps: JobDeps, userId: string, period: string, now: Date): Promise<void> {
   await deps.db.transaction(async (tx) => {
     const [bank] = await tx
-      .select({ fundAccountId: bankDetails.razorpayxFundAccountId })
+      .select({
+        fundAccountId: bankDetails.razorpayxFundAccountId,
+        heldUntil: bankDetails.payoutsHeldUntil,
+        last4: bankDetails.last4,
+      })
       .from(bankDetails)
       .where(eq(bankDetails.userId, userId));
-    const fundAccountId = bank?.fundAccountId;
-    if (fundAccountId == null) {
+    if (bank?.fundAccountId == null) {
       logger.warn({ userId, period }, 'payout skipped: no bank details on file');
       return;
     }
@@ -83,7 +86,7 @@ async function payOne(deps: JobDeps, userId: string, period: string, now: Date):
       .from(ledgerEntries)
       .leftJoin(bookings, eq(bookings.id, ledgerEntries.bookingId))
       .where(partnerPayable(userId));
-    const balancePaise = Number(row?.balance ?? 0);
+    const balancePaise = sumPaise(row?.balance);
     if (balancePaise < MINIMUM_PAYOUT_PAISE) return;
 
     const posting = payoutEntries(toPaise(balancePaise), userId, now);
@@ -100,7 +103,9 @@ async function payOne(deps: JobDeps, userId: string, period: string, now: Date):
         txnId,
         // Pinned: `payout.send` pays exactly this account, and fails the payout
         // rather than redirect it if the details change before it goes.
-        razorpayxFundAccountId: fundAccountId,
+        razorpayxFundAccountId: bank.fundAccountId,
+        // Which account, as it is now: a later bank change never renames this payout (S-113).
+        destinationLast4: bank.last4,
         status: 'pending',
       })
       .onConflictDoNothing({ target: [payouts.userId, payouts.period] })
@@ -109,9 +114,13 @@ async function payOne(deps: JobDeps, userId: string, period: string, now: Date):
     if (payout === undefined) return;
 
     await postLedger(tx, { txnId, payoutId: payout.id, entries: posting.entries });
+    // Details changed under 48h ago (S-100): the payout is owed and recorded now, and the money
+    // waits for the hold, so a change the holder did not make can be reported before it moves.
+    const held = bank.heldUntil != null && bank.heldUntil > now ? bank.heldUntil : null;
     await tx.insert(outboxMessages).values({
       type: PAYOUT_SEND_JOB,
       payload: { payoutId: payout.id },
+      ...(held === null ? {} : { availableAt: held }),
     });
   });
 }

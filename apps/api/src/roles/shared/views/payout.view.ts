@@ -17,6 +17,10 @@ export const toBankDetailsView = (row: BankDetailsRow): BankDetailsView =>
       accountNumberLast4: row.last4,
       ifscPrefix: row.ifscPrefix,
       updatedAt: row.updatedAt.toISOString(),
+      payoutsHeldUntil:
+        row.payoutsHeldUntil !== null && row.payoutsHeldUntil > new Date()
+          ? row.payoutsHeldUntil.toISOString()
+          : null,
     },
     'bank details view',
   );
@@ -33,6 +37,7 @@ export const toPayoutView = (row: PayoutRow): PayoutView =>
       netPaise: row.netPaise,
       status: row.status,
       razorpayPayoutId: row.razorpayPayoutId,
+      destinationLast4: row.destinationLast4,
       createdAt: row.createdAt.toISOString(),
     },
     'payout view',

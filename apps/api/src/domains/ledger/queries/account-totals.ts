@@ -12,6 +12,7 @@ import { z } from 'zod';
 
 import { DB, type Database } from '../../../platform/db/db.module.js';
 import { istDayStart } from '../../../platform/db/ist.js';
+import { parseOutgoing } from '../../../platform/http/outgoing-contract.js';
 
 export type Reader = Pick<Database, 'select'>;
 
@@ -75,7 +76,7 @@ export async function accountTotals(db: Reader, range: IstRange): Promise<readon
 
   const byAccount = new Map(
     rows.map((row) => {
-      const parsed = totalRowSchema.parse(row);
+      const parsed = parseOutgoing(totalRowSchema, row, 'total row');
       return [parsed.account, parsed] as const;
     }),
   );
@@ -188,7 +189,7 @@ export async function imbalancedTxnIds(db: Database, range: IstRange): Promise<s
     ORDER BY txn_id
     LIMIT ${IMBALANCE_REPORT_LIMIT}
   `);
-  return rows.map((row) => imbalanceRowSchema.parse(row).txn_id);
+  return rows.map((row) => parseOutgoing(imbalanceRowSchema, row, 'imbalance row').txn_id);
 }
 
 /** The balances screen. A class only because the controller may not hold a database handle. */

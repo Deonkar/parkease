@@ -3,7 +3,7 @@ import type { RouteStatus } from '@parkease/contracts/enums';
 import type { RouteRequirement } from '@parkease/contracts/shared';
 import { z } from 'zod';
 
-import { razorpayRequest } from './razorpay-rest.js';
+import { RazorpayApiError, razorpayRequest } from './razorpay-rest.js';
 
 /**
  * Razorpay Route Linked Account onboarding (task 16b, ADR-013), in the four steps Razorpay's
@@ -94,19 +94,28 @@ export class RouteHttpClient implements RouteClient {
         },
       },
     };
-    const account =
-      accountId === null
-        ? await razorpayRequest('POST', '/v2/accounts', idResponse, {
-            ...body,
-            type: 'route',
-            reference_id: input.referenceId,
-          })
-        : await razorpayRequest(
-            'PATCH',
-            `/v2/accounts/${encodeURIComponent(accountId)}`,
-            idResponse,
-            body,
-          );
+    if (accountId === null) {
+      try {
+        const created = await razorpayRequest('POST', '/v2/accounts', idResponse, {
+          ...body,
+          type: 'route',
+          reference_id: input.referenceId,
+        });
+        return created.id;
+      } catch (error) {
+        // An earlier create landed and its answer was lost (a timeout, an unreadable 200), so
+        // nothing was saved and this retry created again. Razorpay names the account it already
+        // has: carry on with that one, updated with what was just sent (S-112).
+        if (!(error instanceof RazorpayApiError) || error.existingAccountId === null) throw error;
+        accountId = error.existingAccountId;
+      }
+    }
+    const account = await razorpayRequest(
+      'PATCH',
+      `/v2/accounts/${encodeURIComponent(accountId)}`,
+      idResponse,
+      body,
+    );
     return account.id;
   }
 
