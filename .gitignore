@@ -60,3 +60,6 @@ playwright-report/
 
 # Firecrawl CLI scrape output (agent-side, never committed)
 .firecrawl/
+
+.vercel
+.env*

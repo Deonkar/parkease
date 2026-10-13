@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { valetJobStatusSchema } from '../enums/valet-job-status.js';
+import { verificationStatusSchema } from '../enums/verification-status.js';
 import { bookingIdSchema, valetJobIdSchema } from '../primitives/ids.js';
 import { geoPointSchema } from '../primitives/indian.js';
 import { paiseSchema } from '../primitives/paise.js';
@@ -73,7 +74,7 @@ export const valetEarningsSummarySchema = z.object({
 export type ValetEarningsSummary = z.infer<typeof valetEarningsSummarySchema>;
 
 export const valetProfileViewSchema = z.object({
-  verificationStatus: z.string(),
+  verificationStatus: verificationStatusSchema,
   backgroundCheckStatus: z.string(),
   licenceDocumentId: z.string().nullable(),
   licenceExpiresAt: z.string().datetime().nullable(),

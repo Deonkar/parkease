@@ -9,19 +9,8 @@ import { UPLOAD_COPY, UploadError } from '@/lib/upload-failure';
  * photograph — is testable without a device.
  */
 
-/** R-FE-11: the upload must land under these. */
-export const PROOF_MAX_BYTES = 1_000_000;
-export const PROOF_MAX_WIDTH = 1_200;
-export const PROOF_QUALITY = 0.7;
-
-export interface CompressedImage {
-  readonly uri: string;
-  readonly width: number;
-  readonly height: number;
-}
-
 export interface ProofDeps {
-  compress(uri: string, width: number, quality: number): Promise<CompressedImage>;
+  /** Compresses (R-FE-11, inside `lib/uploads.ts`) and uploads, returning the photo id. */
   upload(uri: string): Promise<string>;
 }
 
@@ -30,7 +19,7 @@ export type ProofResult =
   | { ok: false; message: string; retainedUri: string };
 
 /**
- * Compress, then upload.
+ * Upload the captured photo.
  *
  * On any failure the ORIGINAL uri comes back so the caller can retry without
  * reopening the camera: by the time an upload fails the car is locked and the
@@ -39,8 +28,7 @@ export type ProofResult =
  */
 export async function submitProof(uri: string, deps: ProofDeps): Promise<ProofResult> {
   try {
-    const compressed = await deps.compress(uri, PROOF_MAX_WIDTH, PROOF_QUALITY);
-    const proofPhotoId = await deps.upload(compressed.uri);
+    const proofPhotoId = await deps.upload(uri);
     return { ok: true, proofPhotoId };
   } catch (error) {
     warn('valet.submitProof: could not attach the proof photo', error);

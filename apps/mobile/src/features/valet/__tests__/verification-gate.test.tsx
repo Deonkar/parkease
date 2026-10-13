@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import type { VerificationStatus } from '@parkease/contracts/enums';
 import { describe, expect, it, vi } from 'vitest';
 
 import { render, text } from '../../shared/__tests__/render-native';
@@ -19,7 +20,7 @@ vi.mock('@expo/vector-icons', () => ({
 }));
 
 const gateFor = (status: string) => {
-  const { banner } = describeVerification(status);
+  const { banner } = describeVerification(status as VerificationStatus);
   if (banner === null) return null;
   return render(<VerificationGate banner={banner} />);
 };

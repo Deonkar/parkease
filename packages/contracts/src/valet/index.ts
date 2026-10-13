@@ -1,4 +1,3 @@
-export { valetJobOfferSchema, type ValetJobOffer } from './job-offer.js';
 export { acceptValetJobSchema, type AcceptValetJob } from './accept-job.js';
 export { uploadProofSchema, type UploadProof } from './upload-proof.js';
 export { updateValetAvailabilitySchema, type UpdateValetAvailability } from './availability.js';

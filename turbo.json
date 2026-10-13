@@ -6,6 +6,7 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
+      "env": ["NEXT_PUBLIC_*", "VITE_*", "EXPO_PUBLIC_*"],
       "outputs": ["dist/**", ".next/**", "!.next/cache/**", "build/**"]
     },
     "typecheck": {

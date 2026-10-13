@@ -2,23 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import { UPLOAD_COPY, UploadError } from '@/lib/upload-failure';
 
-import {
-  PROOF_MAX_BYTES,
-  PROOF_MAX_WIDTH,
-  PROOF_QUALITY,
-  submitProof,
-  type ProofDeps,
-} from '../proof';
+import { submitProof, type ProofDeps } from '../proof';
 
 const deps = (overrides: Partial<ProofDeps> = {}) => {
-  const compressed: unknown[] = [];
   const uploaded: string[] = [];
 
   const base: ProofDeps = {
-    compress: (uri, width, quality) => {
-      compressed.push({ uri, width, quality });
-      return Promise.resolve({ uri: `${uri}#compressed`, width, height: 900 });
-    },
     upload: (uri) => {
       uploaded.push(uri);
       return Promise.resolve('photo_1');
@@ -26,7 +15,7 @@ const deps = (overrides: Partial<ProofDeps> = {}) => {
     ...overrides,
   };
 
-  return { deps: base, compressed, uploaded };
+  return { deps: base, uploaded };
 };
 
 /**
@@ -35,17 +24,12 @@ const deps = (overrides: Partial<ProofDeps> = {}) => {
  * connection and survive a failure without asking for a second photograph.
  */
 describe('submitProof', () => {
-  it('compresses before uploading, never the original', async () => {
-    const { deps: d, compressed, uploaded } = deps();
+  it('uploads the captured photo', async () => {
+    const { deps: d, uploaded } = deps();
 
     await submitProof('file://shot.jpg', d);
 
-    // A 4MB original on 3G in a basement is the difference between a proof
-    // photo and a valet stuck on this screen (R-FE-11).
-    expect(compressed).toEqual([
-      { uri: 'file://shot.jpg', width: PROOF_MAX_WIDTH, quality: PROOF_QUALITY },
-    ]);
-    expect(uploaded).toEqual(['file://shot.jpg#compressed']);
+    expect(uploaded).toEqual(['file://shot.jpg']);
   });
 
   it('returns the photo id the server assigned', async () => {
@@ -79,24 +63,6 @@ describe('submitProof', () => {
       expect(result.message).toMatch(/couldn't upload/i);
       expect(result.message).toMatch(/connection/i);
     }
-  });
-
-  it('keeps the original when compression itself fails', async () => {
-    const { deps: d } = deps({
-      compress: () => Promise.reject(new Error('manipulator exploded')),
-    });
-
-    const result = await submitProof('file://shot.jpg', d);
-
-    expect(result).toMatchObject({ ok: false, retainedUri: 'file://shot.jpg' });
-  });
-
-  it('caps the upload below the size limit', () => {
-    // R-FE-11. Asserted as a constant so a later tweak to quality cannot drift
-    // past the limit unnoticed.
-    expect(PROOF_MAX_BYTES).toBe(1_000_000);
-    expect(PROOF_MAX_WIDTH).toBe(1_200);
-    expect(PROOF_QUALITY).toBeLessThanOrEqual(0.7);
   });
 });
 

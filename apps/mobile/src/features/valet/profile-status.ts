@@ -6,6 +6,8 @@
  * the same reason `location/health.ts` sits outside its component.
  */
 
+import type { VerificationStatus } from '@parkease/contracts/enums';
+
 import {
   canAcceptWork,
   verificationStateFor,
@@ -42,7 +44,7 @@ export interface VerificationView {
  * map has not caught up, guessing "probably fine" would put an unapproved
  * person behind someone's steering wheel. Unknown means not permitted.
  */
-export function describeVerification(status: string): VerificationView {
+export function describeVerification(status: VerificationStatus): VerificationView {
   const state = verificationStateFor(status);
   const canAccept = canAcceptWork(state);
 
@@ -151,7 +153,10 @@ export type DocumentState = 'verified' | 'pending' | 'failed' | 'missing';
  * carried its own inline `=== 'verified'` check, which is exactly the second
  * copy this prevents.
  */
-export function documentStateFor(verificationStatus: string, hasDocument: boolean): DocumentState {
+export function documentStateFor(
+  verificationStatus: VerificationStatus,
+  hasDocument: boolean,
+): DocumentState {
   if (!hasDocument) return 'missing';
   if (canAcceptWork(verificationStateFor(verificationStatus))) return 'verified';
   return verificationStatus === 'rejected' ? 'failed' : 'pending';
