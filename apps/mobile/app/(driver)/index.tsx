@@ -45,6 +45,7 @@ import {
   type SearchOrigin,
 } from '@/features/driver/hooks/useSearchFilters';
 import { useSpaceSearch } from '@/features/driver/hooks/useSpaceSearch';
+import { classifyFailure, httpStatusOf } from '@/features/shared/api/failure';
 import { openAppSettings } from '@/lib/settings';
 
 /**
@@ -294,7 +295,9 @@ export default function DriverDiscoveryScreen() {
   const body = () => {
     if (query.isError) {
       // Offline copy is website.md §6, verbatim.
-      const offline = !isAxiosResponseError(query.error);
+      // Offline only when nothing answered. A body this build cannot parse is not the network.
+      const offline =
+        classifyFailure(query.error) === 'unreachable' && httpStatusOf(query.error) === null;
       return (
         <ErrorState
           title={offline ? "You're offline." : 'Something went wrong on our end.'}
@@ -530,16 +533,6 @@ export default function DriverDiscoveryScreen() {
         />
       )}
     </View>
-  );
-}
-
-/** An axios error with a response is a real HTTP status; without one it is transport. */
-function isAxiosResponseError(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'response' in error &&
-    (error as { response?: unknown }).response !== undefined
   );
 }
 

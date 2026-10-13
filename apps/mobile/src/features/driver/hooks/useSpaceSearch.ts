@@ -31,7 +31,7 @@ export function useSpaceSearch(origin: SearchOrigin | null, filters: SearchFilte
       }
       return searchSpaces(withCursor, signal);
     },
-    getNextPageParam: (lastPage) => lastPage.meta.nextCursor,
+    getNextPageParam: (lastPage) => lastPage.meta.nextCursor ?? undefined,
     // Availability is never cached — a stale free-slot count is a double
     // booking or a lost sale (rules.md R-PERF-05). Overrides the 30s default.
     staleTime: 0,
