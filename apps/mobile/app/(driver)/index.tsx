@@ -20,7 +20,7 @@ import {
 import { FlashList } from '@shopify/flash-list';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   FadeIn,
   useAnimatedStyle,
@@ -45,6 +45,8 @@ import {
   type SearchOrigin,
 } from '@/features/driver/hooks/useSearchFilters';
 import { useSpaceSearch } from '@/features/driver/hooks/useSpaceSearch';
+import { classifyFailure, httpStatusOf } from '@/features/shared/api/failure';
+import { openAppSettings } from '@/lib/settings';
 
 /**
  * How many all-filtered-out pages to walk through before giving up and showing
@@ -253,7 +255,7 @@ export default function DriverDiscoveryScreen() {
           body="ParkEase needs your location to find parking spots near you."
           actionLabel="Enable in Settings"
           onAction={() => {
-            void Linking.openSettings();
+            void openAppSettings();
           }}
           secondaryActionLabel="Search Manually"
           onSecondaryAction={() => {
@@ -293,7 +295,9 @@ export default function DriverDiscoveryScreen() {
   const body = () => {
     if (query.isError) {
       // Offline copy is website.md §6, verbatim.
-      const offline = !isAxiosResponseError(query.error);
+      // Offline only when nothing answered. A body this build cannot parse is not the network.
+      const offline =
+        classifyFailure(query.error) === 'unreachable' && httpStatusOf(query.error) === null;
       return (
         <ErrorState
           title={offline ? "You're offline." : 'Something went wrong on our end.'}
@@ -529,16 +533,6 @@ export default function DriverDiscoveryScreen() {
         />
       )}
     </View>
-  );
-}
-
-/** An axios error with a response is a real HTTP status; without one it is transport. */
-function isAxiosResponseError(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'response' in error &&
-    (error as { response?: unknown }).response !== undefined
   );
 }
 

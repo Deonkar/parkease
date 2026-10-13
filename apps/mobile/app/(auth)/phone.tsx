@@ -1,4 +1,5 @@
-import { colors, fontSize, spacing } from '@parkease/tokens';
+import { DEMO_ACCOUNTS } from '@parkease/contracts/public';
+import { colors, fontSize, fontWeight, radius, spacing } from '@parkease/tokens';
 import { Button } from '@parkease/ui-native';
 import { router } from 'expo-router';
 import { useState } from 'react';
@@ -15,6 +16,10 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { requestOtp } from '@/lib/firebase';
+
+// The public web demo (EXPO_PUBLIC_DEMO_MODE): no SMS, any 6-digit code, demo accounts only.
+const DEMO = process.env.EXPO_PUBLIC_DEMO_MODE === 'true';
+const DEMO_ROLES = DEMO_ACCOUNTS.filter((account) => account.role !== 'admin');
 
 export default function PhoneScreen() {
   const [phone, setPhone] = useState('');
@@ -107,6 +112,27 @@ export default function PhoneScreen() {
           accessibilityLabel="Send OTP"
           style={styles.button}
         />
+
+        {DEMO ? (
+          <View style={styles.demo}>
+            <Text style={styles.demoTitle}>Demo: pick a role, then any 6-digit code</Text>
+            <View style={styles.demoRow}>
+              {DEMO_ROLES.map((account) => (
+                <Pressable
+                  key={account.role}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Use the demo ${account.role} account`}
+                  onPress={() => {
+                    setPhone(account.phone.slice(3));
+                  }}
+                  style={styles.demoChip}
+                >
+                  <Text style={styles.demoChipText}>{account.role}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        ) : null}
       </View>
 
       <Text style={styles.terms}>
@@ -212,6 +238,32 @@ const styles = StyleSheet.create({
   },
   button: {
     width: '100%',
+  },
+  demo: {
+    marginTop: spacing.xl,
+    gap: spacing.sm,
+  },
+  demoTitle: {
+    fontSize: fontSize.sm,
+    color: colors.textSecondary,
+  },
+  demoRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  demoChip: {
+    minHeight: 48,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.base,
+    borderRadius: radius.chip,
+    backgroundColor: colors.primarySoft,
+  },
+  demoChipText: {
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.semibold,
+    color: colors.primary,
+    textTransform: 'capitalize',
   },
   terms: {
     fontSize: fontSize.sm,

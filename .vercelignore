@@ -1,0 +1,18 @@
+# CLI deploys upload from the repo root (projects set Root Directory). Never ship secrets or media.
+.env*
+!.env.example
+**/node_modules
+**/dist
+**/.turbo
+**/.next
+graphify-out
+brag-output
+pitch
+apps/mobile/android
+apps/mobile/ios
+*.pem
+*.key
+*.jks
+*.keystore
+google-services.json
+.claude

@@ -21,9 +21,8 @@ export interface ProofCaptureState {
 /**
  * Compress-and-upload for the proof photo, with the image retained on failure.
  *
- * The compression itself now lives in `lib/uploads.ts`, which `uploadProof`
- * calls — this hook's own `deps.compress` is a pass-through so `submitProof`'s
- * compress-then-upload shape still holds, without compressing the image twice.
+ * Compression lives in `lib/uploads.ts`, which `uploadProof` calls, so the
+ * image is compressed exactly once.
  */
 export function useProofCapture(jobId: string | null): ProofCaptureState {
   const [uri, setUri] = useState<string | null>(null);
@@ -40,7 +39,6 @@ export function useProofCapture(jobId: string | null): ProofCaptureState {
   const heldRef = useRef<HeldProof | null>(null);
 
   const deps: ProofDeps = {
-    compress: (source) => Promise.resolve({ uri: source, width: 0, height: 0 }),
     upload: async (source) => {
       if (jobId === null) throw new Error('no active job to attach a photo to');
       const held = heldRef.current;

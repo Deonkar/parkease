@@ -211,7 +211,7 @@ export function devSearchSpaces(params: SearchQueryParams): SpaceSearchPage {
 
   return {
     data: page,
-    meta: hasMore ? { limit, hasMore, nextCursor: String(nextOffset) } : { limit, hasMore },
+    meta: { limit, hasMore, nextCursor: hasMore ? String(nextOffset) : null },
   };
 }
 

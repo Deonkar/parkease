@@ -29,29 +29,6 @@ if it taught something. A file of `done` rows is a file nobody reads.
 
 ## Open
 
-### S-01 — Delete the dead `ValetJobOffer` contract
-
-- **Status:** `chip` (spawned 2026-09-21)
-- **Found in:** task 12, wiring the valet earnings display
-- **Surface:** `packages/contracts`
-
-`packages/contracts/src/valet/job-offer.ts` defines `valetJobOfferSchema` / `ValetJobOffer`
-with a `feePaise` field — the **gross** fee the driver is charged. It is exported from the
-barrel at `packages/contracts/src/valet/index.ts:1` and imported by nothing.
-
-The real offer contract is `valetOfferSchema` in `job-view.ts`, whose `earningsPaise` is the
-valet's **net**, computed server-side by `computeValetLegFee`.
-
-This is a live footgun. `docs/tasks/task-12-valet-app.md` records that v1 shipped a bug
-displaying `feePaise` as take-home — about 25% too high. A dead schema named like an offer,
-whose only money field is the gross, invites exactly that mistake again.
-
-- **Why deferred:** task 12 is a mobile task; this is a contracts-package deletion that
-  needs its own verification sweep across all five apps.
-- **Done means:** nothing imports it (checked across `apps/*` and `packages/*`, ignoring
-  `packages/contracts/dist/`), the file and its barrel export are gone, and
-  `pnpm turbo run lint typecheck test` is green.
-
 ### S-02 — Valet earnings cannot show the per-job fee breakdown the design asks for
 
 - **Status:** `open`
@@ -196,27 +173,6 @@ the session is genuinely revoked, an indefinite retry loop that never surfaces a
 - **Done means:** reconnection is deterministic after a refresh, and a repeatedly-rejected
   handshake ends in a surfaced "signed out" state rather than an unbounded retry.
 
-### S-10 — `verificationStatus` is `z.string()` when the enum already exists
-
-- **Status:** `open`
-- **Found in:** task 12, quality review
-- **Surface:** `packages/contracts`
-
-`valetProfileViewSchema.verificationStatus` is `z.string()` (`job-view.ts`), even though
-`packages/contracts/src/enums/verification-status.ts` already defines `verificationStatusSchema`
-and `admin/verify-partner.ts` uses it. The mobile app's `describeVerification(status: string)`
-and `documentStateFor(...)` inherit that wideness, so a typo in a case label would fall into the
-default branch instead of failing typecheck.
-
-No bug today: the default branch **fails closed**, which is the correct runtime behaviour for an
-old app build meeting a new server value, and narrowing the type would add a compile-time check
-on top of that guard rather than replacing it.
-
-- **Why deferred:** `job-view.ts` shipped in task 11; changing it means re-verifying every
-  consumer across five apps, which is not a mobile task.
-- **Done means:** the contract reuses `verificationStatusSchema`, the mobile helpers take the
-  narrowed type, and the fail-closed default is kept.
-
 ### S-11 — §12.7's availability settings have no API
 
 - **Status:** `open`
@@ -309,18 +265,6 @@ from a written rule and should be confirmed rather than assumed.
 
 - **Done means:** either the deviation is recorded (an ADR or a note in `rules.md` scoping R-FE-07
   to actual lists), or Offers grows a real list and Direction B is revisited.
-
-### S-17 — The R-FE-06 money grep is not wired into CI
-
-- **Status:** `open`
-- **Found in:** task 12, spec-conformance review
-- **Surface:** tooling
-
-§12.6 marks `grep -rE "0\.2|VALET_COMMISSION|GST_RATE" apps/mobile/src/features/valet` as a **CI**
-check. It is run by hand on every task and passes, but no workflow enforces it, so the guard
-depends on someone remembering.
-
-- **Done means:** a GitHub Actions step fails the build on a match.
 
 ### S-23 — Business photos and operating hours have no reader
 
@@ -424,34 +368,6 @@ one.
 - **Done means:** when push (or any other deep link) needs to target a specific job, an
   `active/[jobId]` route reads that job by id through an ownership-checked endpoint, and a
   Maestro or unit test opens it from a link.
-
-### S-29 — `proof.ts`'s compression constants are now unused
-
-- **Status:** `open`
-- **Found in:** task 14, task 1 (the shared signed-upload client)
-- **Surface:** mobile
-
-`apps/mobile/src/features/valet/proof.ts` exports `PROOF_MAX_BYTES`,
-`PROOF_MAX_WIDTH` and `PROOF_QUALITY`, and its `submitProof` orchestration still
-calls `deps.compress(uri, PROOF_MAX_WIDTH, PROOF_QUALITY)`. Task 1 moved the real
-compression into `lib/uploads.ts` (`uploadImage` owns it now, called from
-`uploadProof`) and made `useProofCapture.ts`'s `deps.compress` an identity
-pass-through, specifically to avoid compressing the photo twice. That leaves
-`PROOF_MAX_BYTES` unreferenced anywhere, and `PROOF_MAX_WIDTH` / `PROOF_QUALITY`
-referenced only by `submitProof`'s call to an identity function that ignores
-both arguments.
-
-- **Why deferred:** `proof.ts` was outside task 1's file list (only
-  `valet/api/valet.ts` and `valet/hooks/useProofCapture.ts` were in scope), and
-  a grep found no other consumer of these three constants — but removing them,
-  or restructuring `submitProof`'s compress-then-upload shape now that
-  compression genuinely lives one layer up, is a design call for whichever task
-  owns `proof.ts` next, not a drive-by edit from the task that stopped calling
-  them.
-- **Done means:** either `proof.ts` drops the now-dead constants and simplifies
-  `submitProof` to no longer take a `compress` step, or a comment on
-  `ProofDeps.compress` explains why an identity implementation is expected to
-  stay valid there.
 
 ### S-31 — `GET /washer/earnings?period=all` is unbounded
 
@@ -722,22 +638,6 @@ which would make the summary an index-only scan.
   production-sized ledger shows the sequential scan or heap cost. Then a
   `CREATE INDEX CONCURRENTLY` migration, alone in its file and reviewed SAFE, adds the index,
   and the plan is re-run to show it used.
-
-### S-61 — `washJobViewSchema.availableEvents` is `z.array(z.string())`
-
-- **Status:** `open`
-- **Found in:** task 14 final review, TypeScript lens L7
-- **Surface:** contracts, mobile
-
-`availableEvents` in `packages/contracts/src/washer/job-view.ts` lists the events the partner may
-fire next, but it is typed as plain strings rather than `carwashJobEventSchema`. A typo or a
-renamed event passes the parse and reaches the app, where a `switch` on it falls through to its
-default without a compile error. This is the same shape as S-10's `verificationStatus`.
-
-- **Why deferred:** narrowing it changes the type every consumer reads, and the mobile half
-  belongs to part B of the fix wave.
-- **Done means:** the field is `z.array(carwashJobEventSchema)`, the mobile consumers typecheck
-  against the enum, and a contract test refuses an unknown event.
 
 ### S-62 — `grossPaise` means two things in one earnings response
 
@@ -1169,6 +1069,9 @@ LogBox shows an uncaught error from FontFaceObserver (`entry.bundle`, the `D.pro
 after the driver home loads: a font-load promise rejects with nobody handling it. On the web build this is a
 red-screen in dev; it may also mean an icon font never finishes loading.
 
+- **Note (2026-10-13):** not reproduced — driver home on the web build stayed open for minutes with no
+  font timeout and no console error. Likely a slow first load of the icon font; nothing in the app loads
+  fonts explicitly yet (see S-95).
 - **Why deferred:** web-only, found while filming.
 - **Done means:** the font load that times out is identified, its rejection is handled (R-FAIL-01: logged at
   warn with context), and the icon font loads or falls back deliberately.
@@ -1313,31 +1216,6 @@ driver rating, so a read model would be maintained for no reader.
 - **Why deferred:** YAGNI until something gates on it (an owner auto-decline, a driver trust badge).
 - **Done means:** that consumer exists; `users` gains the rating pair with the same CHECK as
   `spaces_rating_read_model_check`, and the recompute writes it.
-
-### S-135 — "Enable in Settings" crashes the driver home on web
-
-- **Status:** `open`
-- **Found in:** task 17b visual check, 2026-10-05
-- **Surface:** mobile (web build) · `app/(driver)/index.tsx` location-denied state
-
-`Linking.openSettings` does not exist in react-native-web, so the button throws "Linking.default.openSettings
-is not a function" and red-screens the dev build.
-
-- **Why deferred:** web is not the shipping platform (ADR-023) and the crash predates 17b.
-- **Done means:** on web the button is hidden or opens the browser's site-settings help, with a test.
-
-### S-136 — Picking a place suggestion does nothing on web (driver home, denied-location state)
-
-- **Status:** `open`
-- **Found in:** task 17b visual check, 2026-10-05
-- **Surface:** mobile (web build) · `features/driver/components/PlaceSearchBar.tsx`
-
-The input's `onBlur` sets `focused=false` on mousedown, which unmounts the dropdown before the suggestion's
-press lands, so `onSelect` never fires and the screen stays on "Enable Location". A synthetic `click()` works.
-
-- **Why deferred:** predates 17b; needs a check that Android touch does not have the same race.
-- **Done means:** a suggestion tap selects on web and Android (keep the dropdown mounted until the press
-  settles, or select on press-in), with a test.
 
 ### S-137 — The owner reviews section was not opened in a running app
 
@@ -1484,6 +1362,31 @@ Four tidiness items the review found and the task deliberately skipped. None cha
 - **Done means:** each item either applied with tests green, or closed with a one-line reason in `learnings.md`.
 
 | task-22 | `apps/*/Dockerfile` | Image runs under tsx with devDeps because packages export raw `.ts`. Slim image + `pnpm deploy --prod` needs packages to emit `dist`. Also unverified: healthcheck against live DB, worker-host ADR-010 amendment, CI docker push, everything in 22.8 that needs real accounts. |
+
+### S-161 — Onboarding still uses the pre-Wayfinder indigo palette
+
+- **Status:** `open`
+- **Found in:** task 22, opening the mobile web build
+- **Surface:** mobile · `app/(auth)/onboarding.tsx`
+
+The three slides hard-code `#4F46E5` / `#EEF2FF` (indigo, replaced by Wayfinder on 2026-09-14),
+`#D97706` and `#FFFBEB` as literals rather than tokens. It is the first screen a demo visitor sees.
+
+- **Why deferred:** a visual change needs the design gate; task 22 only made the pager work on web.
+- **Done means:** the slide colours come from `@parkease/tokens` (primary/available tiers), and
+  `design-literals.test.ts` covers the file.
+
+### S-162 — `screen-states.test.tsx` times out under parallel turbo load
+
+- **Status:** `open`
+- **Found in:** task 22, `pnpm turbo run lint typecheck test --concurrency=4`
+- **Surface:** mobile tests
+
+With four turbo tasks in parallel, the first case hit vitest's 5 s default timeout and 8 more
+cascaded (empty text where copy was expected). Alone, and at `--concurrency=2`, all 15 pass.
+
+- **Done means:** the file sets its own `testTimeout` (or awaits screens with `findBy*`), and a
+  `--concurrency=4` run is green three times in a row.
 
 ## Product decisions recorded
 

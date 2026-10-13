@@ -8,4 +8,5 @@ interface ImportMetaEnv {
   readonly VITE_FIREBASE_PROJECT_ID?: string;
   /** `1` serves every request from src/lib/fixtures.ts — dev and visual checks only. */
   readonly VITE_ADMIN_FIXTURES?: string;
+  readonly VITE_DEMO_MODE?: string;
 }

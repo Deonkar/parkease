@@ -1,3 +1,4 @@
+import type { VerificationStatus } from '@parkease/contracts/enums';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -6,6 +7,9 @@ import {
   documentStateFor,
   licenceWarning,
 } from '../profile-status';
+
+// An old build meeting a status the server added later: the type says it cannot happen, runtime says it can.
+const UNKNOWN = 'something_new' as VerificationStatus;
 
 const DAY_MS = 86_400_000;
 const NOW = Date.UTC(2026, 8, 22);
@@ -56,7 +60,7 @@ describe('describeVerification', () => {
   it('treats an unrecognised status as not permitted, never as verified', () => {
     // A new status added server-side must fail closed: a client that guesses
     // "probably fine" would let an unapproved valet take someone's car.
-    const view = describeVerification('something_new');
+    const view = describeVerification(UNKNOWN);
 
     expect(view.canAccept).toBe(false);
     expect(view.banner).not.toBe(null);
@@ -139,6 +143,6 @@ describe('documentStateFor', () => {
   });
 
   it('does not report an unknown status as verified', () => {
-    expect(documentStateFor('something_new', true)).not.toBe('verified');
+    expect(documentStateFor(UNKNOWN, true)).not.toBe('verified');
   });
 });

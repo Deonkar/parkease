@@ -1,7 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
 import {
   type CanActivate,
   type ExecutionContext,
@@ -16,9 +12,7 @@ import { logger } from '../observability/logger.js';
 import { REDIS, type RedisClient } from '../redis/redis.module.js';
 
 import { resolvePolicy, type RateLimitPolicy } from './policies.js';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const LUA_SCRIPT = readFileSync(join(__dirname, 'token-bucket.lua'), 'utf8');
+import { TOKEN_BUCKET_LUA } from './token-bucket.js';
 
 interface AuthUser {
   readonly id: string;
@@ -60,7 +54,7 @@ export class RateLimitGuard implements CanActivate {
 
     try {
       const result = (await this.redis.eval(
-        LUA_SCRIPT,
+        TOKEN_BUCKET_LUA,
         1,
         key,
         policy.limit,

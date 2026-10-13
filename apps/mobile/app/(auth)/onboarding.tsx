@@ -3,7 +3,7 @@ import { colors, fontSize, spacing } from '@parkease/tokens';
 import { Button } from '@parkease/ui-native';
 import { router } from 'expo-router';
 import { useRef, useState } from 'react';
-import { AccessibilityInfo, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import PagerView from 'react-native-pager-view';
 
 const slides = [
@@ -30,6 +30,18 @@ const slides = [
   },
 ] as const;
 
+function renderSlide(slide: (typeof slides)[number], i: number) {
+  return (
+    <View key={i} style={styles.slide}>
+      <View style={[styles.illustrationContainer, { backgroundColor: slide.bgColor }]}>
+        <MaterialCommunityIcons name={slide.icon} size={72} color={slide.iconColor} />
+      </View>
+      <Text style={styles.title}>{slide.title}</Text>
+      <Text style={styles.body}>{slide.body}</Text>
+    </View>
+  );
+}
+
 export default function OnboardingScreen() {
   const pagerRef = useRef<PagerView>(null);
   const [page, setPage] = useState(0);
@@ -38,6 +50,8 @@ export default function OnboardingScreen() {
   const handleNext = () => {
     if (isLast) {
       router.replace('/(auth)/phone');
+    } else if (Platform.OS === 'web') {
+      setPage(page + 1);
     } else {
       pagerRef.current?.setPage(page + 1);
     }
@@ -60,31 +74,28 @@ export default function OnboardingScreen() {
         </Pressable>
       )}
 
-      <PagerView
-        ref={pagerRef}
-        style={styles.pager}
-        initialPage={0}
-        onPageSelected={(e) => {
-          const newPage = e.nativeEvent.position;
-          setPage(newPage);
-          const slide = slides[newPage];
-          if (slide) {
-            AccessibilityInfo.announceForAccessibility(
-              `${slide.title}. Page ${String(newPage + 1)} of ${String(slides.length)}`,
-            );
-          }
-        }}
-      >
-        {slides.map((slide, i) => (
-          <View key={i} style={styles.slide}>
-            <View style={[styles.illustrationContainer, { backgroundColor: slide.bgColor }]}>
-              <MaterialCommunityIcons name={slide.icon} size={72} color={slide.iconColor} />
-            </View>
-            <Text style={styles.title}>{slide.title}</Text>
-            <Text style={styles.body}>{slide.body}</Text>
-          </View>
-        ))}
-      </PagerView>
+      {/* react-native-pager-view has no web build; on web the buttons page one slide at a time. */}
+      {Platform.OS === 'web' ? (
+        <View style={styles.pager}>{renderSlide(slides[page] ?? slides[0], page)}</View>
+      ) : (
+        <PagerView
+          ref={pagerRef}
+          style={styles.pager}
+          initialPage={0}
+          onPageSelected={(e) => {
+            const newPage = e.nativeEvent.position;
+            setPage(newPage);
+            const slide = slides[newPage];
+            if (slide) {
+              AccessibilityInfo.announceForAccessibility(
+                `${slide.title}. Page ${String(newPage + 1)} of ${String(slides.length)}`,
+              );
+            }
+          }}
+        >
+          {slides.map((slide, i) => renderSlide(slide, i))}
+        </PagerView>
+      )}
 
       <View style={styles.footer}>
         <View style={styles.dots}>

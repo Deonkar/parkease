@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { carwashJobEventSchema } from '../enums/carwash-job-event.js';
 import { carwashJobStatusSchema } from '../enums/carwash-job-status.js';
 import { carwashServiceNameSchema } from '../enums/carwash-service-name.js';
 import { vehicleTypeSchema } from '../enums/vehicle-type.js';
@@ -18,7 +19,7 @@ export const washJobViewSchema = z.object({
   /** The partner's take-home, frozen at accept. Null until somebody accepts. */
   earningsPaise: paiseSchema.nullable(),
   /** Which events the machine will accept next, so the app renders one button. */
-  availableEvents: z.array(z.string()),
+  availableEvents: z.array(carwashJobEventSchema),
   beforePhotoId: z.string().nullable(),
   afterPhotoId: z.string().nullable(),
   acceptedAt: z.string().datetime().nullable(),

@@ -12,7 +12,8 @@ export function GrossChart({ series }: { series: readonly { day: string; grossPa
   const width = 720;
   const height = 160;
   const gap = 2;
-  const bar = series.length === 0 ? 0 : width / series.length - gap;
+  // Capped, so a short range (one day of data) draws bars, not one block filling the card.
+  const bar = series.length === 0 ? 0 : Math.min(width / series.length - gap, 24);
 
   return (
     <Card size="small" title="Gross bookings per day">
@@ -44,15 +45,17 @@ export function GrossChart({ series }: { series: readonly { day: string; grossPa
           <text x={0} y={height + 14} fontSize={11} fill={colors.textSecondary}>
             {series[0]?.day}
           </text>
-          <text
-            x={width}
-            y={height + 14}
-            fontSize={11}
-            fill={colors.textSecondary}
-            textAnchor="end"
-          >
-            {series.at(-1)?.day}
-          </text>
+          {series.length > 1 ? (
+            <text
+              x={width}
+              y={height + 14}
+              fontSize={11}
+              fill={colors.textSecondary}
+              textAnchor="end"
+            >
+              {series.at(-1)?.day}
+            </text>
+          ) : null}
         </svg>
       )}
     </Card>

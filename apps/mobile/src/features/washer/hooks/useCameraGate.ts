@@ -1,8 +1,9 @@
 import { useCameraPermissions } from 'expo-camera';
 import { useCallback, useState } from 'react';
-import { Alert, Linking } from 'react-native';
+import { Alert } from 'react-native';
 
 import { warn } from '@/lib/log';
+import { openAppSettings } from '@/lib/settings';
 
 export interface CameraGate<S extends string> {
   /** What the open camera is photographing; `null` while it is closed. */
@@ -38,7 +39,7 @@ export function useCameraGate<S extends string>(reason: string): CameraGate<S> {
                 ? undefined
                 : [
                     { text: 'Not now', style: 'cancel' },
-                    { text: 'Open Settings', onPress: () => void Linking.openSettings() },
+                    { text: 'Open Settings', onPress: () => void openAppSettings() },
                   ],
             );
             return;

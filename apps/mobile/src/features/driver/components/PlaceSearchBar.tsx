@@ -18,6 +18,8 @@ interface PlaceSearchBarProps {
  * Destination search over Nominatim (ADR-023: no billed Places API). Debounced
  * inside `usePlaceSearch`, which is shared with the owner listing flow.
  */
+const WEB_PRESS_IN_NOW: object = { delayPressIn: 0 };
+
 export function PlaceSearchBar({
   selectedLabel,
   onSelect,
@@ -84,7 +86,12 @@ export function PlaceSearchBar({
               key={place.id}
               accessibilityRole="button"
               accessibilityLabel={`${place.title}, ${place.subtitle}`}
-              onPress={() => {
+              // Press-in with no delay, not press: on web the input blurs on mousedown and
+              // unmounts this list before a click lands, and react-native-web holds press-in
+              // back 50 ms by default, which is also too late (S-136). `delayPressIn` is a
+              // react-native-web prop missing from RN's types; native has no such delay.
+              {...WEB_PRESS_IN_NOW}
+              onPressIn={() => {
                 setQuery('');
                 setFocused(false);
                 onSelect(place);

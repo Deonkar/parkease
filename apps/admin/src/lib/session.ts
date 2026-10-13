@@ -20,13 +20,30 @@ interface SessionState {
   readonly user: AdminUser | null;
 }
 
+// What `/auth/admin/session` and `/refresh` actually return: tokens only, never a `user`.
 const sessionBodySchema = z.object({
   data: z.object({
     accessToken: z.string().min(1),
     expiresIn: z.number().int().positive(),
-    user: z.object({ id: z.string().uuid(), roles: z.array(z.string()) }),
   }),
 });
+
+const claimsSchema = z.object({ sub: z.string().uuid(), roles: z.array(z.string()) });
+
+/**
+ * The signed-in user, from the access token's own claims (the session bodies carry none). Read
+ * for display and routing only: the API verifies the token and authorises every request.
+ */
+export function userFromToken(token: string): AdminUser | null {
+  try {
+    const payload = (token.split('.')[1] ?? '').replace(/-/g, '+').replace(/_/g, '/');
+    const claims = claimsSchema.safeParse(JSON.parse(atob(payload)));
+    return claims.success ? { id: claims.data.sub, roles: claims.data.roles } : null;
+  } catch (err: unknown) {
+    reportError('access token claims did not decode', err);
+    return null;
+  }
+}
 
 let accessToken: string | null = null;
 let state: SessionState = { status: 'loading', user: null };
@@ -58,8 +75,13 @@ async function accept(response: Response): Promise<boolean> {
     signedOut();
     return false;
   }
+  const user = userFromToken(parsed.data.data.accessToken);
+  if (user === null) {
+    signedOut();
+    return false;
+  }
   accessToken = parsed.data.data.accessToken;
-  set({ status: 'signed_in', user: parsed.data.data.user });
+  set({ status: 'signed_in', user });
   return true;
 }
 

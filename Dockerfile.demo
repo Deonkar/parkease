@@ -1,0 +1,32 @@
+# Free demo host (Render free web service): API and worker as two processes in one
+# container. Two deployables still (ADR-010 amendment, 2026-10-13); only the box is shared.
+FROM node:24.9.0-alpine AS base
+RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
+WORKDIR /app
+
+FROM base AS deps
+COPY pnpm-lock.yaml pnpm-workspace.yaml .npmrc package.json ./
+COPY apps/api/package.json apps/api/
+COPY apps/worker/package.json apps/worker/
+COPY packages/contracts/package.json packages/contracts/
+COPY packages/db/package.json packages/db/
+COPY packages/config/package.json packages/config/
+RUN pnpm install --frozen-lockfile --filter @parkease/api... --filter @parkease/worker...
+
+FROM base AS build
+COPY --from=deps /app .
+COPY tsconfig.base.json turbo.json .
+COPY packages/ packages/
+COPY apps/api/ apps/api/
+COPY apps/worker/ apps/worker/
+RUN pnpm turbo run build --filter=@parkease/api... --filter=@parkease/worker...
+
+# ponytail: same tsx runtime as apps/api/Dockerfile; slim once packages emit dist.
+FROM build AS runtime
+ENV NODE_ENV=production
+COPY scripts/demo-launch.mjs scripts/
+EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD node -e "require('http').get({port:3000,path:'/api/v1/health'},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
+USER node
+CMD ["node", "scripts/demo-launch.mjs"]

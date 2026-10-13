@@ -1,3 +1,5 @@
+import { randomBytes } from 'node:crypto';
+
 import { z } from 'zod';
 
 export const envSchema = z
@@ -87,6 +89,16 @@ export const envSchema = z
       .optional()
       .transform((value) => value === 'true'),
 
+    /**
+     * The free public demo (task 22): sign-in skips Firebase for the fixed demo accounts, and
+     * Firebase, Razorpay and Cloudinary may be unset. Payments and uploads then fail as the
+     * external call fails, through their normal error paths. Never on for a real launch.
+     */
+    DEMO_MODE: z
+      .string()
+      .optional()
+      .transform((value) => value === 'true'),
+
     OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
     SENTRY_DSN: z.string().url().optional(),
   })
@@ -102,8 +114,29 @@ export const envSchema = z
 
 export type Env = z.infer<typeof envSchema>;
 
+/**
+ * What DEMO_MODE fills in for unset external credentials. Secrets are random per boot, never a
+ * fixed string: a known webhook secret would let anyone forge a signed "payment captured".
+ */
+export function demoCredentials(): Record<string, string> {
+  const secret = () => randomBytes(32).toString('hex');
+  return {
+    FIREBASE_PROJECT_ID: 'demo-disabled',
+    FIREBASE_CLIENT_EMAIL: 'demo@disabled.invalid',
+    FIREBASE_PRIVATE_KEY: secret(),
+    RAZORPAY_KEY_ID: 'demo-disabled',
+    RAZORPAY_KEY_SECRET: secret(),
+    RAZORPAY_WEBHOOK_SECRET: secret(),
+    CLOUDINARY_CLOUD_NAME: 'demo-disabled',
+    CLOUDINARY_API_KEY: 'demo-disabled',
+    CLOUDINARY_API_SECRET: secret(),
+  };
+}
+
 function loadEnv(): Env {
-  const parsed = envSchema.safeParse(process.env);
+  const source =
+    process.env['DEMO_MODE'] === 'true' ? { ...demoCredentials(), ...process.env } : process.env;
+  const parsed = envSchema.safeParse(source);
   if (parsed.success) return parsed.data;
 
   const problems = parsed.error.issues

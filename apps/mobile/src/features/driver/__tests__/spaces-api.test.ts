@@ -55,8 +55,20 @@ describe('searchSpaces', () => {
     expect(page.meta.nextCursor).toBe('cursor-2');
   });
 
+  it('accepts the last page as the API sends it, nextCursor null (task 22: live search failed)', async () => {
+    mock
+      .onGet('/driver/spaces')
+      .reply(200, { data: [ITEM], meta: { limit: 20, hasMore: false, nextCursor: null } });
+
+    await expect(searchSpaces({ lat: 12.9, lng: 77.6 })).resolves.toMatchObject({
+      meta: { hasMore: false, nextCursor: null },
+    });
+  });
+
   it('sends the filters as query parameters', async () => {
-    mock.onGet('/driver/spaces').reply(200, { data: [], meta: { limit: 20, hasMore: false } });
+    mock
+      .onGet('/driver/spaces')
+      .reply(200, { data: [], meta: { limit: 20, hasMore: false, nextCursor: null } });
 
     await searchSpaces({ lat: 12.9, lng: 77.6, amenities: 'covered,cctv', vehicleType: 'car' });
 
@@ -68,7 +80,9 @@ describe('searchSpaces', () => {
   });
 
   it('forwards the cursor for the next page', async () => {
-    mock.onGet('/driver/spaces').reply(200, { data: [], meta: { limit: 20, hasMore: false } });
+    mock
+      .onGet('/driver/spaces')
+      .reply(200, { data: [], meta: { limit: 20, hasMore: false, nextCursor: null } });
 
     await searchSpaces({ lat: 12.9, lng: 77.6, cursor: 'cursor-2' });
 

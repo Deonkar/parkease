@@ -20,3 +20,4 @@ export {
   razorpayxWebhookPayloadSchema,
   type RazorpayxWebhookPayload,
 } from './razorpay-webhook.js';
+export { DEMO_ACCOUNTS, DEMO_TOKEN_PREFIX, isDemoPhone } from './demo.js';

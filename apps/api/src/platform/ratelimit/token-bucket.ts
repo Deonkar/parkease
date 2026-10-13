@@ -1,3 +1,8 @@
+/**
+ * The token-bucket check, run atomically in Redis (EVAL). A string constant rather than a .lua
+ * file: tsc copies only .ts into dist, so a file read at boot crashed the built API (task 22).
+ */
+export const TOKEN_BUCKET_LUA = `
 local key      = KEYS[1]
 local capacity = tonumber(ARGV[1])
 local window   = tonumber(ARGV[2])
@@ -16,3 +21,4 @@ end
 redis.call('HSET', key, 'tokens', tokens - 1, 'updated', now)
 redis.call('EXPIRE', key, window * 2)
 return { 1, 0 }
+`;

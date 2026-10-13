@@ -20,3 +20,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm turbo run lint typecheck test --filter=@parkease/mobile...
+      # R-FE-06: the app never holds a commission or GST rate; prices are server-issued.
+      - name: No money rates in mobile
+        run: |
+          if grep -rnE "COMMISSION|GST_RATE" --exclude-dir=__tests__ apps/mobile/src apps/mobile/app             || grep -rnE "0\.2" --exclude-dir=__tests__ apps/mobile/src/features/valet; then
+            echo "::error::rate literal in apps/mobile (R-FE-06)"; exit 1
+          fi

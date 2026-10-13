@@ -3,7 +3,7 @@ import { colors, fontSize, fontWeight, radius, spacing } from '@parkease/tokens'
 import { ErrorState, Skeleton } from '@parkease/ui-native';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Linking, StyleSheet, Text, View } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { z } from 'zod';
 
@@ -16,6 +16,7 @@ import { useBackgroundLocation } from '@/features/valet/hooks/useBackgroundLocat
 import { useAcceptOffer, useOffers, useValetProfile } from '@/features/valet/hooks/useValetQueries';
 import { describeVerification } from '@/features/valet/profile-status';
 import { newIntent, type Intent } from '@/lib/api';
+import { openAppSettings } from '@/lib/settings';
 
 /**
  * The API's error envelope is `{error: {code, message, traceId}}`, but an error
@@ -139,7 +140,7 @@ export default function ValetOffersScreen() {
           DENIAL_COPY[result.reason] ?? 'ParkEase needs your location to send you jobs.',
           [
             { text: 'Not now', style: 'cancel' },
-            { text: 'Enable in Settings', onPress: () => void Linking.openSettings() },
+            { text: 'Enable in Settings', onPress: () => void openAppSettings() },
           ],
         );
       }
@@ -294,7 +295,7 @@ export default function ValetOffersScreen() {
         granted={tracking.granted}
         now={now}
         onToggle={(next) => void handleToggle(next)}
-        onFix={() => void Linking.openSettings()}
+        onFix={() => void openAppSettings()}
       />
 
       {body}
