@@ -1,11 +1,13 @@
-import { QueryClientProvider } from '@tanstack/react-query';
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider } from '@/contexts/AuthContext';
 import { ThemeProvider } from '@/contexts/ThemeContext';
+import { OfflineBanner } from '@/features/shared/components/OfflineBanner';
 import { PushRegistration } from '@/features/shared/notifications/PushRegistration';
+import { connectOnlineManager, persistOptions } from '@/lib/offline';
 import { queryClient } from '@/lib/query';
 
 // Imported for its side effect, and from the ROOT layout rather than the valet
@@ -15,14 +17,22 @@ import { queryClient } from '@/lib/query';
 // survive backgrounding — defining it inside a hook was the v1 bug.
 import '@/features/valet/location/task';
 
+connectOnlineManager();
+
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
-      <QueryClientProvider client={queryClient}>
+      <PersistQueryClientProvider
+        client={queryClient}
+        persistOptions={persistOptions}
+        // Intents paused offline in an earlier session replay once the cache is back.
+        onSuccess={() => void queryClient.resumePausedMutations()}
+      >
         <AuthProvider>
           <ThemeProvider>
             <StatusBar style="auto" />
             <PushRegistration />
+            <OfflineBanner />
             <Stack screenOptions={{ headerShown: false }}>
               <Stack.Screen name="index" />
               <Stack.Screen name="(auth)" />
@@ -34,7 +44,7 @@ export default function RootLayout() {
             </Stack>
           </ThemeProvider>
         </AuthProvider>
-      </QueryClientProvider>
+      </PersistQueryClientProvider>
     </SafeAreaProvider>
   );
 }

@@ -254,6 +254,9 @@ importers:
       '@react-native-async-storage/async-storage':
         specifier: 3.1.1
         version: 3.1.1(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.87.1(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)
+      '@react-native-community/netinfo':
+        specifier: 12.0.1
+        version: 12.0.1(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.87.1(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)
       '@react-native-firebase/app':
         specifier: 26.4.0
         version: 26.4.0(@react-native-async-storage/async-storage@3.1.1(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.87.1(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3))(expo@57.0.27)(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.87.1(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)
@@ -263,9 +266,15 @@ importers:
       '@shopify/flash-list':
         specifier: 2.3.2
         version: 2.3.2(@babel/runtime@7.29.7)(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.87.1(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)
+      '@tanstack/query-async-storage-persister':
+        specifier: 5.102.8
+        version: 5.102.8
       '@tanstack/react-query':
         specifier: 5.102.8
         version: 5.102.8(react@19.2.3)
+      '@tanstack/react-query-persist-client':
+        specifier: 5.102.8
+        version: 5.102.8(@tanstack/react-query@5.102.8(react@19.2.3))(react@19.2.3)
       axios:
         specifier: 1.20.0
         version: 1.20.0
@@ -3370,6 +3379,12 @@ packages:
       react: '*'
       react-native: '*'
 
+  '@react-native-community/netinfo@12.0.1':
+    resolution: {integrity: sha512-P/3caXIvfYSJG8AWJVefukg+ZGRPs+M4Lp3pNJtgcTYoJxCjWrKQGNnCkj/Cz//zWa/avGed0i/wzm0T8vV2IQ==}
+    peerDependencies:
+      react: '*'
+      react-native: '>=0.59'
+
   '@react-native-firebase/app@26.4.0':
     resolution: {integrity: sha512-lqs9vgPcniEw5a+NPRjGNXCQKwuGdVJoSB0iW0HvExR7aGEON/VZYOtSfElBCj3zTwQSiN732zREmqmKrW7Ixw==}
     peerDependencies:
@@ -3747,8 +3762,20 @@ packages:
     resolution: {integrity: sha512-utTS5L2OkeYUzXGohL1Z8sefu1GLNOJcxe8Hd6iIdc/Xo1K1nDB2JEp4iSFhvYh33xKC9V91TxrS8qfrpoKobQ==}
     engines: {node: '>=20.19'}
 
+  '@tanstack/query-async-storage-persister@5.102.8':
+    resolution: {integrity: sha512-9smqFJWyhRo+0l3NqaGFo6CQVr+3jpKOVZBQXI/LL+GoTIGhhxq1wTZegeI63dy0oResZx/EyazGzDjW8harbg==}
+
   '@tanstack/query-core@5.102.8':
     resolution: {integrity: sha512-ZNjkJ33CqvPNec/6lZBnHqLc3EVGPZ9ySLhYahU9TcuRFdmwXewuj0c4hwSWcGHqEUwcSrKeZ+oGcvPBqXcQcg==}
+
+  '@tanstack/query-persist-client-core@5.102.8':
+    resolution: {integrity: sha512-t3v4/D6ejo/BrPzM5gm/AT3c4CWPCxFa+0cIjAeHAeanGPG6rCjFS1hZnPZH/rf55qe3qYYgx5U6iBZMY1PQjA==}
+
+  '@tanstack/react-query-persist-client@5.102.8':
+    resolution: {integrity: sha512-WOZReC+m9klekPtG7eeZ3txJeMA9lg2R0RytSG3yXcZgJItQAVIyoobJdbdIQtlpgcU2tSzsOEBtJacs2vlCOA==}
+    peerDependencies:
+      '@tanstack/react-query': ^5.102.8
+      react: ^18 || ^19
 
   '@tanstack/react-query@5.102.8':
     resolution: {integrity: sha512-TYBea4OuXWD7MhaSHq069TWbFe7rcwWN6kzT7JF0OKi1K6c1gTv2IzD6A6ExJsCMozdkqBWeuIUZmu4KQg0O5A==}
@@ -12018,6 +12045,11 @@ snapshots:
       react-native: 0.86.3(@babel/core@7.29.7)(@types/react@19.2.18)(react@19.2.3)
     optional: true
 
+  '@react-native-community/netinfo@12.0.1(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.87.1(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)':
+    dependencies:
+      react: 19.2.3
+      react-native: 0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.87.1(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3)
+
   '@react-native-firebase/app@26.4.0(@react-native-async-storage/async-storage@3.1.1(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.87.1(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3))(expo@57.0.27)(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.87.1(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)':
     dependencies:
       firebase: 12.17.1(@react-native-async-storage/async-storage@3.1.1(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.87.1(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3))
@@ -12388,7 +12420,22 @@ snapshots:
 
   '@tanstack/history@1.162.4': {}
 
+  '@tanstack/query-async-storage-persister@5.102.8':
+    dependencies:
+      '@tanstack/query-core': 5.102.8
+      '@tanstack/query-persist-client-core': 5.102.8
+
   '@tanstack/query-core@5.102.8': {}
+
+  '@tanstack/query-persist-client-core@5.102.8':
+    dependencies:
+      '@tanstack/query-core': 5.102.8
+
+  '@tanstack/react-query-persist-client@5.102.8(@tanstack/react-query@5.102.8(react@19.2.3))(react@19.2.3)':
+    dependencies:
+      '@tanstack/query-persist-client-core': 5.102.8
+      '@tanstack/react-query': 5.102.8(react@19.2.3)
+      react: 19.2.3
 
   '@tanstack/react-query@5.102.8(react@19.2.3)':
     dependencies:

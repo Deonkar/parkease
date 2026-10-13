@@ -18,6 +18,9 @@ export function shouldRetryQuery(failureCount: number, error: unknown): boolean 
   return classifyFailure(error) === 'unreachable';
 }
 
+/** Every intent replays in one queue, so they reach the server in the order they were made. */
+export const INTENT_QUEUE_SCOPE = 'user-intents';
+
 export const queryDefaults = {
   queries: {
     retry: shouldRetryQuery,
@@ -25,6 +28,9 @@ export const queryDefaults = {
   },
   mutations: {
     retry: false,
+    // Offline, an intent pauses and replays on reconnect in the order it was made (S-150).
+    networkMode: 'online',
+    scope: { id: INTENT_QUEUE_SCOPE },
   },
 } satisfies DefaultOptions;
 
