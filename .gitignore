@@ -63,3 +63,6 @@ playwright-report/
 
 .vercel
 .env*
+
+# Launch videos from /brag — large renders, kept local
+brag-output/
