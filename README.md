@@ -29,7 +29,7 @@ panel and a marketing site — built solo, at zero recurring cost.
 
 |              |                                                                                                    |
 | ------------ | -------------------------------------------------------------------------------------------------- |
-| Built        | 5 weeks, 29 merged PRs (Sep 10 – Oct 13, 2026)                                                     |
+| Built        | 5 weeks, 32 merged PRs (Sep 10 – Oct 13, 2026)                                                     |
 | Code         | ~86k lines of TypeScript across 5 apps and 6 packages                                              |
 | API          | 130 HTTP routes in 38 role-scoped controllers, 21 idempotent background jobs                       |
 | Database     | 58 hand-written SQL migrations, PostgreSQL 18 + PostGIS 3.6                                        |
