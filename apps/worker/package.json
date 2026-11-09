@@ -16,7 +16,7 @@
     "@opentelemetry/api": "^1.9.0",
     "@parkease/contracts": "workspace:*",
     "@parkease/db": "workspace:*",
-    "drizzle-orm": "^0.45.0",
+    "drizzle-orm": "^0.45.4",
     "expo-server-sdk": "7.2.0",
     "ioredis": "^5.4.0",
     "pg-boss": "10.1.5",
