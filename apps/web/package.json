@@ -22,14 +22,14 @@
     "react-dom": "19.2.3"
   },
   "devDependencies": {
-    "@axe-core/playwright": "4.13.0",
+    "@axe-core/playwright": "4.14.0",
     "@parkease/config": "workspace:*",
-    "@playwright/test": "1.64.0",
-    "@tailwindcss/postcss": "4.3.3",
+    "@playwright/test": "1.65.0",
+    "@tailwindcss/postcss": "4.3.4",
     "@types/mdx": "2.0.14",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.6",
-    "tailwindcss": "4.3.3",
+    "tailwindcss": "4.3.4",
     "typescript": "5.7.2",
     "vitest": "3.2.7"
   }
